@@ -239,18 +239,20 @@ CBE processes to contain spectral data buffers. At this time, a minimum value
 for the time that any spectral data buffer will be valid is undetermined,
 although, given the current CBE configuration, about two seconds is reasonable.
 
-To be clear, once a spectral data product has been read by a client, it exists
-in the client's physical memory, and cannot be overwritten until the client
-releases the buffer reference. The time difference of a CBE process sending a
-metadata broadcast for a given spectral data product, and a client reading that
-spectral data is the critical quantity in determining whether the spectral data
-is valid when it is received by the client. When that time difference increases,
-the likelihood that the spectral data will be valid when they arrive in the
-client's memory decreases. The only influence a client application can have on
+The time difference of a CBE process sending a metadata broadcast for a given
+spectral data product, and a vysmaw client library thread reading that spectral
+data is the critical quantity in determining whether the spectral data is valid
+when it is received by the library. When that time difference increases, the
+likelihood that the spectral data will be valid when they arrive in the client
+process memory decreases. The only influence a client application can have on
 this latency period is through the time spent in the callback function
 predicate. Other sources of spectral data retrieval latency are network latency,
 latency introduced by the vysmaw library implementation, and a potential backlog
-in calls to the client predicate.
+in calls to the client predicate. To be clear, once a spectral data product has
+been read by the vysmaw library, it exists in the client's physical memory, and
+cannot be overwritten until the client releases the buffer reference. The
+application is notified when spectral data validation has failed, but without
+any associated data.
 
 ## Sample code
 
