@@ -84,15 +84,15 @@ cmake .. # replace with your cmake command
 The two primary artifacts produced by the build are a C language shared library,
 and a Python extension with a Python/Cython interface to the shared library.
 
-Note that there is no "install" make target yet. If you intend to build and run
-sample code, you may have to set PYTHONPATH to point to the vysmaw/py
+Note that there is no "install" makefile target yet. If you intend to build and
+run sample code, you may have to set PYTHONPATH to point to the `py`
 sub-directory of the build directory.
 
 ## Interfaces
 
 ### C API
 
-At the moment, the API for the C language library is detailed in the vysmaw.h
+At the moment, the API for the C language library is detailed in the `vysmaw.h`
 source file. Python programmers are encouraged to refer the comments in that
 file for documentation, as well.
 
@@ -249,7 +249,7 @@ they arrive in the client's memory decreases.
 
 ## Sample code
 
-All sample code can be found under the "examples" project directory.
+All sample code can be found under the `examples` project directory.
 
 ### sample1
 
@@ -262,7 +262,7 @@ If there is no InfiniBand HCA, the library will immediately signal the end of
 the data stream, and provide error messages to the client in the
 end-of-data-stream message. Also, the OFS software insists on printing messages
 to stderr if no InifiniBand HCA is present, but these can be suppressed by
-redirecting stderr to /dev/null.
+redirecting stderr to `/dev/null`.
 
 ``` cython
 from vysmaw cimport *
