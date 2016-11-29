@@ -69,8 +69,8 @@ eval $CMAKE
 ```
 
 I recommend building the project in a sub-directory of the top level project
-directory. This allows one to easily remove all build artifacts, including the
-cmake generated files, quite easily.
+directory. This allows one to keep the source tree clean, and easily remove all
+build artifacts, including the cmake generated files.
 
 ``` shell
 # from the top level project directory...
