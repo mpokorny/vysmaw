@@ -1,0 +1,124 @@
+from libc.stdint cimport *
+from libc cimport stddef
+
+cdef extern from "vysmaw.h":
+
+    DEF VYSMAW_DATA_DIGEST_SIZE = 16
+
+    DEF VYSMAW_MULTICAST_ADDRESS_SIZE = 32
+
+    DEF VYSMAW_RECEIVE_STATUS_LENGTH = 64
+
+    struct vysmaw_configuration:
+        char signal_multicast_address[VYSMAW_MULTICAST_ADDRESS_SIZE]
+        stddef.size_t spectrum_buffer_pool_size
+        bint single_spectrum_buffer_pool
+        unsigned max_spectrum_buffer_size
+        stddef.size_t signal_message_pool_size
+        bint eager_connect
+        double eager_connect_idle_sec
+        bint preconnect_backlog
+        unsigned max_depth_message_queue
+        unsigned queue_resume_overhead
+        unsigned max_starvation_latency
+        unsigned resolve_route_timeout_ms
+        unsigned resolve_addr_timeout_ms
+        unsigned inactive_server_timeout_sec
+        unsigned shutdown_check_interval_ms
+        unsigned signal_receive_max_posted
+        unsigned signal_receive_min_ack_part
+        unsigned rdma_read_max_posted
+        unsigned rdma_read_min_ack_part
+
+    struct vysmaw_data_info:
+        uint64_t timestamp
+        uint16_t num_channels
+        uint8_t stations[2]
+        uint8_t spectral_window_index
+        uint8_t stokes_index
+
+    struct vysmaw_spectrum_info:
+        uint64_t data_addr
+        uint64_t timestamp
+        uint8_t digest[VYSMAW_DATA_DIGEST_SIZE]
+
+    enum result_code:
+        VYSMAW_NO_ERROR,
+        VYSMAW_SYSERR,
+        VYSMAW_ERROR_USER_END,
+        VYSMAW_ERROR_BUFFPOOL
+
+    struct vysmaw_result:
+        result_code code
+        char *syserr_desc
+
+    struct _vysmaw_handle:
+        pass
+
+    ctypedef _vysmaw_handle * vysmaw_handle
+    
+    enum vysmaw_message_type:
+        VYSMAW_MESSAGE_VALID_BUFFER,
+        VYSMAW_MESSAGE_DIGEST_FAILURE,
+        VYSMAW_MESSAGE_QUEUE_OVERFLOW,
+        VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
+        VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
+        VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
+        VYSMAW_MESSAGE_RDMA_READ_FAILURE,
+        VYSMAW_MESSAGE_END
+
+    struct message_valid_buffer:
+        vysmaw_data_info info
+        stddef.size_t buffer_size
+        float *buffer
+
+    union message_content:
+        message_valid_buffer valid_buffer
+        vysmaw_data_info digest_failure
+        unsigned num_overflow
+        unsigned num_data_buffers_unavailable
+        unsigned num_signal_buffers_unavailable
+        char signal_receive_status[VYSMAW_RECEIVE_STATUS_LENGTH]
+        char rdma_read_status[VYSMAW_RECEIVE_STATUS_LENGTH]
+        vysmaw_result result
+
+    struct vysmaw_message:
+        int refcount
+        vysmaw_message_type typ
+        vysmaw_handle handle
+        message_content content
+
+    struct _vysmaw_message_queue:
+        pass
+
+    ctypedef _vysmaw_message_queue *vysmaw_message_queue
+
+    ctypedef void (*vysmaw_spectrum_filter)(
+        uint8_t[2] stations, uint8_t spectral_window_index,
+        uint8_t stokes_index, vysmaw_spectrum_info *infos,
+        uint8_t num_infos, void *user_data, bint *pass_filter)
+
+    struct vysmaw_consumer:
+        vysmaw_spectrum_filter filter
+        void *filter_data
+        vysmaw_message_queue queue
+
+    vysmaw_handle vysmaw_start(vysmaw_configuration *config,
+                               unsigned num_consumers,
+                               vysmaw_consumer **consumers) nogil
+
+    vysmaw_configuration *vysmaw_configuration_new() nogil
+
+    void vysmaw_configuration_free(vysmaw_configuration *config)
+
+    void vysmaw_shutdown(vysmaw_handle handle)
+
+    void vysmaw_message_unref(vysmaw_message *message)
+
+    vysmaw_message *vysmaw_message_queue_pop(vysmaw_message_queue queue)
+
+    vysmaw_message *vysmaw_message_queue_timeout_pop(
+        vysmaw_message_queue queue,
+        uint64_t timeout)
+
+    vysmaw_message *vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
