@@ -230,22 +230,27 @@ available to vysmaw are also required to be in registered memory, which is used
 for spectral data buffers on a rotating basis. Every spectrum for which metadata
 are broadcast will be available for reading from vysmaw client processes for a
 limited time. Each spectral data buffer hosted by some CBE process will
-eventually be reused by that process for other data. The length of time for
-which a spectrum is available is dependent upon the WIDAR dump rate for the
-product, and the amount of memory allocated by the CBE processes to contain
-spectral data buffers. At this time, a minimum value for the time that any
-spectral data buffer will be valid is undetermined, although, given the current
-CBE configuration, about two seconds is reasonable. The protocol used by the
+eventually be reused by that process for other data. The protocol used by the
 vysmaw system includes a data validation step to ensure that the data received
-by a vysmaw client is that matching the metadata used to identify the spectrum.
-To be clear, once a data product spectrum has been read by a client, it exists
+by a vysmaw client is that matching the metadata used to identify the
+spectrum. The length of time for which a spectrum is available is dependent upon
+the WIDAR dump rate for the product, and the amount of memory allocated by the
+CBE processes to contain spectral data buffers. At this time, a minimum value
+for the time that any spectral data buffer will be valid is undetermined,
+although, given the current CBE configuration, about two seconds is reasonable.
+
+To be clear, once a spectral data product has been read by a client, it exists
 in the client's physical memory, and cannot be overwritten until the client
-releases the buffer reference. The difference in time from when a CBE process
-sends a metadata broadcast for a given spectral data product to the time that a
-client has read the spectral data is the critical quantity in determining
-whether the spectral data is valid when it is received by the client. When that
-time difference increases, the likelihood that the spectral data will valid when
-they arrive in the client's memory decreases.
+releases the buffer reference. The time difference of a CBE process sending a
+metadata broadcast for a given spectral data product, and a client reading that
+spectral data is the critical quantity in determining whether the spectral data
+is valid when it is received by the client. When that time difference increases,
+the likelihood that the spectral data will be valid when they arrive in the
+client's memory decreases. The only influence a client application can have on
+this latency period is through the time spent in the callback function
+predicate. Other sources of spectral data retrieval latency are network latency,
+latency introduced by the vysmaw library implementation, and a potential backlog
+in calls to the client predicate.
 
 ## Sample code
 
