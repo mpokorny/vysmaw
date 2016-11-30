@@ -65,7 +65,6 @@ def show_properties(instance, klass):
         ",".join("{}={}".format(name, value) for (name, value) in nv) + ")"
 
 cdef class Configuration:
-    cdef vysmaw_configuration *_c_configuration
 
     def __cinit__(self):
         self._c_configuration = vysmaw_configuration_new()
@@ -241,8 +240,9 @@ cdef class Configuration:
     def rdma_read_min_ack_part(self, unsigned value):
         self._c_configuration.rdma_read_min_ack_part = value
 
-    cdef start(self, unsigned num_filters, vysmaw_spectrum_filter *filters,
-               void **user_data = NULL):
+    cdef tuple start(self, unsigned num_filters,
+                     vysmaw_spectrum_filter *filters,
+                     void **user_data):
         if filters is NULL or num_filters == 0:
             raise ValueError("At least one filter is required to start vysmaw")
         consumers = [Consumer() for i in range(num_filters)]
@@ -280,7 +280,6 @@ cdef class Configuration:
         return (handle, consumers)
 
 cdef class Handle:
-    cdef vysmaw_handle _c_handle
 
     def __cinit__(self):
         self._c_handle = NULL
@@ -291,7 +290,7 @@ cdef class Handle:
         return
 
     @staticmethod
-    cdef wrap(vysmaw_handle h):
+    cdef Handle wrap(vysmaw_handle h):
         result = Handle()
         result._c_handle = h
         return result
@@ -303,7 +302,6 @@ cdef class Handle:
         return
 
 cdef class Consumer:
-    cdef vysmaw_consumer *_c_consumer
 
     def __cinit__(self):
         self._c_consumer = <vysmaw_consumer *>malloc(sizeof(vysmaw_consumer))
@@ -329,8 +327,8 @@ cdef class Consumer:
             self._c_consumer[0].filter_data = <void *>spectrum_filter
         return
 
-    cdef set_filter(self, vysmaw_spectrum_filter spectrum_filter,
-                    void *user_data = NULL):
+    cdef void set_filter(self, vysmaw_spectrum_filter spectrum_filter,
+                         void *user_data):
         if spectrum_filter is not NULL:
             self._c_consumer[0].filter = spectrum_filter
             self._c_consumer[0].filter_data = user_data
@@ -371,13 +369,12 @@ cdef class Consumer:
         return result
 
 cdef class DataInfo:
-    cdef vysmaw_data_info *_c_info
 
     def __str__(self):
         return show_properties(self, DataInfo)
 
     @staticmethod
-    cdef wrap(vysmaw_data_info *info):
+    cdef DataInfo wrap(vysmaw_data_info *info):
         assert info is not NULL
         result = DataInfo()
         result._c_info = info
@@ -404,13 +401,12 @@ cdef class DataInfo:
         return self._c_info[0].stokes_index
 
 cdef class Result:
-    cdef vysmaw_result *_c_result
 
     def __str__(self):
         return show_properties(self, Result)
 
     @staticmethod
-    cdef wrap(vysmaw_result *res):
+    cdef Result wrap(vysmaw_result *res):
         assert res is not NULL
         result = Result()
         result._c_result = res
@@ -428,7 +424,6 @@ cdef class Result:
             split('\n'))
 
 cdef class Message:
-    cdef vysmaw_message *_c_message
 
     def __cinit__(self):
         return
@@ -438,7 +433,7 @@ cdef class Message:
         return
 
     @staticmethod
-    cdef wrap(vysmaw_message *msg):
+    cdef Message wrap(vysmaw_message *msg):
         assert msg is not NULL
         msgtype = msg[0].typ
         if msgtype == VYSMAW_MESSAGE_VALID_BUFFER:
