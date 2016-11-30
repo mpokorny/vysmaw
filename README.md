@@ -312,3 +312,37 @@ msg.unref()
 
 Note that the above uses the start_py method, which is convenient for
 development and testing, but is not recommended for production code.
+
+### sample2
+
+This example has the same functionality as sample1, but, with a bit more usage
+of Cython and the vysmaw Cython API (cy_vysmaw) than sample1, its implementation
+avoids locking the Python GIL in the callback function predicate.
+
+``` cython
+from vysmaw cimport *
+from libc.stdint cimport *
+from libc.stdlib cimport *
+from cy_vysmaw cimport *
+import cy_vysmaw
+
+# A predicate that selects no spectra. The "pass_filter" array elements _must_
+# be assigned values, as they are always uninitialized at function entry.
+cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto, 
+             const vysmaw_spectrum_info *infos, uint8_t num_infos,
+             void *user_data, bool *pass_filter) nogil:
+    for i in range(num_infos):
+        pass_filter[i] = False
+    return
+
+# Use default configuration
+cdef Configuration config = cy_vysmaw.Configuration()
+
+# Allocate client resources
+cdef vysmaw_spectrum_filter *f = \
+    <vysmaw_spectrum_filter *>malloc(sizeof(vysmaw_spectrum_filter))
+f[0] = cb
+handle, consumers = config.start(1, f, NULL)
+
+# ... the remainder being the same code as in sample1
+```
