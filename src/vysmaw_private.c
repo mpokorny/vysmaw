@@ -631,7 +631,7 @@ data_path_message_free(struct data_path_message *msg)
 		}
 	} else if (msg->typ == DATA_PATH_END) {
 		while (msg->error_records != NULL) {
-			g_free(((struct error_record *)(msg->error_records->data))->desc);
+			error_record_free((struct error_record *)msg->error_records->data);
 			msg->error_records =
 				g_slist_delete_link(msg->error_records, msg->error_records);
 		}
