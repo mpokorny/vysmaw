@@ -9,7 +9,8 @@ include(FindPythonExtensions)
 find_package(Cython)
 
 include_directories(../py ../src)
-link_directories(../py ../lib)
+link_directories(../py ../src)
+
 add_cython_target(sample1 EMBED_MAIN)
 add_executable(sample1 ${sample1})
 python_standalone_executable(sample1)
