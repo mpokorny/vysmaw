@@ -18,6 +18,7 @@
 #
 from libc.stdint cimport *
 from libc cimport stddef
+from libcpp cimport bool
 
 cdef extern from "vysmaw.h":
 
@@ -30,12 +31,12 @@ cdef extern from "vysmaw.h":
     struct vysmaw_configuration:
         char signal_multicast_address[VYSMAW_MULTICAST_ADDRESS_SIZE]
         stddef.size_t spectrum_buffer_pool_size
-        bint single_spectrum_buffer_pool
+        bool single_spectrum_buffer_pool
         unsigned max_spectrum_buffer_size
         stddef.size_t signal_message_pool_size
-        bint eager_connect
+        bool eager_connect
         double eager_connect_idle_sec
-        bint preconnect_backlog
+        bool preconnect_backlog
         unsigned max_depth_message_queue
         unsigned queue_resume_overhead
         unsigned max_starvation_latency
@@ -114,7 +115,7 @@ cdef extern from "vysmaw.h":
     ctypedef void (*vysmaw_spectrum_filter)(
         const uint8_t[2] stations, uint8_t spectral_window_index,
         uint8_t stokes_index, const vysmaw_spectrum_info *infos,
-        uint8_t num_infos, void *user_data, bint *pass_filter)
+        uint8_t num_infos, void *user_data, bool *pass_filter) nogil
 
     struct vysmaw_consumer:
         vysmaw_spectrum_filter filter

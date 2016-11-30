@@ -36,11 +36,11 @@ __logger = __getLogger()
 cdef void evaluate_spectrum_filter(
     const uint8_t *stations, uint8_t spectral_window_index, uint8_t stokes_index,
     const vysmaw_spectrum_info *infos, uint8_t num_infos,
-    void *user_context, bint *pass_filter):
+    void *user_context, bool *pass_filter) with gil:
     func = <object>user_context
     func(<uint8_t [:2]>stations, spectral_window_index, stokes_index,
          <vysmaw_spectrum_info [:num_infos]>infos,
-         <bint [:num_infos]>pass_filter)
+         <bool [:num_infos]>pass_filter)
 
 cdef unicode _ustring(s):
     if type(s) is unicode:
@@ -110,7 +110,7 @@ cdef class Configuration:
         return self._c_configuration.single_spectrum_buffer_pool
 
     @single_spectrum_buffer_pool.setter
-    def single_spectrum_buffer_pool(self, bint value):
+    def single_spectrum_buffer_pool(self, bool value):
         self._c_configuration.single_spectrum_buffer_pool = value
 
     @property
@@ -134,7 +134,7 @@ cdef class Configuration:
         return self._c_configuration.eager_connect
 
     @eager_connect.setter
-    def eager_connect(self, bint value):
+    def eager_connect(self, bool value):
         self._c_configuration.eager_connect = value
 
     @property
@@ -150,7 +150,7 @@ cdef class Configuration:
         return self._c_configuration.preconnect_backlog
 
     @preconnect_backlog.setter
-    def preconnect_backlog(self, bint value):
+    def preconnect_backlog(self, bool value):
         self._c_configuration.preconnect_backlog = value
 
     @property
@@ -323,7 +323,7 @@ cdef class Consumer:
 
     def set_py_filter(self, spectrum_filter):
         cdef vysmaw_spectrum_filter eval_filter = \
-            <vysmaw_spectrum_filter>evaluate_spectrum_filter
+            evaluate_spectrum_filter
         if spectrum_filter is not None:
             self._c_consumer[0].filter = eval_filter
             self._c_consumer[0].filter_data = <void *>spectrum_filter
