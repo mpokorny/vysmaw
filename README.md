@@ -38,7 +38,7 @@ Simple: run cmake, followed by make. Below are some cmake scripts that I've used
 for development on two different systems to help get you started.
 
 A debug build on a standard NRAO RHEL 6.6 machine, with a locally installed,
-modern version of cmake:
+modern version of cmake, in a pyenv environment (Python v 2.7.11):
 
 ``` shell
 GCC=/opt/local/compilers/gcc-6/bin/gcc
