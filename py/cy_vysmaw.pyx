@@ -34,8 +34,8 @@ def __getLogger():
 __logger = __getLogger()
 
 cdef void evaluate_spectrum_filter(
-    uint8_t[2] stations, uint8_t spectral_window_index, uint8_t stokes_index,
-    vysmaw_spectrum_info *infos, uint8_t num_infos,
+    const uint8_t *stations, uint8_t spectral_window_index, uint8_t stokes_index,
+    const vysmaw_spectrum_info *infos, uint8_t num_infos,
     void *user_context, bint *pass_filter):
     func = <object>user_context
     func(<uint8_t [:2]>stations, spectral_window_index, stokes_index,
