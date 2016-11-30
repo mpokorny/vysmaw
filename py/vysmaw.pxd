@@ -113,7 +113,7 @@ cdef extern from "vysmaw.h":
     ctypedef _vysmaw_message_queue *vysmaw_message_queue
 
     ctypedef void (*vysmaw_spectrum_filter)(
-        const uint8_t[2] stations, uint8_t spectral_window_index,
+        const uint8_t *stations, uint8_t spectral_window_index,
         uint8_t stokes_index, const vysmaw_spectrum_info *infos,
         uint8_t num_infos, void *user_data, bool *pass_filter) nogil
 
