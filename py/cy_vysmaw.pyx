@@ -277,6 +277,7 @@ cdef class Configuration:
             c = consumers[i]
             cp_array[i] = c._c_consumer
         handle = Handle.wrap(vysmaw_start(self._c_configuration, n, cp_array))
+        free(cp_array)
         return (handle, consumers)
 
 cdef class Handle:
