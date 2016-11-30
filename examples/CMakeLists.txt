@@ -14,3 +14,7 @@ link_directories(../py ../src)
 add_cython_target(sample1 EMBED_MAIN)
 add_executable(sample1 ${sample1})
 python_standalone_executable(sample1)
+
+add_cython_target(sample2 EMBED_MAIN)
+add_executable(sample2 ${sample2})
+python_standalone_executable(sample2)
