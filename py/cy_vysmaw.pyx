@@ -369,8 +369,8 @@ cdef class Consumer:
         self.test_end(result)
         return result
 
-    cdef vysmaw_message_queue queue(Consumer c):
-        return c._c_consumer[0].queue
+    cdef vysmaw_message_queue queue(self):
+        return self._c_consumer[0].queue
 
 cdef class DataInfo:
 

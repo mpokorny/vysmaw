@@ -66,7 +66,8 @@ handle, consumers = config.start(1, f, u)
 # For maximum efficiency, one should work directly with unwrapped messages to
 # avoid allocating a Python object for every message. Doing so requires direct
 # access to the queue referenced by the consumer.
-cdef vysmaw_message_queue queue = Consumer.queue(consumers[0])
+cdef Consumer c0 = consumers[0]
+cdef vysmaw_message_queue queue = c0.queue()
 cdef vysmaw_message *msg = NULL
 
 # Messages should always be retrieved from the consumer queue until an

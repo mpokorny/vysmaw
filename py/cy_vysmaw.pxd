@@ -46,8 +46,7 @@ cdef class Consumer:
 
     cpdef try_pop(self)
 
-    @staticmethod
-    cdef vysmaw_message_queue queue(Consumer c)
+    cdef vysmaw_message_queue queue(self)
 
 cdef class DataInfo:
     cdef vysmaw_data_info *_c_info
