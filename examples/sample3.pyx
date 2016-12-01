@@ -36,7 +36,7 @@ cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto,
     cdef unsigned long *ncb = <unsigned long *>user_data
     for i in range(num_infos):
         pass_filter[i] = (infos[i].timestamp % full_period) / on_period == 0
-        ncb[0] += 1
+    ncb[0] += 1
     return
 
 # Use default configuration
