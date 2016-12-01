@@ -496,7 +496,6 @@ poll_completions(struct signal_receiver_context_ *context,
 	}
 	if (G_LIKELY(nc > 0)) {
 		g_assert(context->num_posted_wr >= nc);
-		bool buffers_exhausted = false;
 		context->num_posted_wr -= nc;
 		/* for each completion event, process the event */
 		for (int i = 0; i < nc; ++i) {
