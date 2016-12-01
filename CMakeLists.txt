@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 2.8)
 
+project(vysmaw)
+set(vysmaw_VERSION_MAJOR 0)
+set(vysmaw_VERSION_MINOR 1)
+
 set(
   CMAKE_MODULE_PATH
   ${CMAKE_MODULE_PATH}

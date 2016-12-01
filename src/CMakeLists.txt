@@ -1,9 +1,3 @@
-cmake_minimum_required(VERSION 2.8)
-
-project(vysmaw)
-set(vysmaw_VERSION_MAJOR 0)
-set(vysmaw_VERSION_MINOR 1)
-
 find_package(Verbs REQUIRED)
 find_package(RDMACM REQUIRED)
 find_package(PkgConfig REQUIRED)
