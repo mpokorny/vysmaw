@@ -22,8 +22,6 @@ add_compile_options(
   ${GTHREAD2_CFLAGS}
   ${GTHREAD2_CLFAGS_OTHER})
 
-link_directories(${GTHREAD2_LIBRARY_DIRS})
-
 target_link_libraries(
   vysmaw
   ${GTHREAD2_LIBRARIES}
