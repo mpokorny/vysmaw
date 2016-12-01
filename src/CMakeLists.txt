@@ -1,6 +1,7 @@
 find_package(Verbs REQUIRED)
 find_package(RDMACM REQUIRED)
 find_package(PkgConfig REQUIRED)
+
 pkg_check_modules(GTHREAD2 REQUIRED gthread-2.0)
 
 add_library(vysmaw SHARED
@@ -13,11 +14,14 @@ add_library(vysmaw SHARED
 
 include_directories(
   ${GTHREAD2_INCLUDE_DIRS}
-  ${VERBS_INCLUDE_DIR}
-  ${RDMACM_INCLUDE_DIR}
   .)
-add_compile_options(-Wall ${GTHREAD2_CFLAGS})
+add_compile_options(
+  -Wall
+  ${GTHREAD2_CFLAGS}
+  ${GTHREAD2_CLFAGS_OTHER})
+
 link_directories(${GTHREAD2_LIBRARY_DIRS})
+
 target_link_libraries(
   vysmaw
   ${GTHREAD2_LIBRARIES}
