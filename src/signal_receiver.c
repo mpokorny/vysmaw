@@ -67,8 +67,6 @@ struct recv_wr {
 static struct recv_wr *recv_wr_new(
 	uint64_t addr, uint32_t length, uint32_t lkey)
 	__attribute__((returns_nonnull,malloc));
-static void recv_wr_free1(struct recv_wr *wr)
-	__attribute__((nonnull));
 static struct recv_wr *recv_wr_prepend_new(
 	struct recv_wr *wrs, uint64_t addr, uint32_t length, uint32_t lkey)
 	__attribute__((returns_nonnull,malloc));
@@ -140,12 +138,7 @@ recv_wr_new(uint64_t addr, uint32_t length, uint32_t lkey)
 	result->ibv_sge.addr = addr;
 	result->ibv_sge.length = length;
 	result->ibv_sge.lkey = lkey;
-}
-
-static void
-recv_wr_free1(struct recv_wr *wr)
-{
-	g_slice_free1(sizeof(struct recv_wr), wr);
+	return result;
 }
 
 static struct recv_wr *
