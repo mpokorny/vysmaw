@@ -18,3 +18,8 @@ python_standalone_executable(sample1)
 add_cython_target(sample2 EMBED_MAIN)
 add_executable(sample2 ${sample2})
 python_standalone_executable(sample2)
+
+add_cython_target(sample3 EMBED_MAIN)
+add_executable(sample3 ${sample3})
+target_link_libraries(sample3 vysmaw)
+python_standalone_executable(sample3)
