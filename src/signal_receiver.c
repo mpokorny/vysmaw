@@ -472,6 +472,7 @@ new_wr(struct signal_receiver_context_ *context, struct recv_wr **wrs)
 		g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 		result = false;
 	}
+	return result;
 }
 
 static void
