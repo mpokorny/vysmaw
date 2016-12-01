@@ -4,6 +4,9 @@ find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(GTHREAD2 REQUIRED gthread-2.0)
 
+set(CMAKE_C_FLAGS
+  "${CMAKE_C_FLAGS} -Wall -Werror")
+
 add_library(vysmaw SHARED
   vysmaw_private.c
   buffer_pool.c
@@ -16,7 +19,6 @@ include_directories(
   ${GTHREAD2_INCLUDE_DIRS}
   .)
 add_compile_options(
-  -Wall
   ${GTHREAD2_CFLAGS}
   ${GTHREAD2_CLFAGS_OTHER})
 
