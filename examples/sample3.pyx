@@ -81,7 +81,7 @@ while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
         # to wrap them in Python objects, like so: py_msg = Message.wrap(msg)
 
         # must unref vysmaw_messages explicitly, since Python reclamation won't
-        # do it for us (and, as always, it's good practice to to this
+        # do it for us (and, as always, it's good practice to do this
         # explicitly)
         vysmaw_message_unref(msg)
 
@@ -94,7 +94,7 @@ while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
     msg = vysmaw_message_queue_timeout_pop(queue, 500000)
 
 # show the end message
-py_msg = Message.wrap(msg)
+py_msg = Message.wrap(msg) # this steals the message reference
 print(str(py_msg))
 py_msg.unref()
 
