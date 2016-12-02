@@ -337,10 +337,12 @@ digest_failure_message_new(vysmaw_handle handle,
 }
 
 struct vysmaw_message *
-end_message_new(vysmaw_handle handle, const struct vysmaw_result *rc)
+end_message_new(vysmaw_handle handle, struct vysmaw_result *rc)
 {
+	/* this steals ownership of rc->syserr_desc */
 	struct vysmaw_message *result = message_new(handle, VYSMAW_MESSAGE_END);
 	memcpy(&result->content.result, rc, sizeof(*rc));
+	rc->syserr_desc = NULL;
 	return result;
 }
 

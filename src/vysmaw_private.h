@@ -323,7 +323,7 @@ extern struct vysmaw_message *digest_failure_message_new(
 	vysmaw_handle handle, const struct vysmaw_data_info *info)
 	__attribute__((malloc,returns_nonnull,nonnull));
 extern struct vysmaw_message *end_message_new(
-	vysmaw_handle handle, const struct vysmaw_result *rc)
+	vysmaw_handle handle, struct vysmaw_result *rc)
 	__attribute__((malloc,returns_nonnull,nonnull));
 extern struct vysmaw_message *queue_overflow_message_new(
 	vysmaw_handle handle, unsigned num_overflow)
