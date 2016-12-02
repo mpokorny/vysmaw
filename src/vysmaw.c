@@ -94,21 +94,23 @@ vysmaw_start(const struct vysmaw_configuration *config,
 	result->in_shutdown = false;
 	result->result = NULL;
 	memcpy((void *)&result->config, config, sizeof(*config));
-	if (config->single_spectrum_buffer_pool) {
-		size_t num_buffers =
-			config->spectrum_buffer_pool_size
-			/ config->max_spectrum_buffer_size;
-		result->pool = spectrum_buffer_pool_new(
-			config->max_spectrum_buffer_size, num_buffers);
-		result->new_valid_buffer_fn = new_valid_buffer_from_pool;
-		result->lookup_buffer_pool_fn = lookup_buffer_pool_from_pool;
-		result->list_buffer_pools_fn = buffer_pool_list_from_pool;
-	} else {
-		MUTEX_INIT(result->pool_collection_mtx);
-		result->pool_collection = spectrum_buffer_pool_collection_new();
-		result->new_valid_buffer_fn = new_valid_buffer_from_collection;
-		result->lookup_buffer_pool_fn = lookup_buffer_pool_from_collection;
-		result->list_buffer_pools_fn = buffer_pool_list_from_collection;
+	if (result->config.error_record == NULL) {
+		if (config->single_spectrum_buffer_pool) {
+			size_t num_buffers =
+				config->spectrum_buffer_pool_size
+				/ config->max_spectrum_buffer_size;
+			result->pool = spectrum_buffer_pool_new(
+				config->max_spectrum_buffer_size, num_buffers);
+			result->new_valid_buffer_fn = new_valid_buffer_from_pool;
+			result->lookup_buffer_pool_fn = lookup_buffer_pool_from_pool;
+			result->list_buffer_pools_fn = buffer_pool_list_from_pool;
+		} else {
+			MUTEX_INIT(result->pool_collection_mtx);
+			result->pool_collection = spectrum_buffer_pool_collection_new();
+			result->new_valid_buffer_fn = new_valid_buffer_from_collection;
+			result->lookup_buffer_pool_fn = lookup_buffer_pool_from_collection;
+			result->list_buffer_pools_fn = buffer_pool_list_from_collection;
+		}
 	}
 
 	/* per consumer initialization */
@@ -122,13 +124,21 @@ vysmaw_start(const struct vysmaw_configuration *config,
 	result->num_consumers = num_consumers;
 	result->consumers = (struct consumer *)g_array_free(priv_consumers, false);
 
-	/* service threads initialization */
-	MUTEX_INIT(result->gate.mtx);
-	COND_INIT(result->gate.cond);
-	int rc = init_service_threads(result);
-	if (rc != 0) {
-		handle_unref(result);
-		result = NULL;
+	if (result->config.error_record == NULL) {
+		/* service threads initialization */
+		MUTEX_INIT(result->gate.mtx);
+		COND_INIT(result->gate.cond);
+		init_service_threads(result);
+	}
+	if (result->config.error_record != NULL) {
+		result->in_shutdown = true;
+		struct vysmaw_result rc = {
+			.code = VYSMAW_SYSERR,
+			.syserr_desc = vys_error_record_to_string(
+				(struct vys_error_record **)&(result->config.error_record))
+		};
+		struct vysmaw_message *msg = end_message_new(result, &rc);
+		post_msg(result, msg);
 	}
 	return result;
 }
