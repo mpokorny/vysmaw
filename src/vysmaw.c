@@ -161,7 +161,7 @@ vysmaw_shutdown(vysmaw_handle handle)
 }
 
 struct vysmaw_configuration *
-vysmaw_configuration_new(void)
+vysmaw_configuration_new(const char *path)
 {
 	struct vysmaw_configuration *result =
 		g_try_new(struct vysmaw_configuration, 1);

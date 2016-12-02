@@ -126,7 +126,7 @@ cdef extern from "vysmaw.h":
                                unsigned num_consumers,
                                vysmaw_consumer **consumers) nogil
 
-    vysmaw_configuration *vysmaw_configuration_new() nogil
+    vysmaw_configuration *vysmaw_configuration_new(char *path) nogil
 
     void vysmaw_configuration_free(vysmaw_configuration *config)
 

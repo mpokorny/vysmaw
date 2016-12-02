@@ -66,8 +66,15 @@ def show_properties(instance, klass):
 
 cdef class Configuration:
 
-    def __cinit__(self):
-        self._c_configuration = vysmaw_configuration_new()
+    def __cinit__(self, path=None):
+        cdef char *cpath
+        apath = None
+        if path is not None:
+            apath = _ustring(path).encode('ascii')
+            cpath = apath
+        else:
+            cpath = NULL
+        self._c_configuration = vysmaw_configuration_new(cpath)
         if self._c_configuration is NULL:
             raise MemoryError()
         return

@@ -379,11 +379,13 @@ extern struct vysmaw_message *vysmaw_message_queue_try_pop(
 	vysmaw_message_queue queue)
 	__attribute__((nonnull));
 
-/* Get a configuration instance, filled with default values.
+/* Get a configuration instance, filled with default values. Optionally provide
+ * a path to a vysmaw configuration file.
  *
  * @see vysmaw_configuration_free()
  */
-extern struct vysmaw_configuration *vysmaw_configuration_new(void)
+extern struct vysmaw_configuration *vysmaw_configuration_new(
+	const char *path)
 	__attribute__((malloc,returns_nonnull));
 
 /* Free a configuration instance that was allocated using
