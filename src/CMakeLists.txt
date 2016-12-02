@@ -20,7 +20,6 @@ target_compile_options(vys PRIVATE
   ${GLIB2_CLFAGS_OTHER})
 target_compile_definitions(vys PRIVATE
   VYS_CONFIG_PATH="${CMAKE_INSTALL_PREFIX}/etc/vys.conf"
-  VYS_CONFIG_GROUP_NAME="vys"
   VYS_SIGNAL_MULTICAST_ADDRESS="224.0.0.100")
 target_link_libraries(vys
   ${GLIB2_LIBRARIES})

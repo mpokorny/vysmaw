@@ -20,6 +20,8 @@
 
 #include <vys.h>
 
+/* vys configuration file keys */
+#define VYS_CONFIG_GROUP_NAME "vys"
 #define SIGNAL_MULTICAST_ADDRESS_KEY "signal_multicast_address"
 
 extern char *config_vys_base(void)
