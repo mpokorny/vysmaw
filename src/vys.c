@@ -22,21 +22,31 @@
 
 #define SIGNAL_MULTICAST_ADDRESS_KEY "signal_multicast_address"
 
-static gchar *load_config(const gchar *path, GError **error)
-	__attribute__((malloc));
+static gchar *load_config(
+	const gchar *path, struct vys_error_record **error_record)
+	__attribute__((malloc,returns_nonnull));
 static gchar *default_config()
 	__attribute__((returns_nonnull,malloc));
-struct vys_configuration *init_from_key_file(GKeyFile *kf)
-	__attribute__((nonnull,malloc));
+void init_from_key_file(
+	GKeyFile *kf, struct vys_configuration *config)
+	__attribute__((nonnull));
 
 static gchar *
-load_config(const gchar *path, GError **error)
+load_config(const gchar *path, struct vys_error_record **error_record)
 {
 	gchar *result = NULL;
 	if (path != NULL) {
 		GKeyFile *kf = g_key_file_new();
-		if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, error))
+		GError *err = NULL;
+		if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &err)) {
 			result = g_key_file_to_data(kf, NULL, NULL);
+		} else {
+			if (error_record != NULL)
+				MSG_ERROR(error_record, -1,
+				          "Failed to load configuration file '%s': %s",
+				          path, err->message);
+			g_error_free(err);
+		}
 		g_key_file_free(kf);
 	}
 	if (result == NULL)
@@ -56,38 +66,38 @@ default_config()
 	return result;
 }
 
-struct vys_configuration *
-init_from_key_file(GKeyFile *kf)
+void
+init_from_key_file(GKeyFile *kf, struct vys_configuration *config)
 {
-	struct vys_configuration config;
-
 	gchar *mc_addr = g_key_file_get_string(
 		kf, VYS_CONFIG_GROUP_NAME, SIGNAL_MULTICAST_ADDRESS_KEY, NULL);
 	g_assert(mc_addr != NULL);
 	gsize mc_addr_len =
-		g_strlcpy(config.signal_multicast_address, mc_addr,
-		          sizeof(config.signal_multicast_address));
+		g_strlcpy(config->signal_multicast_address, mc_addr,
+		          sizeof(config->signal_multicast_address));
 	g_free(mc_addr);
 	/* check that value is not too long */
-	if (mc_addr_len >= sizeof(config.signal_multicast_address))
-		return NULL;
-
-	return g_memdup(&config, sizeof(config));
+	if (mc_addr_len >= sizeof(config->signal_multicast_address))
+		MSG_ERROR(&(config->error_record), -1, "'%s' field value is too long",
+		          SIGNAL_MULTICAST_ADDRESS_KEY);
 }
 
 struct vys_configuration *
 vys_configuration_new(const char *path)
 {
-	struct vys_configuration *result = NULL;
+	struct vys_configuration *result = g_new0(struct vys_configuration, 1);
 	gchar *dcfg = default_config();
 	gchar *fcfg = load_config(VYS_CONFIG_PATH, NULL);
-	GError *error = NULL;
-	gchar *pcfg = load_config(path, &error);
-	if (error == NULL) {
+	gchar *pcfg = load_config(path, &(result->error_record));
+	if (result->error_record == NULL) {
 		gchar *cfg = g_strjoin("\n", dcfg, fcfg, pcfg, NULL);
 		GKeyFile *kf = g_key_file_new();
-		if (g_key_file_load_from_data(kf, cfg, -1, G_KEY_FILE_NONE, NULL))
-			result = init_from_key_file(kf);
+		if (g_key_file_load_from_data(kf, cfg, -1, G_KEY_FILE_NONE, NULL)) {
+			init_from_key_file(kf, result);
+		} else {
+			MSG_ERROR(&(result->error_record), -1, "%s",
+			          "Failed to merge configuration files");
+		}
 		g_key_file_free(kf);
 		g_free(cfg);
 	}
@@ -97,6 +107,7 @@ vys_configuration_new(const char *path)
 void
 vys_configuration_free(struct vys_configuration *config)
 {
+	vys_error_record_free(config->error_record);
 	g_free(config);
 }
 

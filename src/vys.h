@@ -25,20 +25,23 @@ extern "C" {
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
 
-struct vys_configuration {
-	/* multicast address for signal messages; expected format is dotted quad IP
-	 * address string */
-	char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
-};
-
 struct vys_error_record {
 	int errnum;
 	char *desc;
 	struct vys_error_record *next;
 };
 
-extern struct vys_configuration *vys_configuration_new(const char *path)
-	__attribute__((malloc));
+struct vys_configuration {
+	struct vys_error_record *error_record;
+
+	/* multicast address for signal messages; expected format is dotted quad IP
+	 * address string */
+	char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
+};
+
+extern struct vys_configuration *vys_configuration_new(
+	const char *path)
+	__attribute__((malloc,returns_nonnull));
 extern void vys_configuration_free(struct vys_configuration *config)
 	__attribute__((nonnull));
 
