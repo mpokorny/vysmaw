@@ -118,3 +118,16 @@ vys_error_record_concat(struct vys_error_record *first,
 	}
 	return result;
 }
+
+char *
+vys_error_record_to_string(struct vys_error_record **record)
+{
+	*record = vys_error_record_reverse(*record);
+	GString *str = g_string_new("");
+	struct vys_error_record *er = *record;
+	while (er != NULL) {
+		g_string_append_printf(str, "%s\n", er->desc);
+		er = er->next;
+	}
+	return g_string_free(str, FALSE);
+}

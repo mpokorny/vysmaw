@@ -59,6 +59,10 @@ extern struct vys_error_record *vys_error_record_reverse(
 	struct vys_error_record *record);
 extern struct vys_error_record *vys_error_record_concat(
 	struct vys_error_record *first, struct vys_error_record *second);
+extern char *vys_error_record_to_string(
+	struct vys_error_record **record)
+	__attribute__((malloc,returns_nonnull,nonnull));
+
 
 #define MSG_ERROR(records, err, format, ...)                            \
 	{ *(records) = \
