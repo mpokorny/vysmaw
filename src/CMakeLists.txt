@@ -38,6 +38,8 @@ target_include_directories(vysmaw PRIVATE
 target_compile_options(vysmaw PRIVATE
   ${GTHREAD2_CFLAGS}
   ${GTHREAD2_CLFAGS_OTHER})
+target_compile_definitions(vysmaw PRIVATE
+  VYSMAW_CONFIG_PATH="${CMAKE_INSTALL_PREFIX}/etc/vysmaw.conf")
 target_link_libraries(vysmaw
   vys
   ${GTHREAD2_LIBRARIES}
