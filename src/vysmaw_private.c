@@ -574,39 +574,6 @@ message_queue_pop(vysmaw_message_queue queue)
 	return result;
 }
 
-struct error_record *
-error_record_new(int errnum, char *desc)
-{
-	struct error_record *result = g_slice_new(struct error_record);
-	result->errnum = errnum;
-	result->desc = desc;
-	return result;
-}
-
-struct error_record *
-error_record_desc_dup(int errnum, const char *desc)
-{
-	return error_record_new(errnum, g_strdup(desc));
-}
-
-struct error_record *
-error_record_desc_dup_printf(int errnum, const char *format, ...)
-{
-	va_list ap;
-	va_start(ap, format);
-	struct error_record *result =
-		error_record_new(errnum, g_strdup_vprintf(format, ap));
-	va_end(ap);
-	return result;
-}
-
-void
-error_record_free(struct error_record *record)
-{
-	g_free(record->desc);
-	g_slice_free(struct error_record, record);
-}
-
 struct data_path_message *
 data_path_message_new(unsigned max_spectra_per_signal)
 {
@@ -630,11 +597,7 @@ data_path_message_free(struct data_path_message *msg)
 			consumer_offset += sizeof(GSList *);
 		}
 	} else if (msg->typ == DATA_PATH_END) {
-		while (msg->error_records != NULL) {
-			error_record_free((struct error_record *)msg->error_records->data);
-			msg->error_records =
-				g_slist_delete_link(msg->error_records, msg->error_records);
-		}
+		vys_error_record_free(msg->error_record);
 	}
 	g_slice_free1(msg->message_size, msg);
 }
@@ -780,7 +743,7 @@ set_nonblocking(int fd)
 
 GHashTable *
 register_spectrum_buffer_pools(vysmaw_handle handle, struct rdma_cm_id *id,
-                               GSList **error_records)
+                               struct vys_error_record **error_record)
 {
 	GHashTable *result =
 		g_hash_table_new(g_direct_hash, g_direct_equal);
@@ -794,7 +757,7 @@ register_spectrum_buffer_pools(vysmaw_handle handle, struct rdma_cm_id *id,
 			if (G_LIKELY(mr != NULL)) {
 				g_hash_table_insert(result, sb_pool, mr);
 			} else {
-				VERB_ERR(error_records, errno, "rdma_reg_msgs");
+				VERB_ERR(error_record, errno, "rdma_reg_msgs");
 				rc = -1;
 				GList *keys = g_hash_table_get_keys(result);
 				while (keys != NULL) {
@@ -803,7 +766,7 @@ register_spectrum_buffer_pools(vysmaw_handle handle, struct rdma_cm_id *id,
 							(struct ibv_mr *)g_hash_table_lookup(
 								result, keys->data));
 					if (G_UNLIKELY(rc1 != 0))
-						VERB_ERR(error_records, errno, "rdma_dereg_mr");
+						VERB_ERR(error_record, errno, "rdma_dereg_mr");
 				}
 				g_hash_table_destroy(result);
 				result = NULL;

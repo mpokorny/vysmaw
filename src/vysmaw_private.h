@@ -19,6 +19,7 @@
 #define VYSMAW_PRIVATE_H_
 
 #include <vysmaw.h>
+#include <vys.h>
 #include <buffer_pool.h>
 #include <glib.h>
 #include <infiniband/verbs.h>
@@ -72,9 +73,8 @@
 
 #define MSG_ERROR(records, err, format, ...)                            \
 	{ *(records) = \
-			g_slist_prepend(*(records), \
-			                error_record_desc_dup_printf( \
-				                (err), G_STRLOC ": " format, ##__VA_ARGS__)); }
+	  vys_error_record_desc_dup_printf( \
+		  *(records), (err), G_STRLOC ": " format, ##__VA_ARGS__); }
 
 #define VERB_ERR(records, err, fn)                                      \
 	MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
@@ -171,13 +171,6 @@ struct signal_msg {
 #define SIZEOF_SIGNAL_MSG(n) \
 	(sizeof(struct signal_msg) + ((n) * sizeof(struct vysmaw_spectrum_info)))
 
-struct error_record {
-	int errnum;
-	char *desc;
-};
-
-#define DATA_PATH_MESSAGE_DESC_LEN 128
-
 struct data_path_message {
 	enum {
 		DATA_PATH_SIGNAL_MSG,
@@ -189,7 +182,7 @@ struct data_path_message {
 	size_t message_size;
 	union {
 		enum ibv_wc_status wc_status;
-		GSList *error_records;
+		struct vys_error_record *error_record;
 		struct {
 			struct signal_msg *signal_msg;
 			GSList *consumers[];
@@ -327,19 +320,6 @@ extern void post_signal_receive_failure(
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
 	__attribute__((nonnull));
 
-extern struct error_record *error_record_new(
-	int errnum, char *desc)
-	__attribute__((nonnull,returns_nonnull,malloc));
-extern struct error_record *error_record_desc_dup(
-	int errnum, const char *desc)
-	__attribute__((nonnull,returns_nonnull,malloc));
-extern struct error_record *error_record_desc_dup_printf(
-	int errnum, const char *format, ...)
-	__attribute__((nonnull,returns_nonnull,malloc,format(printf,2,3)));
-extern void error_record_free(
-	struct error_record *record)
-	__attribute__((nonnull));
-
 extern struct data_path_message *data_path_message_new(
 	unsigned max_spectra_per_signal)
 	__attribute__((malloc,returns_nonnull));
@@ -377,7 +357,8 @@ static inline size_t spectrum_size(const struct vysmaw_data_info *info)
 }
 
 extern GHashTable *register_spectrum_buffer_pools(
-	vysmaw_handle handle, struct rdma_cm_id *id, GSList **error_records)
+	vysmaw_handle handle, struct rdma_cm_id *id,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 
 extern unsigned sockaddr_hash(

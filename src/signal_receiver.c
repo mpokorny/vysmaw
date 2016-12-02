@@ -75,19 +75,22 @@ static struct recv_wr *recv_wr_next(struct recv_wr *wr)
 	__attribute__((nonnull));
 static int get_cm_event(
 	struct rdma_event_channel *channel, enum rdma_cm_event_type type,
-	struct rdma_cm_event **out_ev, GSList **error_records)
+	struct rdma_cm_event **out_ev, struct vys_error_record **error_record)
 	__attribute__((nonnull(1)));
 static int resolve_addr(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static void set_max_posted_wr(
 	struct signal_receiver_context_ *context, unsigned max_posted_wr)
 	__attribute__((nonnull));
 static int start_signal_receive(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int stop_signal_receive(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static bool new_wr(
 	struct signal_receiver_context_ *context, struct recv_wr **wrs)
@@ -96,7 +99,8 @@ static void ack_completions(
 	struct signal_receiver_context_ *context, unsigned min_ack)
 	__attribute__((nonnull));
 static int poll_completions(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull(1)));
 static unsigned create_new_wrs(struct signal_receiver_context_ *context)
 	__attribute__((nonnull));
@@ -104,28 +108,34 @@ static void post_wrs(
 	struct signal_receiver_context_ *context, unsigned num_new_wrs)
 	__attribute__((nonnull));
 static int on_poll_events(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record**error_record)
 	__attribute__((nonnull));
 static int signal_receiver_loop(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_receive_completion(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static void to_quit_state(struct signal_receiver_context_ *context,
                           struct data_path_message *msg)
 	__attribute__((nonnull(1)));
 static int on_loop_input(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_shutdown_timer_event(
-	struct signal_receiver_context_ *context, GSList **error_records)
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int start_shutdown_timer(
-	struct pollfd *pollfd, unsigned interval_ms, GSList **error_records)
+	struct pollfd *pollfd, unsigned interval_ms,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int stop_shutdown_timer(
-	struct pollfd *pollfd, GSList **error_records)
+	struct pollfd *pollfd, struct vys_error_record **error_record)
 	__attribute__((nonnull));
 
 static struct recv_wr *
@@ -167,19 +177,19 @@ static int
 get_cm_event(struct rdma_event_channel *channel,
              enum rdma_cm_event_type type,
              struct rdma_cm_event **out_ev,
-             GSList **error_records)
+             struct vys_error_record **error_record)
 {
 	struct rdma_cm_event *event = NULL;
 
 	int rc = rdma_get_cm_event(channel, &event);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_get_cm_event");
+		VERB_ERR(error_record, errno, "rdma_get_cm_event");
 		return rc;
 	}
 
 	/* Verify the event is the expected type */
 	if (G_UNLIKELY(event->event != type)) {
-		MSG_ERROR(error_records, -event->status,
+		MSG_ERROR(error_record, -event->status,
 		          "event: %s, expecting: %s, status: %s",
 		          rdma_event_str(event->event), rdma_event_str(type),
 		          strerror(-event->status));
@@ -196,7 +206,8 @@ get_cm_event(struct rdma_event_channel *channel,
 }
 
 static int
-resolve_addr(struct signal_receiver_context_ *context, GSList **error_records)
+resolve_addr(struct signal_receiver_context_ *context,
+             struct vys_error_record **error_record)
 {
 	int rc;
 	struct rdma_addrinfo *mcast_rai = NULL;
@@ -208,7 +219,7 @@ resolve_addr(struct signal_receiver_context_ *context, GSList **error_records)
 
 	char *bind_addr = get_ipoib_addr();
 	if (G_UNLIKELY(bind_addr == NULL)) {
-		MSG_ERROR(error_records, errno, "Failed to get IPOIB address: %s",
+		MSG_ERROR(error_record, errno, "Failed to get IPOIB address: %s",
 		          strerror(errno));
 		rc = -1;
 		goto resolve_addr_cleanup_and_return;
@@ -218,14 +229,14 @@ resolve_addr(struct signal_receiver_context_ *context, GSList **error_records)
 	hints.ai_flags = RAI_PASSIVE;
 	rc = rdma_getaddrinfo(bind_addr, NULL, &hints, &bind_rai);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_getaddrinfo (bind)");
+		VERB_ERR(error_record, errno, "rdma_getaddrinfo (bind)");
 		goto resolve_addr_cleanup_and_return;
 	}
 
 	/* bind to a specific adapter if requested to do so */
 	rc = rdma_bind_addr(context->id, bind_rai->ai_src_addr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_bind_addr");
+		VERB_ERR(error_record, errno, "rdma_bind_addr");
 		goto resolve_addr_cleanup_and_return;
 	}
 
@@ -234,7 +245,7 @@ resolve_addr(struct signal_receiver_context_ *context, GSList **error_records)
 		(char *)context->shared->handle->config.signal_multicast_address, NULL,
 		&hints, &mcast_rai);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_getaddrinfo (mcast)");
+		VERB_ERR(error_record, errno, "rdma_getaddrinfo (mcast)");
 		goto resolve_addr_cleanup_and_return;
 	}
 
@@ -244,13 +255,13 @@ resolve_addr(struct signal_receiver_context_ *context, GSList **error_records)
 		mcast_rai->ai_dst_addr,
 		context->shared->handle->config.resolve_addr_timeout_ms);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_resolve_addr");
+		VERB_ERR(error_record, errno, "rdma_resolve_addr");
 		goto resolve_addr_cleanup_and_return;
 	}
 
 	rc = get_cm_event(
 		context->event_channel, RDMA_CM_EVENT_ADDR_RESOLVED, NULL,
-		error_records);
+		error_record);
 	if (G_UNLIKELY(rc != 0))
 		goto resolve_addr_cleanup_and_return;
 
@@ -274,7 +285,7 @@ set_max_posted_wr(struct signal_receiver_context_ *context,
 
 static int
 start_signal_receive(struct signal_receiver_context_ *context,
-                     GSList **error_records)
+                     struct vys_error_record **error_record)
 {
 	set_max_posted_wr(
 		context,
@@ -285,12 +296,12 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	/* event channel */
 	context->event_channel = rdma_create_event_channel();
 	if (G_UNLIKELY(context->event_channel == NULL)) {
-		VERB_ERR(error_records, errno, "rdma_create_event_channel");
+		VERB_ERR(error_record, errno, "rdma_create_event_channel");
 		return -1;
 	}
 	int rc = set_nonblocking(context->event_channel->fd);
 	if (G_UNLIKELY(rc != 0)) {
-		MSG_ERROR(error_records, errno,
+		MSG_ERROR(error_record, errno,
 		          "failed to set multicast completion event channel to "
 		          "non-blocking: %s", strerror(errno));
 		return -1;
@@ -300,12 +311,12 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	rc = rdma_create_id(
 		context->event_channel, &context->id, context, RDMA_PS_UDP);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_create_id");
+		VERB_ERR(error_record, errno, "rdma_create_id");
 		return -1;
 	}
 
 	/* resolve my and multicast addresses */
-	rc = resolve_addr(context, error_records);
+	rc = resolve_addr(context, error_record);
 	if (G_UNLIKELY(rc != 0))
 		return -1;
 
@@ -313,7 +324,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	struct ibv_port_attr port_attr;
 	rc = ibv_query_port(context->id->verbs, context->id->port_num, &port_attr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, rc, "ibv_query_port");
+		VERB_ERR(error_record, rc, "ibv_query_port");
 		return -1;
 	}
 	int mtu = 1 << (port_attr.active_mtu + 7);
@@ -333,7 +344,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	/* completion channel */
 	context->comp_channel = ibv_create_comp_channel(context->id->verbs);
 	if (G_UNLIKELY(context->comp_channel == NULL)) {
-		VERB_ERR(error_records, errno, "ibv_create_comp_channel");
+		VERB_ERR(error_record, errno, "ibv_create_comp_channel");
 		return -1;
 	}
 
@@ -341,7 +352,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	struct ibv_device_attr dev_attr;
 	rc = ibv_query_device(context->id->verbs, &dev_attr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, rc, "ibv_query_device");
+		VERB_ERR(error_record, rc, "ibv_query_device");
 		return -1;
 	}
 	set_max_posted_wr(context, MIN(context->max_posted_wr, dev_attr.max_cqe));
@@ -350,7 +361,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	context->cq = ibv_create_cq(context->id->verbs, context->max_posted_wr,
 	                            NULL, context->comp_channel, 0);
 	if (G_UNLIKELY(context->cq == NULL)) {
-		VERB_ERR(error_records, errno, "ibv_create_cq");
+		VERB_ERR(error_record, errno, "ibv_create_cq");
 		return -1;
 	}
 
@@ -367,7 +378,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	attr.cap.max_recv_sge = 1;
 	rc = rdma_create_qp(context->id, context->id->pd, &attr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_create_qp");
+		VERB_ERR(error_record, errno, "rdma_create_qp");
 		return rc;
 	}
 
@@ -383,19 +394,19 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		context->shared->signal_msg_buffers->pool,
 		context->shared->signal_msg_buffers->pool_size);
 	if (G_UNLIKELY(context->mr == NULL)) {
-		VERB_ERR(error_records, errno, "rdma_reg_msgs");
+		VERB_ERR(error_record, errno, "rdma_reg_msgs");
 		return -1;
 	}
 
 	/* join multicast */
 	rc = rdma_join_multicast(context->id, &context->sockaddr, NULL);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_join_multicast");
+		VERB_ERR(error_record, errno, "rdma_join_multicast");
 		return -1;
 	}
 	struct rdma_cm_event *event;
 	rc = get_cm_event(context->event_channel, RDMA_CM_EVENT_MULTICAST_JOIN,
-	                  &event, error_records);
+	                  &event, error_record);
 	if (G_UNLIKELY(rc != 0))
 		return -1;
 	context->remote_qpn = event->param.ud.qp_num;
@@ -407,7 +418,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 
 static int
 stop_signal_receive(struct signal_receiver_context_ *context,
-                    GSList **error_records)
+                    struct vys_error_record **error_record)
 {
 	int result = 0;
 	int rc;
@@ -415,7 +426,7 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 	if (context->id != NULL) {
 		rc = rdma_leave_multicast(context->id, &context->sockaddr);
 		if (G_UNLIKELY(rc != 0)) {
-			VERB_ERR(error_records, errno, "rdma_leave_multicast");
+			VERB_ERR(error_record, errno, "rdma_leave_multicast");
 			result = -1;
 		}
 		if (context->id->qp != NULL)
@@ -424,14 +435,14 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 	if (context->cq != NULL) {
 		rc = ibv_destroy_cq(context->cq);
 		if (G_UNLIKELY(rc != 0)) {
-			VERB_ERR(error_records, errno, "ibv_destroy_cq");
+			VERB_ERR(error_record, errno, "ibv_destroy_cq");
 			result = -1;
 		}
 	}
 	if (context->mr != NULL) {
 		rc = rdma_dereg_mr(context->mr);
 		if (G_UNLIKELY(rc != 0)) {
-			VERB_ERR(error_records, errno, "rdma_dereg_mr");
+			VERB_ERR(error_record, errno, "rdma_dereg_mr");
 			result = -1;
 		}
 	}
@@ -441,7 +452,7 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 	if (context->id != NULL) {
 		rc = rdma_destroy_id(context->id);
 		if (G_UNLIKELY(rc != 0)) {
-			VERB_ERR(error_records, errno, "rdma_destroy_id");
+			VERB_ERR(error_record, errno, "rdma_destroy_id");
 			result = -1;
 		}
 	}
@@ -487,11 +498,11 @@ ack_completions(struct signal_receiver_context_ *context, unsigned min_ack)
 
 static int
 poll_completions(struct signal_receiver_context_ *context,
-                 GSList **error_records)
+                 struct vys_error_record **error_record)
 {
 	int nc = ibv_poll_cq(context->cq, context->num_posted_wr, context->wcs);
 	if (G_UNLIKELY(nc < 0)) {
-		VERB_ERR(error_records, errno, "ibv_poll_cq");
+		VERB_ERR(error_record, errno, "ibv_poll_cq");
 		return errno;
 	}
 	if (G_LIKELY(nc > 0)) {
@@ -580,14 +591,14 @@ post_wrs(struct signal_receiver_context_ *context, unsigned num_new_wrs)
 
 static int
 on_receive_completion(struct signal_receiver_context_ *context,
-                      GSList **error_records)
+                      struct vys_error_record **error_record)
 {
 	/* get the completion event */
 	struct ibv_cq *ev_cq;
 	void *ev_ctx;
 	int rc = ibv_get_cq_event(context->comp_channel, &ev_cq, &ev_ctx);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "ibv_get_cq_event");
+		VERB_ERR(error_record, errno, "ibv_get_cq_event");
 		return rc;
 	}
 	g_assert(ev_cq == context->cq);
@@ -599,11 +610,11 @@ on_receive_completion(struct signal_receiver_context_ *context,
 	/* post new completion notification request */
 	rc = ibv_req_notify_cq(context->cq, 0);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, rc, "ibv_req_notify_cq");
+		VERB_ERR(error_record, rc, "ibv_req_notify_cq");
 		return -1;
 	}
 
-	rc = poll_completions(context, error_records);
+	rc = poll_completions(context, error_record);
 	if (G_UNLIKELY(rc != 0))
 		return -1;
 
@@ -627,7 +638,8 @@ to_quit_state(struct signal_receiver_context_ *context,
 }
 
 static int
-on_loop_input(struct signal_receiver_context_ *context, GSList **error_records)
+on_loop_input(struct signal_receiver_context_ *context,
+              struct vys_error_record **error_record)
 {
 	struct data_path_message *msg;
 	int rc = 0;
@@ -638,7 +650,7 @@ on_loop_input(struct signal_receiver_context_ *context, GSList **error_records)
 		if (G_LIKELY(n >= 0)) {
 			num_read += n;
 		} else if (errno != EINTR && n < 0) {
-			MSG_ERROR(error_records, errno, "Failed to read from loop pipe: %s",
+			MSG_ERROR(error_record, errno, "Failed to read from loop pipe: %s",
 			          strerror(errno));
 			rc = -1;
 		}
@@ -656,7 +668,7 @@ on_loop_input(struct signal_receiver_context_ *context, GSList **error_records)
 
 static int
 on_shutdown_timer_event(struct signal_receiver_context_ *context,
-                        GSList **error_records)
+                        struct vys_error_record **error_record)
 {
 	uint64_t n;
 	int rc = 0;
@@ -667,7 +679,7 @@ on_shutdown_timer_event(struct signal_receiver_context_ *context,
 		if (G_LIKELY(c >= 0)) {
 			count += c;
 		} else if (errno != EINTR && n < 0) {
-			MSG_ERROR(error_records, errno,
+			MSG_ERROR(error_record, errno,
 			          "Failed to read from timer fd: %s\n",
 			          strerror(errno));
 			rc = -1;
@@ -685,11 +697,11 @@ on_shutdown_timer_event(struct signal_receiver_context_ *context,
 			to_quit_state(context, NULL);
 			if (result != NULL && result->code != VYSMAW_NO_ERROR) {
 				if (result->syserr_desc != NULL) {
-					MSG_ERROR(error_records, result->code, "%s",
+					MSG_ERROR(error_record, result->code, "%s",
 					          result->syserr_desc);
 					g_free(result->syserr_desc);
 				} else if (result->code == VYSMAW_ERROR_BUFFPOOL){
-					MSG_ERROR(error_records, result->code, "%s",
+					MSG_ERROR(error_record, result->code, "%s",
 					          "Buffer pool accounting internal error");
 				}
 			}
@@ -700,28 +712,29 @@ on_shutdown_timer_event(struct signal_receiver_context_ *context,
 }
 
 static int
-on_poll_events(struct signal_receiver_context_ *context, GSList **error_records)
+on_poll_events(struct signal_receiver_context_ *context,
+               struct vys_error_record **error_record)
 {
 	int result = 0;
 	for (unsigned i = 0; result == 0 && i < NUM_FDS; ++i) {
 		if (G_UNLIKELY(context->pollfds[i].revents & (POLLHUP | POLLERR))) {
-			MSG_ERROR(error_records, -1, "%s", "HUP or ERR on poll fd");
+			MSG_ERROR(error_record, -1, "%s", "HUP or ERR on poll fd");
 			result = -1;
 		} else {
 			switch (i) {
 			case SHUTDOWN_TIMER_FD_INDEX:
 				if (G_LIKELY(context->pollfds[i].revents & POLLIN))
-					result = on_shutdown_timer_event(context, error_records);
+					result = on_shutdown_timer_event(context, error_record);
 				break;
 
 			case RECEIVE_COMPLETION_FD_INDEX:
 				if (G_LIKELY(context->pollfds[i].revents & POLLIN))
-					result = on_receive_completion(context, error_records);
+					result = on_receive_completion(context, error_record);
 				break;
 
 			case LOOP_FD_INDEX:
 				if (G_LIKELY(context->pollfds[i].revents & POLLIN))
-					result = on_loop_input(context, error_records);
+					result = on_loop_input(context, error_record);
 				break;
 
 			default:
@@ -735,7 +748,7 @@ on_poll_events(struct signal_receiver_context_ *context, GSList **error_records)
 
 static int
 start_shutdown_timer(struct pollfd *pollfd, unsigned interval_ms,
-                     GSList **error_records)
+                     struct vys_error_record **error_record)
 {
 	int result = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 	pollfd->fd = result;
@@ -749,26 +762,27 @@ start_shutdown_timer(struct pollfd *pollfd, unsigned interval_ms,
 		};
 		int rc = timerfd_settime(result, 0, &itimerspec, NULL);
 		if (rc < 0) {
-			MSG_ERROR(error_records, errno, "Failed to start shutdown timer: %s",
+			MSG_ERROR(error_record, errno, "Failed to start shutdown timer: %s",
 			          strerror(errno));
-			stop_shutdown_timer(pollfd, error_records);
+			stop_shutdown_timer(pollfd, error_record);
 			return rc;
 		}
 	} else {
-		MSG_ERROR(error_records, errno, "Failed to create shutdown timer: %s",
+		MSG_ERROR(error_record, errno, "Failed to create shutdown timer: %s",
 		          strerror(errno));
 	}
 	return result;
 }
 
 static int
-stop_shutdown_timer(struct pollfd *pollfd, GSList **error_records)
+stop_shutdown_timer(struct pollfd *pollfd,
+                    struct vys_error_record **error_record)
 {
 	int rc = 0;
 	if (pollfd->fd >= 0) {
 		rc = close(pollfd->fd);
 		if (rc < 0)
-			MSG_ERROR(error_records, errno, "Failed to close shutdown timer: %s",
+			MSG_ERROR(error_record, errno, "Failed to close shutdown timer: %s",
 			          strerror(errno));
 	}
 	pollfd->fd = -1;
@@ -777,7 +791,7 @@ stop_shutdown_timer(struct pollfd *pollfd, GSList **error_records)
 
 static int
 start_loop_monitor(struct signal_receiver_context_ *context,
-                   GSList **error_records)
+                   struct vys_error_record **error_record)
 {
 	struct pollfd *pollfd = &context->pollfds[LOOP_FD_INDEX];
 	pollfd->fd = context->shared->loop_fd;
@@ -787,18 +801,18 @@ start_loop_monitor(struct signal_receiver_context_ *context,
 
 static int
 stop_loop_monitor(struct signal_receiver_context_ *context,
-                  GSList **error_records)
+                  struct vys_error_record **error_record)
 {
 	int rc = close(context->shared->loop_fd);
 	if (G_UNLIKELY(rc != 0))
-		MSG_ERROR(error_records, errno, "Failed to close loop fd: %s",
+		MSG_ERROR(error_record, errno, "Failed to close loop fd: %s",
 		          strerror(errno));
 	return rc;
 }
 
 static int
 signal_receiver_loop(struct signal_receiver_context_ *context,
-                     GSList **error_records)
+                     struct vys_error_record **error_record)
 {
 	int result = 0;
 	bool quit = false;
@@ -806,9 +820,9 @@ signal_receiver_loop(struct signal_receiver_context_ *context,
 		int rc = 0;
 		int nfd = poll(context->pollfds, NUM_FDS, -1);
 		if (G_LIKELY(nfd > 0)) {
-			rc = on_poll_events(context, error_records);
+			rc = on_poll_events(context, error_record);
 		} else if (G_UNLIKELY(nfd < 0) && errno != EINTR) {
-			MSG_ERROR(error_records, errno, "Failed to poll fds: %s",
+			MSG_ERROR(error_record, errno, "Failed to poll fds: %s",
 			          strerror(errno));
 			rc = -1;
 		}
@@ -832,7 +846,7 @@ void *
 signal_receiver(struct signal_receiver_context *shared)
 {
 
-	GSList *error_records = NULL;
+	struct vys_error_record *error_record = NULL;
 
 	struct signal_receiver_context_ context;
 	memset(&context, 0, sizeof(context));
@@ -842,24 +856,24 @@ signal_receiver(struct signal_receiver_context *shared)
 	for (unsigned i = 0; i < NUM_FDS; ++i)
 		context.pollfds[i].fd = -1;
 
-	int rc = start_loop_monitor(&context, &error_records);
+	int rc = start_loop_monitor(&context, &error_record);
 	g_assert(rc == 0);
 
 	rc = start_shutdown_timer(
 		&context.pollfds[SHUTDOWN_TIMER_FD_INDEX],
 		shared->handle->config.shutdown_check_interval_ms,
-		&error_records);
+		&error_record);
 	if (rc < 0)
 		goto signal_data_path_end_and_return;
 
-	rc = start_signal_receive(&context, &error_records);
+	rc = start_signal_receive(&context, &error_record);
 	if (rc < 0)
 		goto signal_data_path_end_and_return;
 
 	READY(&shared->handle->gate);
 
 	context.state = STATE_RUN;
-	rc = signal_receiver_loop(&context, &error_records);
+	rc = signal_receiver_loop(&context, &error_record);
 
 signal_data_path_end_and_return:
 	READY(&shared->handle->gate);
@@ -869,19 +883,19 @@ signal_data_path_end_and_return:
 		to_quit_state(&context, NULL);
 		/* polling loop will only poll the loop fd, as the others are now
 		 * closed */
-		signal_receiver_loop(&context, &error_records);
+		signal_receiver_loop(&context, &error_record);
 	}
 
-	stop_signal_receive(&context, &error_records);
+	stop_signal_receive(&context, &error_record);
 
 	stop_shutdown_timer(
-		&context.pollfds[SHUTDOWN_TIMER_FD_INDEX], &error_records);
+		&context.pollfds[SHUTDOWN_TIMER_FD_INDEX], &error_record);
 
-	stop_loop_monitor(&context, &error_records);
+	stop_loop_monitor(&context, &error_record);
 
 	g_assert(context.end_msg != NULL && context.end_msg->typ == DATA_PATH_END);
-	context.end_msg->error_records =
-		g_slist_concat(error_records, context.end_msg->error_records);
+	context.end_msg->error_record =
+		vys_error_record_concat(error_record, context.end_msg->error_record);
 	g_async_queue_push(shared->signal_msg_queue, context.end_msg);
 
 	g_async_queue_unref(shared->signal_msg_queue);

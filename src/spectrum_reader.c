@@ -101,10 +101,12 @@ static int compare_server_comp_ch_fd(
 	void *unused __attribute__((unused)))
 	__attribute__((nonnull,pure));
 static int start_rdma_cm(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int stop_rdma_cm(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static void set_max_posted_wr(
 	struct spectrum_reader_context_ *context,
@@ -112,37 +114,41 @@ static void set_max_posted_wr(
 	__attribute__((nonnull));
 static struct server_connection_context *initiate_server_connection(
 	struct spectrum_reader_context_ *context, const struct sockaddr_in *sockaddr,
-	GSList **error_records)
+	struct vys_error_record **error_record)
 	__attribute__((nonnull,returns_nonnull,malloc));
 static int find_connection(
 	struct spectrum_reader_context_ *context, struct sockaddr_in *sockaddr,
 	struct server_connection_context **conn_ctx, GQueue **req_queue,
-	GSList **error_records)
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_signal_message(
 	struct spectrum_reader_context_ *context, struct signal_msg *msg,
-	GSList **consumers, GSList **error_records)
+	GSList **consumers, struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_data_path_message(
 	struct spectrum_reader_context_ *context, struct data_path_message *msg,
-	GSList **error_records)
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_server_addr_resolved(
 	struct spectrum_reader_context_ *context,
-	struct server_connection_context *conn_ctx, GSList **error_records)
+	struct server_connection_context *conn_ctx,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_server_route_resolved(
 	struct spectrum_reader_context_ *context,
-	struct server_connection_context *conn_ctx, GSList **error_records)
+	struct server_connection_context *conn_ctx,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int post_server_reads(
 	struct spectrum_reader_context_ *context,
-	struct server_connection_context *conn_ctx, GSList **error_records)
+	struct server_connection_context *conn_ctx,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_server_established(
 	struct spectrum_reader_context_ *context,
 	struct server_connection_context *conn_ctx, uint32_t rkey,
-	unsigned initiator_depth, GSList **error_records)
+	unsigned initiator_depth,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static GSequenceIter *find_server_connection_context_iter(
 	const struct spectrum_reader_context_ *context, int fd)
@@ -152,18 +158,21 @@ static struct server_connection_context *find_server_connection_context(
 	__attribute__((nonnull));
 static int begin_server_disconnect(
 	struct spectrum_reader_context_ *context,
-	struct server_connection_context *conn_ctx, GSList **error_records)
+	struct server_connection_context *conn_ctx,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int complete_server_disconnect(
 	struct spectrum_reader_context_ *context,
-	struct server_connection_context *conn_ctx, GSList **error_records)
+	struct server_connection_context *conn_ctx,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_cm_event(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int poll_completions(
 	GChecksum *checksum, struct server_connection_context *conn_ctx,
-	GSList **reqs, GSList **error_records)
+	GSList **reqs, struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static void ack_completions(
 	struct server_connection_context *conn_ctx, unsigned min_ack)
@@ -171,33 +180,39 @@ static void ack_completions(
 static int get_completed_requests(
 	struct spectrum_reader_context_ *context, int fd,
 	struct server_connection_context **conn_ctx, GSList **reqs,
-	GSList **error_records)
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_read_completion(
 	struct spectrum_reader_context_ *context, unsigned pfd,
-	GSList **error_records)
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_inactivity_timer_event(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_poll_events(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
-static int to_quit_state(struct spectrum_reader_context_ *context,
-                         struct data_path_message *msg, GSList **error_records)
+static int to_quit_state(
+	struct spectrum_reader_context_ *context,
+	struct data_path_message *msg, struct vys_error_record **error_record)
 	__attribute__((nonnull(1,3)));
 static int spectrum_reader_loop(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int start_inactivity_timer(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int stop_inactivity_timer(
-	struct spectrum_reader_context_ *context, GSList **error_records)
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int loopback_msg(
 	struct spectrum_reader_context_ *context,
-	struct data_path_message *msg, GSList **error_records)
+	struct data_path_message *msg, struct vys_error_record **error_record)
 	__attribute__((nonnull));
 
 static bool
@@ -245,17 +260,18 @@ compare_server_comp_ch_fd(const struct server_connection_context *c1,
 }
 
 static int
-start_rdma_cm(struct spectrum_reader_context_ *context, GSList **error_records)
+start_rdma_cm(struct spectrum_reader_context_ *context,
+              struct vys_error_record **error_record)
 {
 	/* rdma cm event channel */
 	context->event_channel = rdma_create_event_channel();
 	if (G_UNLIKELY(context->event_channel == NULL)) {
-		VERB_ERR(error_records, errno, "rdma_create_event_channel");
+		VERB_ERR(error_record, errno, "rdma_create_event_channel");
 		return -1;
 	}
 	int rc = set_nonblocking(context->event_channel->fd);
 	if (G_UNLIKELY(rc != 0)) {
-		MSG_ERROR(error_records, errno,
+		MSG_ERROR(error_record, errno,
 		          "failed to set rdma cm event channel to non-blocking: %s",
 		          strerror(errno));
 		return rc;
@@ -274,7 +290,8 @@ start_rdma_cm(struct spectrum_reader_context_ *context, GSList **error_records)
 }
 
 static int
-stop_rdma_cm(struct spectrum_reader_context_ *context, GSList **error_records)
+stop_rdma_cm(struct spectrum_reader_context_ *context,
+             struct vys_error_record **error_record)
 {
 	if (context->fd_connections != NULL)
 		g_sequence_free(context->fd_connections);
@@ -302,12 +319,12 @@ set_max_posted_wr(struct spectrum_reader_context_ *context,
 static struct server_connection_context *
 initiate_server_connection(struct spectrum_reader_context_ *context,
                            const struct sockaddr_in *sockaddr,
-                           GSList **error_records)
+                           struct vys_error_record **error_record)
 {
 	struct rdma_cm_id *id;
 	int rc = rdma_create_id(context->event_channel, &id, NULL, RDMA_PS_TCP);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_create_id");
+		VERB_ERR(error_record, errno, "rdma_create_id");
 		return NULL;
 	}
 
@@ -316,7 +333,7 @@ initiate_server_connection(struct spectrum_reader_context_ *context,
 		id, NULL, (struct sockaddr *)key,
 		context->shared->handle->config.resolve_addr_timeout_ms);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_resolve_addr");
+		VERB_ERR(error_record, errno, "rdma_resolve_addr");
 		rdma_destroy_id(id);
 		free_sockaddr_key(key);
 		return NULL;
@@ -342,12 +359,12 @@ static int
 find_connection(struct spectrum_reader_context_ *context,
                 struct sockaddr_in *sockaddr,
                 struct server_connection_context **conn_ctx,
-                GQueue **req_queue, GSList **error_records)
+                GQueue **req_queue, struct vys_error_record **error_record)
 {
 	*conn_ctx = g_hash_table_lookup(context->connections, sockaddr);
 	if (*conn_ctx == NULL) {
 		*conn_ctx =
-			initiate_server_connection(context, sockaddr, error_records);
+			initiate_server_connection(context, sockaddr, error_record);
 		if (G_UNLIKELY(*conn_ctx == NULL))
 			return -1;
 	}
@@ -362,14 +379,14 @@ find_connection(struct spectrum_reader_context_ *context,
 static int
 on_signal_message(struct spectrum_reader_context_ *context,
                   struct signal_msg *msg, GSList **consumers,
-                  GSList **error_records)
+                  struct vys_error_record **error_record)
 {
 	struct signal_msg_payload *payload = &(msg->payload);
 	GQueue *reqs = NULL;
 	struct server_connection_context *conn_ctx = NULL;
 
 	int rc = find_connection(context, &payload->sockaddr, &conn_ctx, &reqs,
-	                         error_records);
+	                         error_record);
 
 	if (G_LIKELY(rc == 0 && reqs != NULL)) {
 		struct vysmaw_spectrum_info *info = payload->infos;
@@ -388,14 +405,15 @@ on_signal_message(struct spectrum_reader_context_ *context,
 
 static int
 on_data_path_message(struct spectrum_reader_context_ *context,
-                     struct data_path_message *msg, GSList **error_records)
+                     struct data_path_message *msg,
+                     struct vys_error_record **error_record)
 {
 	int rc = 0;
 	switch (msg->typ) {
 	case DATA_PATH_SIGNAL_MSG:
 		if (G_LIKELY(context->state == STATE_RUN))
 			rc = on_signal_message(
-				context, msg->signal_msg, msg->consumers, error_records);
+				context, msg->signal_msg, msg->consumers, error_record);
 		buffer_pool_push(context->shared->signal_msg_buffers, msg->signal_msg);
 		data_path_message_free(msg);
 		break;
@@ -412,13 +430,13 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 
 	case DATA_PATH_QUIT:
 		if (context->quit_msg == NULL) {
-			rc = to_quit_state(context, msg, error_records);
+			rc = to_quit_state(context, msg, error_record);
 		} else {
 			if (context->quit_msg == msg) {
 				context->end_msg = data_path_message_new(
 					context->shared->signal_msg_num_spectra);
 				context->end_msg->typ = DATA_PATH_END;
-				rc = loopback_msg(context, context->end_msg, error_records);
+				rc = loopback_msg(context, context->end_msg, error_record);
 				context->quit_msg = NULL;
 			}
 			data_path_message_free(msg);
@@ -439,13 +457,13 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 static int
 on_server_addr_resolved(struct spectrum_reader_context_ *context,
                         struct server_connection_context *conn_ctx,
-                        GSList **error_records)
+                        struct vys_error_record **error_record)
 {
 	/* query ib device */
 	struct ibv_device_attr dev_attr;
 	int rc = ibv_query_device(conn_ctx->id->verbs, &dev_attr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, rc, "ibv_query_device");
+		VERB_ERR(error_record, rc, "ibv_query_device");
 		return -1;
 	}
 	set_max_posted_wr(
@@ -463,7 +481,7 @@ on_server_addr_resolved(struct spectrum_reader_context_ *context,
 	attr.cap.max_recv_sge = 1;
 	rc = rdma_create_qp(conn_ctx->id, NULL, &attr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_create_qp");
+		VERB_ERR(error_record, errno, "rdma_create_qp");
 		return -1;
 	}
 
@@ -474,7 +492,7 @@ on_server_addr_resolved(struct spectrum_reader_context_ *context,
 	/* resize cq for the maximum number of posted work requests */
 	rc = ibv_resize_cq(conn_ctx->id->send_cq, conn_ctx->max_posted_wr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "ibv_resize_cq");
+		VERB_ERR(error_record, errno, "ibv_resize_cq");
 		return -1;
 	}
 
@@ -487,7 +505,7 @@ on_server_addr_resolved(struct spectrum_reader_context_ *context,
 		conn_ctx->id,
 		context->shared->handle->config.resolve_route_timeout_ms);
 	if (G_UNLIKELY(rc != 0))
-		VERB_ERR(error_records, errno, "rdma_resolve_route");
+		VERB_ERR(error_record, errno, "rdma_resolve_route");
 
 	return rc;
 
@@ -496,11 +514,11 @@ on_server_addr_resolved(struct spectrum_reader_context_ *context,
 static int
 on_server_route_resolved(struct spectrum_reader_context_ *context,
                          struct server_connection_context *conn_ctx,
-                         GSList **error_records)
+                         struct vys_error_record **error_record)
 {
 	/* register memory for receiving spectra */
 	conn_ctx->mrs = register_spectrum_buffer_pools(
-		context->shared->handle, conn_ctx->id, error_records);
+		context->shared->handle, conn_ctx->id, error_record);
 	if (G_UNLIKELY(conn_ctx->mrs == NULL))
 		return -1;
 
@@ -519,7 +537,7 @@ on_server_route_resolved(struct spectrum_reader_context_ *context,
 	/* post first request for notification from completion queue */
 	int rc = ibv_req_notify_cq(conn_ctx->id->send_cq, 0);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, rc, "ibv_req_notify_cq");
+		VERB_ERR(error_record, rc, "ibv_req_notify_cq");
 		return rc;
 	}
 
@@ -529,14 +547,14 @@ on_server_route_resolved(struct spectrum_reader_context_ *context,
 	conn_param.initiator_depth = conn_ctx->max_posted_wr;
 	rc = rdma_connect(conn_ctx->id, &conn_param);
 	if (G_UNLIKELY(rc != 0))
-		VERB_ERR(error_records, errno, "rdma_connect");
+		VERB_ERR(error_record, errno, "rdma_connect");
 	return rc;
 }
 
 static int
 post_server_reads(struct spectrum_reader_context_ *context,
                   struct server_connection_context *conn_ctx,
-                  GSList **error_records)
+                  struct vys_error_record **error_record)
 {
 	int rc = 0;
 	struct ibv_mr *mr = NULL;
@@ -560,7 +578,7 @@ post_server_reads(struct spectrum_reader_context_ *context,
 			if (G_LIKELY(rc == 0))
 				conn_ctx->num_posted_wr++;
 			else
-				VERB_ERR(error_records, errno, "rdma_post_read");
+				VERB_ERR(error_record, errno, "rdma_post_read");
 		} else {
 			free_rdma_req(req);
 		}
@@ -572,14 +590,14 @@ static int
 on_server_established(struct spectrum_reader_context_ *context,
                       struct server_connection_context *conn_ctx,
                       uint32_t rkey, unsigned initiator_depth,
-                      GSList **error_records)
+                      struct vys_error_record **error_record)
 {
 	conn_ctx->rkey = rkey;
 	set_max_posted_wr(context, conn_ctx,
 	                  MIN(conn_ctx->max_posted_wr, initiator_depth));
 	conn_ctx->wcs = g_new(struct ibv_wc, conn_ctx->max_posted_wr);
 	conn_ctx->established = true;
-	return post_server_reads(context, conn_ctx, error_records);
+	return post_server_reads(context, conn_ctx, error_record);
 }
 
 static GSequenceIter *
@@ -617,7 +635,7 @@ find_server_connection_context(const struct spectrum_reader_context_ *context,
 static int
 begin_server_disconnect(struct spectrum_reader_context_ *context,
                         struct server_connection_context *conn_ctx,
-                        GSList **error_records)
+                        struct vys_error_record **error_record)
 {
 	int rc = 0;
 	while (!g_queue_is_empty(conn_ctx->reqs))
@@ -627,7 +645,7 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
 		conn_ctx->established = false;
 		rc = rdma_disconnect(conn_ctx->id);
 		if (G_UNLIKELY(rc != 0))
-			VERB_ERR(error_records, errno, "rdma_disconnect");
+			VERB_ERR(error_record, errno, "rdma_disconnect");
 	}
 	return rc;
 }
@@ -635,7 +653,7 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
 static int
 complete_server_disconnect(struct spectrum_reader_context_ *context,
                            struct server_connection_context *conn_ctx,
-                           GSList **error_records)
+                           struct vys_error_record **error_record)
 {
 	if (conn_ctx->reqs != NULL)
 		g_queue_free(conn_ctx->reqs);
@@ -643,7 +661,7 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 	bool removed = g_hash_table_remove(
 		context->connections, &(conn_ctx->id->route.addr.dst_sin));
 	if (G_UNLIKELY(!removed))
-		MSG_ERROR(error_records, -1, "%s",
+		MSG_ERROR(error_record, -1, "%s",
 		          "failed to remove server connection record from client");
 
 	g_sequence_remove(
@@ -672,7 +690,7 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 		              void *unused1) {
 			int rc = rdma_dereg_mr(mr);
 			if (G_UNLIKELY(rc != 0))
-				VERB_ERR(error_records, errno, "rdma_dereg_mr");
+				VERB_ERR(error_record, errno, "rdma_dereg_mr");
 		}
 		g_hash_table_foreach(conn_ctx->mrs, (GHFunc)dereg_mr, NULL);
 		g_hash_table_destroy(conn_ctx->mrs);
@@ -680,7 +698,7 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 
 	int rc = rdma_destroy_id(conn_ctx->id);
 	if (G_UNLIKELY(rc != 0))
-		VERB_ERR(error_records, errno, "rdma_destroy_id");
+		VERB_ERR(error_record, errno, "rdma_destroy_id");
 
 	if (conn_ctx->wcs != NULL)
 		g_free(conn_ctx->wcs);
@@ -690,17 +708,18 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 
 	g_slice_free(struct server_connection_context, conn_ctx);
 
-	return ((*error_records != NULL) ? -1 : 0);
+	return ((*error_record != NULL) ? -1 : 0);
 }
 
 static int
-on_cm_event(struct spectrum_reader_context_ *context, GSList **error_records)
+on_cm_event(struct spectrum_reader_context_ *context,
+            struct vys_error_record **error_record)
 {
 	/* get event */
 	struct rdma_cm_event *event = NULL;
 	int rc = rdma_get_cm_event(context->event_channel, &event);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "rdma_get_cm_event");
+		VERB_ERR(error_record, errno, "rdma_get_cm_event");
 		return rc;
 	}
 
@@ -710,7 +729,7 @@ on_cm_event(struct spectrum_reader_context_ *context, GSList **error_records)
 		                    &event->id->route.addr.dst_sin);
 	if (G_UNLIKELY(conn_ctx == NULL))
 		MSG_ERROR(
-			error_records, -1,
+			error_record, -1,
 			"failed to find connection for event %s",
 			rdma_event_str(event->event));
 
@@ -725,31 +744,31 @@ on_cm_event(struct spectrum_reader_context_ *context, GSList **error_records)
 	/* ack event */
 	rc = rdma_ack_cm_event(event);
 	if (G_UNLIKELY(rc != 0))
-		VERB_ERR(error_records, errno, "rdma_ack_cm_event");
+		VERB_ERR(error_record, errno, "rdma_ack_cm_event");
 
-	if (G_UNLIKELY(*error_records != NULL))
+	if (G_UNLIKELY(*error_record != NULL))
 		return -1;
 
 	/* dispatch event based on type */
 	switch (ev_type) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
-		rc = on_server_addr_resolved(context, conn_ctx, error_records);
+		rc = on_server_addr_resolved(context, conn_ctx, error_record);
 		break;
 
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
-		rc = on_server_route_resolved(context, conn_ctx, error_records);
+		rc = on_server_route_resolved(context, conn_ctx, error_record);
 		break;
 
 	case RDMA_CM_EVENT_ESTABLISHED: {
 		uint32_t rkey = *(uint32_t *)private_data;
 		rc = on_server_established(context, conn_ctx, rkey, initiator_depth,
-		                           error_records);
+		                           error_record);
 		break;
 	}
 	case RDMA_CM_EVENT_DISCONNECTED:
-		rc = begin_server_disconnect(context, conn_ctx, error_records);
+		rc = begin_server_disconnect(context, conn_ctx, error_record);
 		if (rc == 0 && conn_ctx->num_posted_wr == 0)
-			rc = complete_server_disconnect(context, conn_ctx, error_records);
+			rc = complete_server_disconnect(context, conn_ctx, error_record);
 		break;
 
 	case RDMA_CM_EVENT_ADDR_ERROR:
@@ -760,7 +779,7 @@ on_cm_event(struct spectrum_reader_context_ *context, GSList **error_records)
 		char addr[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &(conn_ctx->id->route.addr.dst_sin),
 		          addr, sizeof(addr));
-		MSG_ERROR(error_records, -1, "%s on %s", rdma_event_str(ev_type), addr);
+		MSG_ERROR(error_record, -1, "%s on %s", rdma_event_str(ev_type), addr);
 		rc = -1;
 		break;
 	}
@@ -773,13 +792,13 @@ on_cm_event(struct spectrum_reader_context_ *context, GSList **error_records)
 
 static int
 poll_completions(GChecksum *checksum, struct server_connection_context *conn_ctx,
-                 GSList **reqs, GSList **error_records)
+                 GSList **reqs, struct vys_error_record **error_record)
 {
 	*reqs = NULL;
 	int nc = ibv_poll_cq(conn_ctx->id->send_cq, conn_ctx->max_posted_wr,
 	                     conn_ctx->wcs);
 	if (G_UNLIKELY(nc < 0)) {
-		VERB_ERR(error_records, errno, "ibv_poll_cq");
+		VERB_ERR(error_record, errno, "ibv_poll_cq");
 		return errno;
 	}
 	if (G_LIKELY(nc > 0)) {
@@ -819,12 +838,12 @@ ack_completions(struct server_connection_context *conn_ctx, unsigned min_ack)
 static int
 get_completed_requests(struct spectrum_reader_context_ *context, int fd,
                        struct server_connection_context **conn_ctx,
-                       GSList **reqs, GSList **error_records)
+                       GSList **reqs, struct vys_error_record **error_record)
 {
 	/* look up server_connection_context instance for given fd */
 	*conn_ctx = find_server_connection_context(context, fd);
 	if (G_UNLIKELY(*conn_ctx == NULL)) {
-		MSG_ERROR(error_records, -1,
+		MSG_ERROR(error_record, -1,
 		          "failed to find server context for read completion on %d",
 		          fd);
 		return -1;
@@ -835,7 +854,7 @@ get_completed_requests(struct spectrum_reader_context_ *context, int fd,
 	int rc =
 		ibv_get_cq_event((*conn_ctx)->id->send_cq_channel, &ev_cq, &cq_ctx);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, errno, "ibv_get_cq_event");
+		VERB_ERR(error_record, errno, "ibv_get_cq_event");
 		return rc;
 	}
 
@@ -844,16 +863,16 @@ get_completed_requests(struct spectrum_reader_context_ *context, int fd,
 
 	rc = ibv_req_notify_cq(ev_cq, 0);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_records, rc, "ibv_req_notify_cq");
+		VERB_ERR(error_record, rc, "ibv_req_notify_cq");
 		return rc;
 	}
 
-	return poll_completions(context->checksum, *conn_ctx, reqs, error_records);
+	return poll_completions(context->checksum, *conn_ctx, reqs, error_record);
 }
 
 static int
 on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
-                   GSList **error_records)
+                   struct vys_error_record **error_record)
 {
 	struct pollfd *pollfd =
 		&g_array_index(context->pollfds, struct pollfd, pfd);
@@ -861,12 +880,12 @@ on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
 	GSList *reqs = NULL;
 	struct server_connection_context *conn_ctx;
 	int rc = get_completed_requests(context, pollfd->fd, &conn_ctx, &reqs,
-	                                error_records);
+	                                error_record);
 	if (G_UNLIKELY(rc != 0)) return rc;
 
 	g_timer_start(conn_ctx->last_access);
 
-	rc = post_server_reads(context, conn_ctx, error_records);
+	rc = post_server_reads(context, conn_ctx, error_record);
 	if (G_UNLIKELY(rc != 0)) return rc;
 
 	while (reqs != NULL) {
@@ -887,14 +906,14 @@ on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
 	}
 
 	if (!conn_ctx->established && conn_ctx->num_posted_wr == 0)
-		rc = complete_server_disconnect(context, conn_ctx, error_records);
+		rc = complete_server_disconnect(context, conn_ctx, error_record);
 
 	return rc;
 }
 
 static int
 on_inactivity_timer_event(struct spectrum_reader_context_ *context,
-                          GSList **error_records)
+                          struct vys_error_record **error_record)
 {
 	struct pollfd *pollfd = &g_array_index(
 		context->pollfds, struct pollfd, INACTIVITY_TIMER_FD_INDEX);
@@ -910,18 +929,19 @@ on_inactivity_timer_event(struct spectrum_reader_context_ *context,
 	                         void *unused1) {
 		if (g_timer_elapsed(conn_ctx->last_access, NULL)
 		    >= inactive_server_timeout_sec)
-			begin_server_disconnect(context, conn_ctx, error_records);
+			begin_server_disconnect(context, conn_ctx, error_record);
 	}
 
 	g_hash_table_foreach(
 		context->connections, (GHFunc)disconnect_inactive, NULL);
 
-	if (*error_records != NULL) return -1;
+	if (*error_record != NULL) return -1;
 	return 0;
 }
 
 static int
-on_poll_events(struct spectrum_reader_context_ *context, GSList **error_records)
+on_poll_events(struct spectrum_reader_context_ *context,
+               struct vys_error_record **error_record)
 {
 	int rc = 0;
 
@@ -929,9 +949,9 @@ on_poll_events(struct spectrum_reader_context_ *context, GSList **error_records)
 	struct pollfd *cm_pollfd =
 		&g_array_index(context->pollfds, struct pollfd, CM_EVENT_FD_INDEX);
 	if (cm_pollfd->revents & POLLIN) {
-		rc = on_cm_event(context, error_records);
+		rc = on_cm_event(context, error_record);
 	} else if (cm_pollfd->revents & (POLLERR | POLLHUP)) {
-		MSG_ERROR(error_records, -1, "%s",
+		MSG_ERROR(error_record, -1, "%s",
 		          "rdma cm event channel ERR or HUP");
 		rc = -1;
 	}
@@ -940,7 +960,7 @@ on_poll_events(struct spectrum_reader_context_ *context, GSList **error_records)
 	struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
 	                                          INACTIVITY_TIMER_FD_INDEX);
 	if (tm_pollfd->revents & POLLIN)
-		rc = on_inactivity_timer_event(context, error_records);
+		rc = on_inactivity_timer_event(context, error_record);
 
 	/* read completion events */
 	for (unsigned i = NUM_FIXED_FDS; i < context->pollfds->len; ++i) {
@@ -948,9 +968,9 @@ on_poll_events(struct spectrum_reader_context_ *context, GSList **error_records)
 			&g_array_index(context->pollfds, struct pollfd, i);
 		int rc1;
 		if (ev_pollfd->revents & POLLIN) {
-			rc1 = on_read_completion(context, i, error_records);
+			rc1 = on_read_completion(context, i, error_record);
 		} else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
-			MSG_ERROR(error_records, -1, "%s",
+			MSG_ERROR(error_record, -1, "%s",
 			          "connection event channel ERR or HUP");
 			rc1 = -1;
 		}
@@ -967,7 +987,8 @@ on_poll_events(struct spectrum_reader_context_ *context, GSList **error_records)
 
 static int
 to_quit_state(struct spectrum_reader_context_ *context,
-              struct data_path_message *quit_msg, GSList **error_records)
+              struct data_path_message *quit_msg,
+              struct vys_error_record **error_record)
 {
 	g_assert(context->state != STATE_DONE);
 
@@ -978,7 +999,7 @@ to_quit_state(struct spectrum_reader_context_ *context,
 				g_sequence_get_begin_iter(context->fd_connections);
 			while (!g_sequence_iter_is_end(iter)) {
 				struct server_connection_context *conn_ctx = g_sequence_get(iter);
-				begin_server_disconnect(context, conn_ctx, error_records);
+				begin_server_disconnect(context, conn_ctx, error_record);
 				iter = g_sequence_iter_next(iter);
 			}
 		}
@@ -987,7 +1008,7 @@ to_quit_state(struct spectrum_reader_context_ *context,
 				data_path_message_new(context->shared->signal_msg_num_spectra);
 			quit_msg->typ = DATA_PATH_QUIT;
 		}
-		rc = loopback_msg(context, quit_msg, error_records);
+		rc = loopback_msg(context, quit_msg, error_record);
 		context->state = STATE_QUIT;
 		context->quit_msg = quit_msg;
 	}
@@ -996,7 +1017,7 @@ to_quit_state(struct spectrum_reader_context_ *context,
 
 static int
 spectrum_reader_loop(struct spectrum_reader_context_ *context,
-                     GSList **error_records)
+                     struct vys_error_record **error_record)
 {
 	int result = 0;
 	bool quit = false;
@@ -1005,9 +1026,9 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
 		int nfd = poll((struct pollfd *)(context->pollfds->data),
 		               context->pollfds->len, 0);
 		if (G_LIKELY(nfd > 0)) {
-			rc = on_poll_events(context, error_records);
+			rc = on_poll_events(context, error_record);
 		} else if (G_UNLIKELY(nfd < 0 && errno != EINTR)) {
-			MSG_ERROR(error_records, errno,
+			MSG_ERROR(error_record, errno,
 			          "spectrum_reader poll failed: %s", strerror(errno));
 			rc = -1;
 		}
@@ -1015,9 +1036,9 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
 		struct data_path_message *msg =
 			g_async_queue_try_pop(context->shared->read_request_queue);
 		if (msg != NULL)
-			rc1 = on_data_path_message(context, msg, error_records);
+			rc1 = on_data_path_message(context, msg, error_record);
 		if (G_UNLIKELY(rc != 0 || rc1 != 0)) {
-			to_quit_state(context, NULL, error_records);
+			to_quit_state(context, NULL, error_record);
 			result = -1;
 		}
 		quit = (context->state == STATE_DONE
@@ -1029,7 +1050,7 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
 
 static int
 start_inactivity_timer(struct spectrum_reader_context_ *context,
-                       GSList **error_records)
+                       struct vys_error_record **error_record)
 {
 	struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
 	                                          INACTIVITY_TIMER_FD_INDEX);
@@ -1045,14 +1066,14 @@ start_inactivity_timer(struct spectrum_reader_context_ *context,
 		};
 		int rc = timerfd_settime(tm_pollfd->fd, 0, &itimerspec, NULL);
 		if (rc < 0) {
-			MSG_ERROR(error_records, errno,
+			MSG_ERROR(error_record, errno,
 			          "Failed to start inactivity timer: %s",
 			          strerror(errno));
-			stop_inactivity_timer(context, error_records);
+			stop_inactivity_timer(context, error_record);
 			return rc;
 		}
 	} else {
-		MSG_ERROR(error_records, errno, "Failed to create inactivity timer: %s",
+		MSG_ERROR(error_record, errno, "Failed to create inactivity timer: %s",
 		          strerror(errno));
 	}
 	return tm_pollfd->fd;
@@ -1060,7 +1081,7 @@ start_inactivity_timer(struct spectrum_reader_context_ *context,
 
 static int
 stop_inactivity_timer(struct spectrum_reader_context_ *context,
-                      GSList **error_records)
+                      struct vys_error_record **error_record)
 {
 	struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
 	                                          INACTIVITY_TIMER_FD_INDEX);
@@ -1068,7 +1089,7 @@ stop_inactivity_timer(struct spectrum_reader_context_ *context,
 	if (tm_pollfd->fd >= 0) {
 		rc = close(tm_pollfd->fd);
 		if (rc < 0)
-			MSG_ERROR(error_records, errno,
+			MSG_ERROR(error_record, errno,
 			          "Failed to close inactivity timer: %s", strerror(errno));
 	}
 	return rc;
@@ -1076,7 +1097,8 @@ stop_inactivity_timer(struct spectrum_reader_context_ *context,
 
 static int
 loopback_msg(struct spectrum_reader_context_ *context,
-             struct data_path_message *msg, GSList **error_records)
+             struct data_path_message *msg,
+             struct vys_error_record **error_record)
 {
 	int result = 0;
 	ssize_t num_written = 0;
@@ -1086,7 +1108,7 @@ loopback_msg(struct spectrum_reader_context_ *context,
 		if (G_LIKELY(n >= 0)) {
 			num_written += n;
 		} else if (errno != EINTR && n < 0) {
-			MSG_ERROR(error_records, errno, "Failed to write to loop pipe: %s",
+			MSG_ERROR(error_record, errno, "Failed to write to loop pipe: %s",
 			          strerror(errno));
 			result = -1;
 		}
@@ -1098,7 +1120,7 @@ loopback_msg(struct spectrum_reader_context_ *context,
 void *
 spectrum_reader(struct spectrum_reader_context *shared)
 {
-	GSList *error_records = NULL;
+	struct vys_error_record *error_record = NULL;
 
 	struct spectrum_reader_context_ context;
 	memset(&context, 0, sizeof(context));
@@ -1116,57 +1138,57 @@ spectrum_reader(struct spectrum_reader_context *shared)
 		pollfd->events = 0;
 	}
 
-	int rc = start_rdma_cm(&context, &error_records);
+	int rc = start_rdma_cm(&context, &error_record);
 	if (rc < 0)
 		goto cleanup_and_return;
 
-	rc = start_inactivity_timer(&context, &error_records);
+	rc = start_inactivity_timer(&context, &error_record);
 	if (rc < 0)
 		goto cleanup_and_return;
 
 	READY(&shared->handle->gate);
 
 	context.state = STATE_RUN;
-	rc = spectrum_reader_loop(&context, &error_records);
+	rc = spectrum_reader_loop(&context, &error_record);
 
  cleanup_and_return:
 	READY(&shared->handle->gate);
 
 	/* initialization failures may result in not being in STATE_DONE state */
 	if (context.state != STATE_DONE) {
-		to_quit_state(&context, NULL, &error_records);
+		to_quit_state(&context, NULL, &error_record);
 		/* polling loop will only poll the loop fd, as the others are now
 		 * closed */
-		spectrum_reader_loop(&context, &error_records);
+		spectrum_reader_loop(&context, &error_record);
 	}
 
-	stop_inactivity_timer(&context, &error_records);
+	stop_inactivity_timer(&context, &error_record);
 
-	stop_rdma_cm(&context, &error_records);
+	stop_rdma_cm(&context, &error_record);
 
 	rc = close(shared->loop_fd);
 	if (rc != 0)
-		MSG_ERROR(&error_records, errno, "Failed to close loop fd: %s",
+		MSG_ERROR(&error_record, errno, "Failed to close loop fd: %s",
 		          strerror(errno));
 
 	g_assert(context.end_msg != NULL && context.end_msg->typ == DATA_PATH_END);
-	context.end_msg->error_records =
-		g_slist_concat(error_records, context.end_msg->error_records);
+	context.end_msg->error_record =
+		vys_error_record_concat(error_record, context.end_msg->error_record);
 
 	/* create vysmaw_message for end result */
 	struct vysmaw_result result;
-	if (context.end_msg->error_records == NULL) {
+	if (context.end_msg->error_record == NULL) {
 		result.code = VYSMAW_NO_ERROR;
 		result.syserr_desc = NULL;
 	} else {
 		result.code = VYSMAW_SYSERR;
+		context.end_msg->error_record =
+			vys_error_record_reverse(context.end_msg->error_record);
 		GString *str = g_string_new("");
-		GSList *er = context.end_msg->error_records;
+		struct vys_error_record *er = context.end_msg->error_record;
 		while (er != NULL) {
-			g_string_append_printf(str,
-			                       "%s\n",
-			                       ((struct error_record *)(er->data))->desc);
-			er = g_slist_next(er);
+			g_string_append_printf(str, "%s\n", er->desc);
+			er = er->next;
 		}
 		result.syserr_desc = g_string_free(str, FALSE);
 	}

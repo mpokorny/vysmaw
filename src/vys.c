@@ -99,3 +99,72 @@ vys_configuration_free(struct vys_configuration *config)
 {
 	g_free(config);
 }
+
+struct vys_error_record *
+vys_error_record_new(struct vys_error_record *tail, int errnum, char *desc)
+{
+	struct vys_error_record *result = g_slice_new(struct vys_error_record);
+	result->errnum = errnum;
+	result->desc = desc;
+	result->next = tail;
+	return result;
+}
+
+struct vys_error_record *
+vys_error_record_desc_dup(struct vys_error_record *tail,
+                          int errnum, const char *desc)
+{
+	return vys_error_record_new(tail, errnum, g_strdup(desc));
+}
+
+struct vys_error_record *
+vys_error_record_desc_dup_printf(struct vys_error_record *tail,
+                                 int errnum, const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	struct vys_error_record *result =
+		vys_error_record_new(tail, errnum, g_strdup_vprintf(format, ap));
+	va_end(ap);
+	return result;
+}
+
+void
+vys_error_record_free(struct vys_error_record *record)
+{
+	while (record != NULL) {
+		g_free(record->desc);
+		struct vys_error_record *next = record->next;
+		g_slice_free(struct vys_error_record, record);
+		record = next;
+	}
+}
+
+struct vys_error_record *
+vys_error_record_reverse(struct vys_error_record *record)
+{
+	struct vys_error_record *result = NULL;
+	while (record != NULL) {
+		struct vys_error_record *next = record->next;
+		record->next = result;
+		result = record;
+		record = next;
+	}
+	return result;
+}
+
+struct vys_error_record *
+vys_error_record_concat(struct vys_error_record *first,
+                        struct vys_error_record *second)
+{
+	struct vys_error_record *result;
+	if (first != NULL) {
+		result = first;
+		while (first->next != NULL)
+			first = first->next;
+		first->next = second;
+	} else {
+		result = second;
+	}
+	return result;
+}

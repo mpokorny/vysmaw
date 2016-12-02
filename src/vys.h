@@ -31,10 +31,31 @@ struct vys_configuration {
 	char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
 };
 
+struct vys_error_record {
+	int errnum;
+	char *desc;
+	struct vys_error_record *next;
+};
+
 extern struct vys_configuration *vys_configuration_new(const char *path)
 	__attribute__((malloc));
 extern void vys_configuration_free(struct vys_configuration *config)
 	__attribute__((nonnull));
+
+extern struct vys_error_record *vys_error_record_new(
+	struct vys_error_record *tail, int errnum, char *desc)
+	__attribute__((nonnull(3),returns_nonnull,malloc));
+extern struct vys_error_record *vys_error_record_desc_dup(
+	struct vys_error_record *tail, int errnum, const char *desc)
+	__attribute__((nonnull(3),returns_nonnull,malloc));
+extern struct vys_error_record *vys_error_record_desc_dup_printf(
+	struct vys_error_record *tail, int errnum, const char *format, ...)
+	__attribute__((nonnull(3),returns_nonnull,malloc,format(printf,3,4)));
+extern void vys_error_record_free(struct vys_error_record *record);
+extern struct vys_error_record *vys_error_record_reverse(
+	struct vys_error_record *record);
+extern struct vys_error_record *vys_error_record_concat(
+	struct vys_error_record *first, struct vys_error_record *second);
 
 #ifdef __cplusplus
 }
