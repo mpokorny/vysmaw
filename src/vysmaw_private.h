@@ -20,6 +20,7 @@
 
 #include <vysmaw.h>
 #include <vys.h>
+#include <vys_private.h>
 #include <buffer_pool.h>
 #include <glib.h>
 #include <infiniband/verbs.h>
@@ -73,6 +74,27 @@
 
 #define VERB_ERR(records, err, fn)                                      \
 	MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
+
+/* vysmaw configuration file keys */
+#define VYSMAW_CONFIG_GROUP_NAME "vysmaw"
+#define SPECTRUM_BUFFER_POOL_SIZE_KEY "spectrum_buffer_pool_size"
+#define SINGLE_SPECTRUM_BUFFER_POOL_KEY "single_spectrum_buffer_pool"
+#define MAX_SPECTRUM_BUFFER_SIZE_KEY "max_spectrum_buffer_size"
+#define SIGNAL_MESSAGE_POOL_SIZE_KEY "signal_message_pool_size"
+#define EAGER_CONNECT_KEY "eager_connect"
+#define EAGER_CONNECT_IDLE_SEC_KEY "eager_connect_idle_sec"
+#define PRECONNECT_BACKLOG_KEY "preconnect_backlog"
+#define MAX_DEPTH_MESSAGE_QUEUE_KEY "max_depth_message_queue"
+#define QUEUE_RESUME_OVERHEAD_KEY "queue_resume_overhead"
+#define MAX_STARVATION_LATENCY_KEY "max_starvation_latency"
+#define RESOLVE_ROUTE_TIMEOUT_MS_KEY "resolve_route_timeout_ms"
+#define RESOLVE_ADDR_TIMEOUT_MS_KEY "resolve_addr_timeout_ms"
+#define INACTIVE_SERVER_TIMEOUT_SEC_KEY "inactive_server_timeout_sec"
+#define SHUTDOWN_CHECK_INTERVAL_MS_KEY "shutdown_check_interval_ms"
+#define SIGNAL_RECEIVE_MAX_POSTED_KEY "signal_receive_max_posted"
+#define SIGNAL_RECEIVE_MIN_ACK_PART_KEY "signal_receive_min_ack_part"
+#define RDMA_READ_MAX_POSTED_KEY "rdma_read_max_posted"
+#define RDMA_READ_MIN_ACK_PART_KEY "rdma_read_min_ack_part"
 
 struct _vysmaw_message_queue {
 	GAsyncQueue *q;
@@ -184,6 +206,12 @@ struct data_path_message {
 		};
 	};
 };
+
+extern char *config_vysmaw_base(void)
+	__attribute__((malloc,returns_nonnull));
+extern void init_from_key_file_vysmaw(
+	GKeyFile *kf, struct vysmaw_configuration *config)
+	__attribute__((nonnull));
 
 extern vysmaw_handle handle_ref(vysmaw_handle handle)
 	__attribute__((nonnull,returns_nonnull));

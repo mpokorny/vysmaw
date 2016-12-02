@@ -31,6 +31,217 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#define DEFAULT_SPECTRUM_BUFFER_POOL_SIZE (10 * (1 << 20))
+#define DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL true
+#define DEFAULT_MAX_SPECTRUM_BUFFER_SIZE (1 << 10)
+#define DEFAULT_SIGNAL_MESSAGE_POOL_SIZE (10 * (1 << 20))
+#define DEFAULT_EAGER_CONNECT true
+#define DEFAULT_EAGER_CONNECT_IDLE_SEC 1
+#define DEFAULT_PRECONNECT_BACKLOG true
+#define DEFAULT_MAX_DEPTH_MESSAGE_QUEUE 1000
+#define DEFAULT_QUEUE_RESUME_OVERHEAD 100
+#define DEFAULT_MAX_STARVATION_LATENCY 100
+#define DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS 1000
+#define DEFAULT_RESOLVE_ADDR_TIMEOUT_MS 1000
+#define DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC (60 * 60 * 12)
+#define DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS 1000
+#define DEFAULT_SIGNAL_RECEIVE_MAX_POSTED 10000
+#define DEFAULT_SIGNAL_RECEIVE_MIN_ACK_PART 10
+#define DEFAULT_RDMA_READ_MAX_POSTED 1000
+#define DEFAULT_RDMA_READ_MIN_ACK_PART 10
+
+static gchar *default_config_vysmaw()
+	__attribute__((returns_nonnull,malloc));
+static guint64 parse_uint64(
+	GKeyFile *kf, const gchar *key,
+	struct vysmaw_configuration *config)
+	__attribute__((nonnull));
+static gboolean parse_boolean(
+	GKeyFile *kf, const gchar *key,
+	struct vysmaw_configuration *config)
+	__attribute__((nonnull));
+static gdouble parse_double(
+	GKeyFile *kf, const gchar *key,
+	struct vysmaw_configuration *config)
+	__attribute__((nonnull));
+
+static gchar *
+default_config_vysmaw()
+{
+	GKeyFile *kf = g_key_file_new();
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SPECTRUM_BUFFER_POOL_SIZE_KEY,
+	                      DEFAULT_SPECTRUM_BUFFER_POOL_SIZE);
+	g_key_file_set_boolean(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                       SINGLE_SPECTRUM_BUFFER_POOL_KEY,
+	                       DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      MAX_SPECTRUM_BUFFER_SIZE_KEY,
+	                      DEFAULT_MAX_SPECTRUM_BUFFER_SIZE);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SIGNAL_MESSAGE_POOL_SIZE_KEY,
+	                      DEFAULT_SIGNAL_MESSAGE_POOL_SIZE);
+	g_key_file_set_boolean(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                       EAGER_CONNECT_KEY,
+	                       DEFAULT_EAGER_CONNECT);
+	g_key_file_set_double(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      EAGER_CONNECT_IDLE_SEC_KEY,
+	                      DEFAULT_EAGER_CONNECT_IDLE_SEC);
+	g_key_file_set_boolean(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                       PRECONNECT_BACKLOG_KEY,
+	                       DEFAULT_PRECONNECT_BACKLOG);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      MAX_DEPTH_MESSAGE_QUEUE_KEY,
+	                      DEFAULT_MAX_DEPTH_MESSAGE_QUEUE);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      QUEUE_RESUME_OVERHEAD_KEY,
+	                      DEFAULT_QUEUE_RESUME_OVERHEAD);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      MAX_STARVATION_LATENCY_KEY,
+	                      DEFAULT_MAX_STARVATION_LATENCY);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      RESOLVE_ROUTE_TIMEOUT_MS_KEY,
+	                      DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      RESOLVE_ADDR_TIMEOUT_MS_KEY,
+	                      DEFAULT_RESOLVE_ADDR_TIMEOUT_MS);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      INACTIVE_SERVER_TIMEOUT_SEC_KEY,
+	                      DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SHUTDOWN_CHECK_INTERVAL_MS_KEY,
+	                      DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SIGNAL_RECEIVE_MAX_POSTED_KEY,
+	                      DEFAULT_SIGNAL_RECEIVE_MAX_POSTED);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SIGNAL_RECEIVE_MIN_ACK_PART_KEY,
+	                      DEFAULT_SIGNAL_RECEIVE_MIN_ACK_PART);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      RDMA_READ_MAX_POSTED_KEY,
+	                      DEFAULT_RDMA_READ_MAX_POSTED);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      RDMA_READ_MIN_ACK_PART_KEY,
+	                      DEFAULT_RDMA_READ_MIN_ACK_PART);
+	gchar *result = g_key_file_to_data(kf, NULL, NULL);
+	g_key_file_free(kf);
+	return result;
+}
+
+char *
+config_vysmaw_base(void)
+{
+	char *dcfg = default_config_vysmaw();
+	char *fcfg = load_config(VYSMAW_CONFIG_PATH, NULL);
+	char *result = g_strjoin("\n", dcfg, fcfg, NULL);
+	g_free(fcfg);
+	g_free(dcfg);
+	return result;
+}
+
+static guint64
+parse_uint64(GKeyFile *kf, const gchar *key,
+             struct vysmaw_configuration *config)
+{
+	GError *err = NULL;
+	guint64 result =
+		g_key_file_get_uint64(kf, VYSMAW_CONFIG_GROUP_NAME, key, &err);
+	if (err != NULL) {
+		MSG_ERROR(&(config->error_record), -1,
+		          "Failed to parse '%s' field: %s",
+		          key, err->message);
+		g_error_free(err);
+	}
+	return result;
+}
+
+static gboolean
+parse_boolean(GKeyFile *kf, const gchar *key,
+              struct vysmaw_configuration *config)
+{
+	GError *err = NULL;
+	gboolean result =
+		g_key_file_get_boolean(kf, VYSMAW_CONFIG_GROUP_NAME, key, &err);
+	if (err != NULL) {
+		MSG_ERROR(&(config->error_record), -1,
+		          "Failed to parse '%s' field: %s",
+		          key, err->message);
+		g_error_free(err);
+	}
+	return result;
+}
+
+static gdouble
+parse_double(GKeyFile *kf, const gchar *key,
+             struct vysmaw_configuration *config)
+{
+	GError *err = NULL;
+	gdouble result =
+		g_key_file_get_double(kf, VYSMAW_CONFIG_GROUP_NAME, key, &err);
+	if (err != NULL) {
+		MSG_ERROR(&(config->error_record), -1,
+		          "Failed to parse '%s' field: %s",
+		          key, err->message);
+		g_error_free(err);
+	}
+	return result;
+}
+
+void
+init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
+{
+	/* vys group configuration */
+	struct vys_configuration vys_cfg = {
+		.error_record = NULL
+	};
+	init_from_key_file_vys(kf, &vys_cfg);
+	if (vys_cfg.error_record == NULL)
+		g_strlcpy(config->signal_multicast_address,
+		          vys_cfg.signal_multicast_address,
+		          sizeof(config->signal_multicast_address));
+	else
+		config->error_record = vys_error_record_concat(
+			vys_cfg.error_record, config->error_record);
+
+	/* vysmaw group configuration */
+	config->spectrum_buffer_pool_size =
+		parse_uint64(kf, SPECTRUM_BUFFER_POOL_SIZE_KEY, config);
+	config->single_spectrum_buffer_pool =
+		parse_boolean(kf, SINGLE_SPECTRUM_BUFFER_POOL_KEY, config);
+	config->max_spectrum_buffer_size =
+		parse_uint64(kf, MAX_SPECTRUM_BUFFER_SIZE_KEY, config);
+	config->signal_message_pool_size =
+		parse_uint64(kf, SIGNAL_MESSAGE_POOL_SIZE_KEY, config);
+	config->eager_connect =
+		parse_boolean(kf, EAGER_CONNECT_KEY, config);
+	config->eager_connect_idle_sec =
+		parse_double(kf, EAGER_CONNECT_IDLE_SEC_KEY, config);
+	config->preconnect_backlog =
+		parse_boolean(kf, PRECONNECT_BACKLOG_KEY, config);
+	config->max_depth_message_queue =
+		parse_uint64(kf, MAX_DEPTH_MESSAGE_QUEUE_KEY, config);
+	config->queue_resume_overhead =
+		parse_uint64(kf, QUEUE_RESUME_OVERHEAD_KEY, config);
+	config->max_starvation_latency =
+		parse_uint64(kf, MAX_STARVATION_LATENCY_KEY, config);
+	config->resolve_route_timeout_ms =
+		parse_uint64(kf, RESOLVE_ROUTE_TIMEOUT_MS_KEY, config);
+	config->resolve_addr_timeout_ms =
+		parse_uint64(kf, RESOLVE_ADDR_TIMEOUT_MS_KEY, config);
+	config->inactive_server_timeout_sec =
+		parse_uint64(kf, INACTIVE_SERVER_TIMEOUT_SEC_KEY, config);
+	config->shutdown_check_interval_ms =
+		parse_uint64(kf, SHUTDOWN_CHECK_INTERVAL_MS_KEY, config);
+	config->signal_receive_max_posted =
+		parse_uint64(kf, SIGNAL_RECEIVE_MAX_POSTED_KEY, config);
+	config->signal_receive_min_ack_part =
+		parse_uint64(kf, SIGNAL_RECEIVE_MIN_ACK_PART_KEY, config);
+	config->rdma_read_max_posted =
+		parse_uint64(kf, RDMA_READ_MAX_POSTED_KEY, config);
+	config->rdma_read_min_ack_part =
+		parse_uint64(kf, RDMA_READ_MIN_ACK_PART_KEY, config);
+}
+
 vysmaw_handle
 handle_ref(vysmaw_handle handle)
 {
@@ -689,7 +900,7 @@ static void
 vysmaw_message_free_syserr_desc(struct vysmaw_message *message)
 {
 	if (message->typ == VYSMAW_MESSAGE_END &&
-		message->content.result.syserr_desc != NULL)
+	    message->content.result.syserr_desc != NULL)
 		g_free(message->content.result.syserr_desc);
 }
 

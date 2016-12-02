@@ -25,6 +25,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <vys.h>
 
 #define VYSMAW_MULTICAST_ADDRESS_SIZE 32
 #define VYSMAW_DATA_DIGEST_SIZE 16

@@ -19,26 +19,6 @@
 #include <glib.h>
 #include <string.h>
 
-#define DEFAULT_SIGNAL_MULTICAST_ADDRESS "224.0.0.100"
-#define DEFAULT_SPECTRUM_BUFFER_POOL_SIZE (10 * (1 << 20))
-#define DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL (10 * (1 << 20))
-#define DEFAULT_MAX_SPECTRUM_BUFFER_SIZE (1 << 10)
-#define DEFAULT_SIGNAL_MESSAGE_POOL_SIZE (10 * (1 << 20))
-#define DEFAULT_EAGER_CONNECT true
-#define DEFAULT_EAGER_CONNECT_IDLE_SEC 1
-#define DEFAULT_PRECONNECT_BACKLOG true
-#define DEFAULT_MAX_DEPTH_MESSAGE_QUEUE 1000
-#define DEFAULT_QUEUE_RESUME_OVERHEAD 100
-#define DEFAULT_MAX_STARVATION_LATENCY 100
-#define DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS 1000
-#define DEFAULT_RESOLVE_ADDR_TIMEOUT_MS 1000
-#define DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC (60 * 60 * 12)
-#define DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS 1000
-#define DEFAULT_SIGNAL_RECEIVE_MAX_POSTED 10000
-#define DEFAULT_SIGNAL_RECEIVE_MIN_ACK_PART 10
-#define DEFAULT_RDMA_READ_MAX_POSTED 1000
-#define DEFAULT_RDMA_READ_MIN_ACK_PART 10
-
 struct vysmaw_message *
 vysmaw_message_queue_pop(vysmaw_message_queue queue)
 {
@@ -164,30 +144,27 @@ struct vysmaw_configuration *
 vysmaw_configuration_new(const char *path)
 {
 	struct vysmaw_configuration *result =
-		g_try_new(struct vysmaw_configuration, 1);
+		g_try_new0(struct vysmaw_configuration, 1);
 	if (G_UNLIKELY(result == NULL)) return NULL;
 
-	g_strlcpy(result->signal_multicast_address,
-	          DEFAULT_SIGNAL_MULTICAST_ADDRESS,
-	          sizeof(result->signal_multicast_address));
-	result->spectrum_buffer_pool_size = DEFAULT_SPECTRUM_BUFFER_POOL_SIZE;
-	result->single_spectrum_buffer_pool = DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL;
-	result->max_spectrum_buffer_size = DEFAULT_MAX_SPECTRUM_BUFFER_SIZE;
-	result->signal_message_pool_size = DEFAULT_SIGNAL_MESSAGE_POOL_SIZE;
-	result->eager_connect = DEFAULT_EAGER_CONNECT;
-	result->eager_connect_idle_sec = DEFAULT_EAGER_CONNECT_IDLE_SEC;
-	result->preconnect_backlog = DEFAULT_PRECONNECT_BACKLOG;
-	result->max_depth_message_queue = DEFAULT_MAX_DEPTH_MESSAGE_QUEUE;
-	result->queue_resume_overhead = DEFAULT_QUEUE_RESUME_OVERHEAD;
-	result->max_starvation_latency = DEFAULT_MAX_STARVATION_LATENCY;
-	result->resolve_route_timeout_ms = DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS;
-	result->resolve_addr_timeout_ms = DEFAULT_RESOLVE_ADDR_TIMEOUT_MS;
-	result->inactive_server_timeout_sec = DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC;
-	result->shutdown_check_interval_ms = DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS;
-	result->signal_receive_max_posted = DEFAULT_SIGNAL_RECEIVE_MAX_POSTED;
-	result->signal_receive_min_ack_part = DEFAULT_SIGNAL_RECEIVE_MIN_ACK_PART;
-	result->rdma_read_max_posted = DEFAULT_RDMA_READ_MAX_POSTED;
-	result->rdma_read_min_ack_part = DEFAULT_RDMA_READ_MIN_ACK_PART;
+	char *vys_base = config_vys_base();
+	char *vysmaw_base = config_vysmaw_base();
+	char *pcfg = load_config(path, &(result->error_record));
+	if (result->error_record == NULL) {
+		char *cfg = g_strjoin("\n", vys_base, vysmaw_base, pcfg, NULL);
+		GKeyFile *kf = g_key_file_new();
+		if (g_key_file_load_from_data(kf, cfg, -1, G_KEY_FILE_NONE, NULL)) {
+			init_from_key_file_vysmaw(kf, result);
+		} else {
+			MSG_ERROR(&(result->error_record), -1, "%s",
+			          "Failed to merge configuration files");
+		}
+		g_key_file_free(kf);
+		g_free(cfg);
+	}
+	g_free(pcfg);
+	g_free(vysmaw_base);
+	g_free(vys_base);
 	return result;
 }
 
