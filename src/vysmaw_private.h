@@ -71,11 +71,6 @@
 # define COND_SIGNAL(c) g_cond_signal(c)
 #endif
 
-#define MSG_ERROR(records, err, format, ...)                            \
-	{ *(records) = \
-	  vys_error_record_desc_dup_printf( \
-		  *(records), (err), G_STRLOC ": " format, ##__VA_ARGS__); }
-
 #define VERB_ERR(records, err, fn)                                      \
 	MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
 

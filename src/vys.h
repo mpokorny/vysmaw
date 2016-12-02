@@ -57,6 +57,11 @@ extern struct vys_error_record *vys_error_record_reverse(
 extern struct vys_error_record *vys_error_record_concat(
 	struct vys_error_record *first, struct vys_error_record *second);
 
+#define MSG_ERROR(records, err, format, ...)                            \
+	{ *(records) = \
+			vys_error_record_desc_dup_printf( \
+				*(records), (err), G_STRLOC ": " format, ##__VA_ARGS__); }
+
 #ifdef __cplusplus
 }
 #endif
