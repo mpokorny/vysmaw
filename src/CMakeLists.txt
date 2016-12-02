@@ -10,6 +10,7 @@ set(CMAKE_C_FLAGS
 
 # vys library
 add_library(vys SHARED
+  vys_private.c
   vys.c)
 target_include_directories(vys PRIVATE
   ${GLIB2_INCLUDE_DIRS}

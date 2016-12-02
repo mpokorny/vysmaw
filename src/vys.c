@@ -15,56 +15,12 @@
 // You should have received a copy of the GNU General Public License along with
 // vysmaw.  If not, see <http://www.gnu.org/licenses/>.
 //
-#include <vys.h>
+#include <vys_private.h>
 #include <glib.h>
-#include <stdio.h>
-#include <string.h>
 
-#define SIGNAL_MULTICAST_ADDRESS_KEY "signal_multicast_address"
-
-static gchar *load_config(
-	const gchar *path, struct vys_error_record **error_record)
-	__attribute__((malloc,returns_nonnull));
-static gchar *default_config()
-	__attribute__((returns_nonnull,malloc));
 void init_from_key_file(
 	GKeyFile *kf, struct vys_configuration *config)
 	__attribute__((nonnull));
-
-static gchar *
-load_config(const gchar *path, struct vys_error_record **error_record)
-{
-	gchar *result = NULL;
-	if (path != NULL) {
-		GKeyFile *kf = g_key_file_new();
-		GError *err = NULL;
-		if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &err)) {
-			result = g_key_file_to_data(kf, NULL, NULL);
-		} else {
-			if (error_record != NULL)
-				MSG_ERROR(error_record, -1,
-				          "Failed to load configuration file '%s': %s",
-				          path, err->message);
-			g_error_free(err);
-		}
-		g_key_file_free(kf);
-	}
-	if (result == NULL)
-		result = g_strdup("");
-	return result;
-}
-
-static gchar *
-default_config()
-{
-	GKeyFile *kf = g_key_file_new();
-	g_key_file_set_string(kf, VYS_CONFIG_GROUP_NAME,
-	                      SIGNAL_MULTICAST_ADDRESS_KEY,
-	                      VYS_SIGNAL_MULTICAST_ADDRESS);
-	gchar *result = g_key_file_to_data(kf, NULL, NULL);
-	g_key_file_free(kf);
-	return result;
-}
 
 void
 init_from_key_file(GKeyFile *kf, struct vys_configuration *config)
@@ -86,11 +42,10 @@ struct vys_configuration *
 vys_configuration_new(const char *path)
 {
 	struct vys_configuration *result = g_new0(struct vys_configuration, 1);
-	gchar *dcfg = default_config();
-	gchar *fcfg = load_config(VYS_CONFIG_PATH, NULL);
+	gchar *base = config_vys_base();
 	gchar *pcfg = load_config(path, &(result->error_record));
 	if (result->error_record == NULL) {
-		gchar *cfg = g_strjoin("\n", dcfg, fcfg, pcfg, NULL);
+		gchar *cfg = g_strjoin("\n", base, pcfg, NULL);
 		GKeyFile *kf = g_key_file_new();
 		if (g_key_file_load_from_data(kf, cfg, -1, G_KEY_FILE_NONE, NULL)) {
 			init_from_key_file(kf, result);
@@ -101,6 +56,8 @@ vys_configuration_new(const char *path)
 		g_key_file_free(kf);
 		g_free(cfg);
 	}
+	g_free(base);
+	g_free(pcfg);
 	return result;
 }
 
