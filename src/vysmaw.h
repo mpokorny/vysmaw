@@ -30,6 +30,8 @@ extern "C" {
 #define VYSMAW_DATA_DIGEST_SIZE 16
 
 struct vysmaw_configuration {
+	struct vys_error_record *error_record;
+
 	/* multicast address for signal messages from CBE containing available
 	 * spectrum metadata; expected format is dotted quad IP address string */
 	char signal_multicast_address[VYSMAW_MULTICAST_ADDRESS_SIZE];

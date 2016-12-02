@@ -194,5 +194,6 @@ vysmaw_configuration_new(void)
 void
 vysmaw_configuration_free(struct vysmaw_configuration *config)
 {
+	vys_error_record_free(config->error_record);
 	g_free(config);
 }
