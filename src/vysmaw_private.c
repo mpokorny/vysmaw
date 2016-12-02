@@ -30,6 +30,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <limits.h>
 
 #define DEFAULT_SPECTRUM_BUFFER_POOL_SIZE (10 * (1 << 20))
 #define DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL true
@@ -577,9 +578,14 @@ message_queue_push_one_unlocked(struct vysmaw_message *msg,
                                 struct consumer *consumer)
 {
 	/* adjust max depth to accommodate overhead */
-	unsigned max_depth = msg->handle->config.max_depth_message_queue;
-	if (consumer->queue.num_overflow > 0)
-		max_depth -= msg->handle->config.queue_resume_overhead + 1;
+	unsigned max_depth;
+	if (G_LIKELY(msg->typ != VYSMAW_MESSAGE_END)) {
+		max_depth = msg->handle->config.max_depth_message_queue;
+		if (consumer->queue.num_overflow > 0)
+			max_depth -= msg->handle->config.queue_resume_overhead + 1;
+	} else {
+		max_depth = UINT_MAX;
+	}
 
 	if (consumer->queue.depth < max_depth) {
 		if (consumer->queue.num_overflow > 0) {
@@ -743,8 +749,10 @@ init_service_threads(vysmaw_handle handle)
 	if (rc == 0) rc = set_nonblocking(loop_fds[1]);
 #endif
 	if (rc != 0) {
-		fprintf(stderr, "Failed to create service thread loop pipe: %s\n",
-		        strerror(errno));
+		MSG_ERROR((struct vys_error_record **)(&(handle->config.error_record)),
+		          errno,
+		          "Failed to create service thread loop pipe: %s",
+		          strerror(errno));
 		return rc;
 	}
 
