@@ -32,7 +32,7 @@ struct vys_configuration {
 };
 
 extern struct vys_configuration *vys_configuration_new(const char *path)
-	__attribute__((returns_nonnull,malloc));
+	__attribute__((malloc));
 extern void vys_configuration_free(struct vys_configuration *config)
 	__attribute__((nonnull));
 

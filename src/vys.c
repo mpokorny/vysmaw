@@ -20,53 +20,76 @@
 #include <stdio.h>
 #include <string.h>
 
-static gboolean
-load_config(GKeyFile *keyfile, const gchar *path)
+#define SIGNAL_MULTICAST_ADDRESS_KEY "signal_multicast_address"
+
+static gchar *load_config(const gchar *path, GError **error)
+	__attribute__((malloc));
+static gchar *default_config()
+	__attribute__((returns_nonnull,malloc));
+struct vys_configuration *init_from_key_file(GKeyFile *kf)
+	__attribute__((nonnull,malloc));
+
+static gchar *
+load_config(const gchar *path, GError **error)
 {
-	GError *error = NULL;
-	gboolean result =
-		g_key_file_load_from_file(keyfile, path, G_KEY_FILE_NONE, &error);
-	if (!result) {
-		fprintf(stderr, "Failed to load vys config file '%s': %s\n",
-		        path, error->message);
-		g_error_free(error);
+	gchar *result = NULL;
+	if (path != NULL) {
+		GKeyFile *kf = g_key_file_new();
+		if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, error))
+			result = g_key_file_to_data(kf, NULL, NULL);
+		g_key_file_free(kf);
 	}
+	if (result == NULL)
+		result = g_strdup("");
 	return result;
+}
+
+static gchar *
+default_config()
+{
+	GKeyFile *kf = g_key_file_new();
+	g_key_file_set_string(kf, VYS_CONFIG_GROUP_NAME,
+	                      SIGNAL_MULTICAST_ADDRESS_KEY,
+	                      VYS_SIGNAL_MULTICAST_ADDRESS);
+	gchar *result = g_key_file_to_data(kf, NULL, NULL);
+	g_key_file_free(kf);
+	return result;
+}
+
+struct vys_configuration *
+init_from_key_file(GKeyFile *kf)
+{
+	struct vys_configuration config;
+
+	gchar *mc_addr = g_key_file_get_string(
+		kf, VYS_CONFIG_GROUP_NAME, SIGNAL_MULTICAST_ADDRESS_KEY, NULL);
+	g_assert(mc_addr != NULL);
+	gsize mc_addr_len =
+		g_strlcpy(config.signal_multicast_address, mc_addr,
+		          sizeof(config.signal_multicast_address));
+	g_free(mc_addr);
+	/* check that value is not too long */
+	if (mc_addr_len >= sizeof(config.signal_multicast_address))
+		return NULL;
+
+	return g_memdup(&config, sizeof(config));
 }
 
 struct vys_configuration *
 vys_configuration_new(const char *path)
 {
-	struct vys_configuration *result = g_new(struct vys_configuration, 1);
-	/* initialize with defaults */
-	g_strlcpy(result->signal_multicast_address,
-	          VYS_SIGNAL_MULTICAST_ADDRESS,
-	          sizeof(result->signal_multicast_address));
-
-	/* Override defaults with values from configuration file.*/
-	GKeyFile *keyfile = g_key_file_new();
-	if (load_config(keyfile, (path != NULL) ? path : VYS_CONFIG_PATH)) {
-		/* get values from config file */
-		GError *error = NULL;
-		/* signal_multicast_address */
-		gchar *mc_addr = g_key_file_get_string(
-			keyfile, VYS_CONFIG_GROUP_NAME, "signal_multicast_address", &error);
-		if (mc_addr != NULL) {
-			/* check that value from file is not too long */
-			if (strlen(mc_addr) < sizeof(result->signal_multicast_address))
-				g_strlcpy(result->signal_multicast_address, mc_addr,
-				          sizeof(result->signal_multicast_address));
-			else
-				fprintf(stderr, "%s",
-				        "Configuration value too long - using default value\n");
-			g_free(mc_addr);
-		} else {
-			fprintf(stderr,
-			        "Failed to read configuration parameter: %s - "
-			        "using default value\n",
-			        error->message);
-			g_error_free(error);
-		}
+	struct vys_configuration *result = NULL;
+	gchar *dcfg = default_config();
+	gchar *fcfg = load_config(VYS_CONFIG_PATH, NULL);
+	GError *error = NULL;
+	gchar *pcfg = load_config(path, &error);
+	if (error == NULL) {
+		gchar *cfg = g_strjoin("\n", dcfg, fcfg, pcfg, NULL);
+		GKeyFile *kf = g_key_file_new();
+		if (g_key_file_load_from_data(kf, cfg, -1, G_KEY_FILE_NONE, NULL))
+			result = init_from_key_file(kf);
+		g_key_file_free(kf);
+		g_free(cfg);
 	}
 	return result;
 }
