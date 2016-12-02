@@ -90,7 +90,7 @@ static bool verify_digest(
 	GChecksum *checksum, const float *buff, size_t buffer_size, uint8_t *digest)
 	__attribute__((nonnull));
 static struct rdma_req *new_rdma_req(
-	GSList *consumers, const struct signal_msg_payload *payload,
+	GSList *consumers, const struct vys_signal_msg_payload *payload,
 	const struct vys_spectrum_info *spectrum_info)
 	__attribute__((nonnull,returns_nonnull,malloc));
 static void free_rdma_req(struct rdma_req *req)
@@ -122,7 +122,7 @@ static int find_connection(
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_signal_message(
-	struct spectrum_reader_context_ *context, struct signal_msg *msg,
+	struct spectrum_reader_context_ *context, struct vys_signal_msg *msg,
 	GSList **consumers, struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_data_path_message(
@@ -228,7 +228,7 @@ verify_digest(GChecksum *checksum, const float *buff, size_t buffer_size,
 }
 
 static struct rdma_req *
-new_rdma_req(GSList *consumers, const struct signal_msg_payload *payload,
+new_rdma_req(GSList *consumers, const struct vys_signal_msg_payload *payload,
              const struct vys_spectrum_info *spectrum_info)
 {
 	struct rdma_req *result = g_slice_new(struct rdma_req);
@@ -378,10 +378,10 @@ find_connection(struct spectrum_reader_context_ *context,
 
 static int
 on_signal_message(struct spectrum_reader_context_ *context,
-                  struct signal_msg *msg, GSList **consumers,
+                  struct vys_signal_msg *msg, GSList **consumers,
                   struct vys_error_record **error_record)
 {
-	struct signal_msg_payload *payload = &(msg->payload);
+	struct vys_signal_msg_payload *payload = &(msg->payload);
 	GQueue *reqs = NULL;
 	struct server_connection_context *conn_ctx = NULL;
 

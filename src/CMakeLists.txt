@@ -17,7 +17,7 @@ target_include_directories(vys PRIVATE
   .)
 target_compile_options(vys PRIVATE
   ${GLIB2_CFLAGS}
-  ${GLIB2_CLFAGS_OTHER})
+  ${GLIB2_CFLAGS_OTHER})
 target_compile_definitions(vys PRIVATE
   VYS_CONFIG_PATH="${CMAKE_INSTALL_PREFIX}/etc/vys.conf"
   VYS_SIGNAL_MULTICAST_ADDRESS="224.0.0.100")
@@ -37,7 +37,7 @@ target_include_directories(vysmaw PRIVATE
   .)
 target_compile_options(vysmaw PRIVATE
   ${GTHREAD2_CFLAGS}
-  ${GTHREAD2_CLFAGS_OTHER})
+  ${GTHREAD2_CFLAGS_OTHER})
 target_compile_definitions(vysmaw PRIVATE
   VYSMAW_CONFIG_PATH="${CMAKE_INSTALL_PREFIX}/etc/vysmaw.conf")
 target_link_libraries(vysmaw

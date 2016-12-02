@@ -23,6 +23,10 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
@@ -32,6 +36,29 @@ struct vys_spectrum_info {
 	uint64_t timestamp;
 	uint8_t digest[VYS_DATA_DIGEST_SIZE];
 };
+
+struct vys_signal_msg_payload {
+	struct sockaddr_in sockaddr;
+	uint16_t num_channels;
+	uint8_t stations[2];
+	uint8_t spectral_window_index;
+	uint8_t stokes_index;
+	uint8_t num_spectra;
+	struct vys_spectrum_info infos[];
+};
+
+struct vys_signal_msg {
+	struct ibv_grh grh;
+	struct vys_signal_msg_payload payload;
+};
+
+#define SIZEOF_VYS_SIGNAL_MSG_PAYLOAD(n)                                \
+	(sizeof(struct vys_signal_msg_payload) + \
+	 ((n) * sizeof(struct vys_spectrum_info)))
+
+#define SIZEOF_VYS_SIGNAL_MSG(n)                                        \
+	(sizeof(struct vys_signal_msg) + \
+	 ((n) * sizeof(struct vys_spectrum_info)))
 
 struct vys_error_record {
 	int errnum;

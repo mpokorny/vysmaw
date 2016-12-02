@@ -31,7 +31,7 @@ select_spectra(struct data_path_message *msg, struct consumer *consumers,
 {
 	g_assert(msg->typ == DATA_PATH_SIGNAL_MSG);
 
-	const struct signal_msg_payload *payload = &msg->signal_msg->payload;
+	const struct vys_signal_msg_payload *payload = &msg->signal_msg->payload;
 
 	bool result = false;
 	for (unsigned i = 0; i < payload->num_spectra; ++i)

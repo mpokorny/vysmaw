@@ -166,28 +166,6 @@ struct _vysmaw_handle {
 	GThread *spectrum_reader_thread;
 };
 
-struct signal_msg_payload {
-	struct sockaddr_in sockaddr;
-	uint16_t num_channels;
-	uint8_t stations[2];
-	uint8_t spectral_window_index;
-	uint8_t stokes_index;
-	uint8_t num_spectra;
-	struct vys_spectrum_info infos[];
-};
-
-struct signal_msg {
-	struct ibv_grh grh;
-	struct signal_msg_payload payload;
-};
-
-#define SIZEOF_SIGNAL_MSG_PAYLOAD(n) \
-	(sizeof(struct signal_msg_payload) + \
-	 ((n) * sizeof(struct vys_spectrum_info)))
-
-#define SIZEOF_SIGNAL_MSG(n) \
-	(sizeof(struct signal_msg) + ((n) * sizeof(struct vys_spectrum_info)))
-
 struct data_path_message {
 	enum {
 		DATA_PATH_SIGNAL_MSG,
@@ -201,7 +179,7 @@ struct data_path_message {
 		enum ibv_wc_status wc_status;
 		struct vys_error_record *error_record;
 		struct {
-			struct signal_msg *signal_msg;
+			struct vys_signal_msg *signal_msg;
 			GSList *consumers[];
 		};
 	};

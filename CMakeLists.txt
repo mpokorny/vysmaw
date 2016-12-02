@@ -12,3 +12,4 @@ set(
 add_subdirectory(src)
 add_subdirectory(py)
 add_subdirectory(examples)
+add_subdirectory(vyssim)

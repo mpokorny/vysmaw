@@ -330,9 +330,9 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	int mtu = 1 << (port_attr.active_mtu + 7);
 	/* set size of signal buffers to be maximum possible given mtu */
 	context->shared->signal_msg_num_spectra =
-		(mtu - sizeof(struct signal_msg)) / sizeof(struct vys_spectrum_info);
+		(mtu - sizeof(struct vys_signal_msg)) / sizeof(struct vys_spectrum_info);
 	size_t sizeof_signal_msg =
-		SIZEOF_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
+		SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
 
 	/* create signal message buffer pool */
 	context->shared->signal_msg_buffers =
@@ -467,13 +467,13 @@ static bool
 new_wr(struct signal_receiver_context_ *context, struct recv_wr **wrs)
 {
 	bool result;
-	struct signal_msg *buff =
+	struct vys_signal_msg *buff =
 		buffer_pool_pop(context->shared->signal_msg_buffers);
 	if (buff != NULL) {
 		*wrs = recv_wr_prepend_new(
 			*wrs,
 			(uint64_t)buff,
-			SIZEOF_SIGNAL_MSG(context->shared->signal_msg_num_spectra),
+			SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra),
 			context->mr->lkey);
 		result = true;
 	} else {
@@ -510,8 +510,8 @@ poll_completions(struct signal_receiver_context_ *context,
 		context->num_posted_wr -= nc;
 		/* for each completion event, process the event */
 		for (int i = 0; i < nc; ++i) {
-			struct signal_msg *s_msg =
-				(struct signal_msg *)context->wcs[i].wr_id;
+			struct vys_signal_msg *s_msg =
+				(struct vys_signal_msg *)context->wcs[i].wr_id;
 			struct data_path_message *dp_msg =
 				data_path_message_new(context->shared->signal_msg_num_spectra);
 			if (G_LIKELY(context->wcs[i].status == IBV_WC_SUCCESS)) {
