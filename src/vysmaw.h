@@ -27,15 +27,12 @@ extern "C" {
 #include <sys/types.h>
 #include <vys.h>
 
-#define VYSMAW_MULTICAST_ADDRESS_SIZE 32
-#define VYSMAW_DATA_DIGEST_SIZE 16
-
 struct vysmaw_configuration {
 	struct vys_error_record *error_record;
 
 	/* multicast address for signal messages from CBE containing available
 	 * spectrum metadata; expected format is dotted quad IP address string */
-	char signal_multicast_address[VYSMAW_MULTICAST_ADDRESS_SIZE];
+	char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
 
 	/* Size of memory region for storing spectra retrieved via RDMA from the
 	 * CBE. The memory region is allocated and registered for RDMA by the
@@ -149,12 +146,6 @@ struct vysmaw_data_info {
 	uint8_t stokes_index;
 };
 
-struct vysmaw_spectrum_info {
-	uint64_t data_addr;
-	uint64_t timestamp;
-	uint8_t digest[VYSMAW_DATA_DIGEST_SIZE];
-};
-
 /* vysmaw result codes
  *
  * Values below VYSMAW_ERROR_NON_FATAL_END are non-fatal results. Values above
@@ -264,15 +255,15 @@ struct vysmaw_message {
  * output array that must be filled by this function. The metadata are provided
  * as a pair of station ids, a spectral window index, a stokes parameter index,
  * an array of timestamps. Note that, for efficiency, the timestamps are
- * provided through 'struct vysmaw_spectrum_info' values. 'num_infos' provides
- * the length of the 'infos' array, as well as the 'pass_filter' (output) array.
+ * provided through 'struct vys_spectrum_info' values. 'num_infos' provides the
+ * length of the 'infos' array, as well as the 'pass_filter' (output) array.
  * All elements in the 'pass_filter' array should be written by the function.
  * The element 'pass_filter[i]' should be set to 'true' if and only if the
  * client wishes to receive the data corresponding to 'infos[i]'.
  */
 typedef void (*vysmaw_spectrum_filter)(
 	const uint8_t stations[2], uint8_t spectral_window_index,
-	uint8_t stokes_index, const struct vysmaw_spectrum_info *infos,
+	uint8_t stokes_index, const struct vys_spectrum_info *infos,
 	uint8_t num_infos, void *user_data, bool *pass_filter);
 
 /* Message queue (FIFO) used to pass spectral data back to client.

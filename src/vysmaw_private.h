@@ -173,7 +173,7 @@ struct signal_msg_payload {
 	uint8_t spectral_window_index;
 	uint8_t stokes_index;
 	uint8_t num_spectra;
-	struct vysmaw_spectrum_info infos[];
+	struct vys_spectrum_info infos[];
 };
 
 struct signal_msg {
@@ -183,10 +183,10 @@ struct signal_msg {
 
 #define SIZEOF_SIGNAL_MSG_PAYLOAD(n) \
 	(sizeof(struct signal_msg_payload) + \
-	 ((n) * sizeof(struct vysmaw_spectrum_info)))
+	 ((n) * sizeof(struct vys_spectrum_info)))
 
 #define SIZEOF_SIGNAL_MSG(n) \
-	(sizeof(struct signal_msg) + ((n) * sizeof(struct vysmaw_spectrum_info)))
+	(sizeof(struct signal_msg) + ((n) * sizeof(struct vys_spectrum_info)))
 
 struct data_path_message {
 	enum {

@@ -23,7 +23,7 @@ import cy_vysmaw
 # A predicate that selects no spectra. The "pass_filter" array elements _must_
 # be assigned values, as they are always uninitialized at function entry.
 def cb(uint8_t[:] stns, uint8_t spw, uint8_t sto, 
-       vysmaw_spectrum_info[:] infos, bool[:] pass_filter):
+       vys_spectrum_info[:] infos, bool[:] pass_filter):
     for i in xrange(pass_filter.shape[0]):
         pass_filter[i] = False
     return

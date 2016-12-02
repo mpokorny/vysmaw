@@ -22,14 +22,14 @@ from libcpp cimport bool
 
 cdef extern from "vysmaw.h":
 
-    DEF VYSMAW_DATA_DIGEST_SIZE = 16
+    DEF VYS_DATA_DIGEST_SIZE = 16
 
-    DEF VYSMAW_MULTICAST_ADDRESS_SIZE = 32
+    DEF VYS_MULTICAST_ADDRESS_SIZE = 32
 
     DEF VYSMAW_RECEIVE_STATUS_LENGTH = 64
 
     struct vysmaw_configuration:
-        char signal_multicast_address[VYSMAW_MULTICAST_ADDRESS_SIZE]
+        char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE]
         stddef.size_t spectrum_buffer_pool_size
         bool single_spectrum_buffer_pool
         unsigned max_spectrum_buffer_size
@@ -56,10 +56,10 @@ cdef extern from "vysmaw.h":
         uint8_t spectral_window_index
         uint8_t stokes_index
 
-    struct vysmaw_spectrum_info:
+    struct vys_spectrum_info:
         uint64_t data_addr
         uint64_t timestamp
-        uint8_t digest[VYSMAW_DATA_DIGEST_SIZE]
+        uint8_t digest[VYS_DATA_DIGEST_SIZE]
 
     enum result_code:
         VYSMAW_NO_ERROR,
@@ -114,7 +114,7 @@ cdef extern from "vysmaw.h":
 
     ctypedef void (*vysmaw_spectrum_filter)(
         const uint8_t *stations, uint8_t spectral_window_index,
-        uint8_t stokes_index, const vysmaw_spectrum_info *infos,
+        uint8_t stokes_index, const vys_spectrum_info *infos,
         uint8_t num_infos, void *user_data, bool *pass_filter) nogil
 
     struct vysmaw_consumer:

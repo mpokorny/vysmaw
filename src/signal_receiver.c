@@ -330,7 +330,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	int mtu = 1 << (port_attr.active_mtu + 7);
 	/* set size of signal buffers to be maximum possible given mtu */
 	context->shared->signal_msg_num_spectra =
-		(mtu - sizeof(struct signal_msg)) / sizeof(struct vysmaw_spectrum_info);
+		(mtu - sizeof(struct signal_msg)) / sizeof(struct vys_spectrum_info);
 	size_t sizeof_signal_msg =
 		SIZEOF_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
 

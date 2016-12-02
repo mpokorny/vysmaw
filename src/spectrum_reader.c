@@ -79,7 +79,7 @@ enum rdma_req_result {
 
 struct rdma_req {
 	struct vysmaw_data_info data_info;
-	struct vysmaw_spectrum_info spectrum_info;
+	struct vys_spectrum_info spectrum_info;
 	enum rdma_req_result result;
 	enum ibv_wc_status status;
 	GSList *consumers;
@@ -91,7 +91,7 @@ static bool verify_digest(
 	__attribute__((nonnull));
 static struct rdma_req *new_rdma_req(
 	GSList *consumers, const struct signal_msg_payload *payload,
-	const struct vysmaw_spectrum_info *spectrum_info)
+	const struct vys_spectrum_info *spectrum_info)
 	__attribute__((nonnull,returns_nonnull,malloc));
 static void free_rdma_req(struct rdma_req *req)
 	__attribute__((nonnull));
@@ -221,15 +221,15 @@ verify_digest(GChecksum *checksum, const float *buff, size_t buffer_size,
 {
 	g_checksum_reset(checksum);
 	g_checksum_update(checksum, (guchar *)buff, buffer_size);
-	uint8_t buff_digest[VYSMAW_DATA_DIGEST_SIZE];
-	gsize digest_len = VYSMAW_DATA_DIGEST_SIZE;
+	uint8_t buff_digest[VYS_DATA_DIGEST_SIZE];
+	gsize digest_len = VYS_DATA_DIGEST_SIZE;
 	g_checksum_get_digest(checksum, buff_digest, &digest_len);
 	return memcmp(buff_digest, digest, digest_len) == 0;
 }
 
 static struct rdma_req *
 new_rdma_req(GSList *consumers, const struct signal_msg_payload *payload,
-             const struct vysmaw_spectrum_info *spectrum_info)
+             const struct vys_spectrum_info *spectrum_info)
 {
 	struct rdma_req *result = g_slice_new(struct rdma_req);
 	memcpy(&(result->spectrum_info), spectrum_info,
@@ -389,7 +389,7 @@ on_signal_message(struct spectrum_reader_context_ *context,
 	                         error_record);
 
 	if (G_LIKELY(rc == 0 && reqs != NULL)) {
-		struct vysmaw_spectrum_info *info = payload->infos;
+		struct vys_spectrum_info *info = payload->infos;
 		for (unsigned i = payload->num_spectra; i > 0; --i) {
 			if (*consumers != NULL)
 				g_queue_push_tail(reqs,

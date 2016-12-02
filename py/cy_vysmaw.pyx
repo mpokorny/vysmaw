@@ -17,8 +17,6 @@
 # vysmaw.  If not, see <http://www.gnu.org/licenses/>.
 #
 from vysmaw cimport *
-# import everything from libc.stdint without a namespace prefix, or cython
-# compilation fails
 from libc.stdint cimport *
 from libc.string cimport *
 from libc.stdlib cimport *
@@ -35,11 +33,11 @@ __logger = __getLogger()
 
 cdef void evaluate_spectrum_filter(
     const uint8_t *stations, uint8_t spectral_window_index, uint8_t stokes_index,
-    const vysmaw_spectrum_info *infos, uint8_t num_infos,
+    const vys_spectrum_info *infos, uint8_t num_infos,
     void *user_context, bool *pass_filter) with gil:
     func = <object>user_context
     func(<uint8_t [:2]>stations, spectral_window_index, stokes_index,
-         <vysmaw_spectrum_info [:num_infos]>infos,
+         <vys_spectrum_info [:num_infos]>infos,
          <bool [:num_infos]>pass_filter)
 
 cdef unicode _ustring(s):

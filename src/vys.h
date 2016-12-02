@@ -22,8 +22,16 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
+
+struct vys_spectrum_info {
+	uint64_t data_addr;
+	uint64_t timestamp;
+	uint8_t digest[VYS_DATA_DIGEST_SIZE];
+};
 
 struct vys_error_record {
 	int errnum;

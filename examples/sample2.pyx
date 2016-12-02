@@ -25,7 +25,7 @@ import cy_vysmaw
 # A predicate that selects no spectra. The "pass_filter" array elements _must_
 # be assigned values, as they are always uninitialized at function entry.
 cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto, 
-             const vysmaw_spectrum_info *infos, uint8_t num_infos,
+             const vys_spectrum_info *infos, uint8_t num_infos,
              void *user_data, bool *pass_filter) nogil:
     for i in range(num_infos):
         pass_filter[i] = False
