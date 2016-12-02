@@ -84,9 +84,21 @@ cmake .. # replace with your cmake command
 The two primary artifacts produced by the build are a C language shared library,
 and a Python extension with a Python/Cython interface to the shared library.
 
+A smaller artifact is a _vys_ system configuration library, which supports both
+_vysmaw_ and the visibility stream producers (_i.e._, the sending processes: the
+CBE or a simulator).
+
 Note that there is no "install" makefile target yet. If you intend to build and
 run sample code, you may have to set PYTHONPATH to point to the `py`
 sub-directory of the build directory.
+
+## Configuration files
+
+Configuration files for both the _vysmaw_ and _vys_ libraries are available in
+the source tree. These may be installed by the user, but are operationally
+optional. As an alternative to, or in addition to, installing these files on a
+system, they may be used as templates by application developers for
+application-specific configurations.
 
 ## Interfaces
 
