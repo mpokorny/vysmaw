@@ -1182,15 +1182,8 @@ spectrum_reader(struct spectrum_reader_context *shared)
 		result.syserr_desc = NULL;
 	} else {
 		result.code = VYSMAW_SYSERR;
-		context.end_msg->error_record =
-			vys_error_record_reverse(context.end_msg->error_record);
-		GString *str = g_string_new("");
-		struct vys_error_record *er = context.end_msg->error_record;
-		while (er != NULL) {
-			g_string_append_printf(str, "%s\n", er->desc);
-			er = er->next;
-		}
-		result.syserr_desc = g_string_free(str, FALSE);
+		result.syserr_desc =
+			vys_error_record_to_string(&(context.end_msg->error_record));
 	}
 	struct vysmaw_message *msg = end_message_new(shared->handle, &result);
 
