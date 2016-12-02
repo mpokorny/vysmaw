@@ -66,3 +66,29 @@ config_vys_base(void)
 	g_free(dcfg);
 	return result;
 }
+
+void
+init_from_key_file_vys(GKeyFile *kf, struct vys_configuration *config)
+{
+	GError *err = NULL;
+	gchar *mc_addr = g_key_file_get_string(
+		kf, VYS_CONFIG_GROUP_NAME, SIGNAL_MULTICAST_ADDRESS_KEY, &err);
+	if (err == NULL) {
+		g_assert(mc_addr != NULL);
+		gsize mc_addr_len =
+			g_strlcpy(config->signal_multicast_address, mc_addr,
+			          sizeof(config->signal_multicast_address));
+		g_free(mc_addr);
+		/* check that value is not too long */
+		if (mc_addr_len >= sizeof(config->signal_multicast_address))
+			MSG_ERROR(&(config->error_record), -1,
+			          "'%s' field value is too long",
+			          SIGNAL_MULTICAST_ADDRESS_KEY);
+	} else {
+		MSG_ERROR(&(config->error_record), -1,
+		          "Failed to parse '%s' field: %s",
+		          SIGNAL_MULTICAST_ADDRESS_KEY,
+		          err->message);
+		g_error_free(err);
+	}
+}

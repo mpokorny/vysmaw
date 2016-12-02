@@ -18,26 +18,6 @@
 #include <vys_private.h>
 #include <glib.h>
 
-void init_from_key_file(
-	GKeyFile *kf, struct vys_configuration *config)
-	__attribute__((nonnull));
-
-void
-init_from_key_file(GKeyFile *kf, struct vys_configuration *config)
-{
-	gchar *mc_addr = g_key_file_get_string(
-		kf, VYS_CONFIG_GROUP_NAME, SIGNAL_MULTICAST_ADDRESS_KEY, NULL);
-	g_assert(mc_addr != NULL);
-	gsize mc_addr_len =
-		g_strlcpy(config->signal_multicast_address, mc_addr,
-		          sizeof(config->signal_multicast_address));
-	g_free(mc_addr);
-	/* check that value is not too long */
-	if (mc_addr_len >= sizeof(config->signal_multicast_address))
-		MSG_ERROR(&(config->error_record), -1, "'%s' field value is too long",
-		          SIGNAL_MULTICAST_ADDRESS_KEY);
-}
-
 struct vys_configuration *
 vys_configuration_new(const char *path)
 {
@@ -45,10 +25,12 @@ vys_configuration_new(const char *path)
 	gchar *base = config_vys_base();
 	gchar *pcfg = load_config(path, &(result->error_record));
 	if (result->error_record == NULL) {
+		/* merge base config and config loaded from path */
 		gchar *cfg = g_strjoin("\n", base, pcfg, NULL);
 		GKeyFile *kf = g_key_file_new();
 		if (g_key_file_load_from_data(kf, cfg, -1, G_KEY_FILE_NONE, NULL)) {
-			init_from_key_file(kf, result);
+			/* parse the merged configuration */
+			init_from_key_file_vys(kf, result);
 		} else {
 			MSG_ERROR(&(result->error_record), -1, "%s",
 			          "Failed to merge configuration files");

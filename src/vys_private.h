@@ -19,6 +19,7 @@
 #define VYS_PRIVATE_H_
 
 #include <vys.h>
+#include <glib.h>
 
 /* vys configuration file keys */
 #define VYS_CONFIG_GROUP_NAME "vys"
@@ -29,5 +30,8 @@ extern char *config_vys_base(void)
 extern char *load_config(
 	const char *path, struct vys_error_record **error_record)
 	__attribute__((malloc,returns_nonnull));
+extern void init_from_key_file_vys(
+	GKeyFile *kf, struct vys_configuration *config)
+	__attribute__((nonnull));
 
 #endif /* VYS_PRIVATE_H_ */
