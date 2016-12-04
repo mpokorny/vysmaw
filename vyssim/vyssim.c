@@ -96,12 +96,6 @@ struct vyssim_context {
 	struct spectral_window_descriptor *spw_descriptors;
 };
 
-char *
-get_ipoib_addr(void)
-{
-	return g_strdup("FIXME");
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -159,7 +153,7 @@ main(int argc, char *argv[])
 		goto cleanup_and_return;
 	}
 
-	vyssim.bind_addr = get_ipoib_addr();
+	vyssim.bind_addr = vys_get_ipoib_addr();
 	if (vyssim.bind_addr == NULL)
 		goto cleanup_and_return;
 

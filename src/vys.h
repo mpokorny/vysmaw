@@ -27,6 +27,10 @@ extern "C" {
 #include <rdma/rdma_cma.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <linux/if_packet.h>
+#include <linux/if_arp.h>
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
@@ -98,6 +102,8 @@ extern char *vys_error_record_to_string(
 	struct vys_error_record **record)
 	__attribute__((malloc,returns_nonnull,nonnull));
 
+extern char *vys_get_ipoib_addr(void)
+	__attribute__((malloc,nonnull));
 
 #define MSG_ERROR(records, err, format, ...)                            \
 	{ *(records) = \

@@ -217,7 +217,7 @@ resolve_addr(struct signal_receiver_context_ *context,
 
 	hints.ai_port_space = RDMA_PS_UDP;
 
-	char *bind_addr = get_ipoib_addr();
+	char *bind_addr = vys_get_ipoib_addr();
 	if (G_UNLIKELY(bind_addr == NULL)) {
 		MSG_ERROR(error_record, errno, "Failed to get IPOIB address: %s",
 		          strerror(errno));

@@ -347,8 +347,6 @@ extern void mark_signal_receive_failure(
 	vysmaw_handle handle, enum ibv_wc_status status)
 	__attribute__((nonnull));
 
-extern char *get_ipoib_addr(void)
-	__attribute__((malloc,nonnull));
 
 extern int set_nonblocking(int fd);
 

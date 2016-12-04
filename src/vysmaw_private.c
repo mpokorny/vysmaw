@@ -19,13 +19,7 @@
 #include <signal_receiver.h>
 #include <spectrum_selector.h>
 #include <spectrum_reader.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <sys/types.h>
-#include <linux/if_packet.h>
-#include <linux/if_arp.h>
-#include <ifaddrs.h>
 #include <string.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -920,39 +914,6 @@ vysmaw_message_free_resources(struct vysmaw_message *message)
 	vysmaw_message_release_buffer(message);
 	vysmaw_message_free_syserr_desc(message);
 	handle_unref(message->handle);
-}
-
-char *
-get_ipoib_addr(void)
-{
-	char *result = NULL;
-	struct ifaddrs *ifap0 = NULL;
-	int rc = getifaddrs(&ifap0);
-	if (G_LIKELY(rc == 0)) {
-		struct ifaddrs *ifap1 = ifap0;
-		while (result == NULL && ifap1 != NULL) {
-			if (ifap1->ifa_addr->sa_family == AF_PACKET) {
-				struct sockaddr_ll *sockaddr_ll =
-					(struct sockaddr_ll *)(ifap1->ifa_addr);
-				if (sockaddr_ll->sll_hatype == ARPHRD_INFINIBAND) {
-					struct ifaddrs *ifap2 = ifap0;
-					while (result == NULL && ifap2 != NULL) {
-						if (ifap2->ifa_addr->sa_family == AF_INET &&
-						    strcmp(ifap1->ifa_name, ifap2->ifa_name) == 0) {
-							struct sockaddr_in *sockaddr_in =
-								(struct sockaddr_in *)(ifap2->ifa_addr);
-							char *cp = inet_ntoa(sockaddr_in->sin_addr);
-							result = g_strdup(cp);
-						}
-						ifap2 = ifap2->ifa_next;
-					}
-				}
-			}
-			ifap1 = ifap1->ifa_next;
-		}
-		freeifaddrs(ifap0);
-	}
-	return result;
 }
 
 int
