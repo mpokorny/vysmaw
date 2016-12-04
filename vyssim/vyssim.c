@@ -157,7 +157,9 @@ main(int argc, char *argv[])
 	if (vyssim.bind_addr == NULL)
 		goto cleanup_and_return;
 
+#if !GLIB_CHECK_VERSION(2,32,0)
 	g_thread_init(NULL);
+#endif
 
 	// TODO: verify MPI thread level
 	int provided;
