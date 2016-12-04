@@ -20,6 +20,7 @@
 
 #include <vys.h>
 #include <glib.h>
+#include <fcntl.h>
 
 /* vys configuration file keys */
 #define VYS_CONFIG_GROUP_NAME "vys"
@@ -33,5 +34,7 @@ extern char *load_config(
 extern void init_from_key_file_vys(
 	GKeyFile *kf, struct vys_configuration *config)
 	__attribute__((nonnull));
+
+extern int set_nonblocking(int fd);
 
 #endif /* VYS_PRIVATE_H_ */

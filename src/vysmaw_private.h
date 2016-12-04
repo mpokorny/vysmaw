@@ -347,9 +347,6 @@ extern void mark_signal_receive_failure(
 	vysmaw_handle handle, enum ibv_wc_status status)
 	__attribute__((nonnull));
 
-
-extern int set_nonblocking(int fd);
-
 static inline size_t spectrum_size(const struct vysmaw_data_info *info)
 {
 	return 2 * info->num_channels * sizeof(float);

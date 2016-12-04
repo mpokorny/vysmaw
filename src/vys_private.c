@@ -92,3 +92,10 @@ init_from_key_file_vys(GKeyFile *kf, struct vys_configuration *config)
 		g_error_free(err);
 	}
 }
+
+int
+set_nonblocking(int fd)
+{
+	int flags = fcntl(fd, F_GETFL);
+	return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}

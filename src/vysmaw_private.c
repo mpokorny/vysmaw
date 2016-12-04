@@ -22,9 +22,8 @@
 #include <sys/types.h>
 #include <string.h>
 #include <stdarg.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <limits.h>
+#include <unistd.h>
 
 #define DEFAULT_SPECTRUM_BUFFER_POOL_SIZE (10 * (1 << 20))
 #define DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL true
@@ -914,13 +913,6 @@ vysmaw_message_free_resources(struct vysmaw_message *message)
 	vysmaw_message_release_buffer(message);
 	vysmaw_message_free_syserr_desc(message);
 	handle_unref(message->handle);
-}
-
-int
-set_nonblocking(int fd)
-{
-	int flags = fcntl(fd, F_GETFL);
-	return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 GHashTable *
