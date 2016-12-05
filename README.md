@@ -359,7 +359,7 @@ handle, consumers = config.start(1, f, NULL)
 # ... the remainder being the same code as in sample1
 ```
 
-### sample 3
+### sample3
 
 This example demonstrates several Cython optimization techniques, as well as
 providing a non-trivial callback function predicate.
@@ -412,16 +412,19 @@ u[0] = &num_cbs
 # start vysmaw client
 handle, consumers = config.start(1, f, u)
 
+free(f)
+free(u)
+
 # For maximum efficiency, one should work directly with unwrapped messages to
 # avoid allocating a Python object for every message. Doing so requires direct
 # access to the queue referenced by the consumer.
 cdef Consumer c0 = consumers[0]
 cdef vysmaw_message_queue queue = c0.queue()
-cdef vysmaw_message *msg = NULL
 
 # Messages should always be retrieved from the consumer queue until an
 # EndMessage appears. A NULL-valued msg can appear here due to using a timeout
 # in getting a message from the queue in order to allow for interrupt handling.
+cdef vysmaw_message *msg = NULL
 while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
     if msg is not NULL:
         if msg[0].typ is VYSMAW_MESSAGE_VALID_BUFFER:
@@ -430,9 +433,10 @@ while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
         # than the "valid buffer" messages, it could be convenient at this stage
         # to wrap them in Python objects, like so: py_msg = Message.wrap(msg)
 
-        # must unref vysmaw_messages explicitly, since Python reclamation won't
-        # do it for us (and, as always, it's good practice to do this
-        # explicitly)
+        # must unref (unwrapped) vysmaw_messages explicitly, since Python
+        # reclamation won't do it for us [N.B. use only one of
+        # vysmaw_message_unref() or a Python wrappped messages's unref()
+        # method.]
         vysmaw_message_unref(msg)
 
     if interrupted:
