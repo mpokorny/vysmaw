@@ -72,6 +72,9 @@
 # define COND_SIGNAL(c) g_cond_signal(c)
 #endif
 
+#define VERB_ERR(records, err, fn)                                      \
+	MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
+
 /* vysmaw configuration file keys */
 #define VYSMAW_CONFIG_GROUP_NAME "vysmaw"
 #define SPECTRUM_BUFFER_POOL_SIZE_KEY "spectrum_buffer_pool_size"
@@ -85,6 +88,7 @@
 #define QUEUE_RESUME_OVERHEAD_KEY "queue_resume_overhead"
 #define MAX_STARVATION_LATENCY_KEY "max_starvation_latency"
 #define RESOLVE_ROUTE_TIMEOUT_MS_KEY "resolve_route_timeout_ms"
+#define RESOLVE_ADDR_TIMEOUT_MS_KEY "resolve_addr_timeout_ms"
 #define INACTIVE_SERVER_TIMEOUT_SEC_KEY "inactive_server_timeout_sec"
 #define SHUTDOWN_CHECK_INTERVAL_MS_KEY "shutdown_check_interval_ms"
 #define SIGNAL_RECEIVE_MAX_POSTED_KEY "signal_receive_max_posted"

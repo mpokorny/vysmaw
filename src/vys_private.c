@@ -18,8 +18,6 @@
 #include <vys_private.h>
 #include <glib.h>
 
-#define DEFAULT_RESOLVE_ADDR_TIMEOUT_MS 1000
-
 static gchar *default_config_vys()
 	__attribute__((returns_nonnull,malloc));
 
@@ -30,9 +28,6 @@ default_config_vys()
 	g_key_file_set_string(kf, VYS_CONFIG_GROUP_NAME,
 	                      SIGNAL_MULTICAST_ADDRESS_KEY,
 	                      VYS_SIGNAL_MULTICAST_ADDRESS);
-	g_key_file_set_uint64(kf, VYS_CONFIG_GROUP_NAME,
-	                      RESOLVE_ADDR_TIMEOUT_MS_KEY,
-	                      DEFAULT_RESOLVE_ADDR_TIMEOUT_MS);
 	gchar *result = g_key_file_to_data(kf, NULL, NULL);
 	g_key_file_free(kf);
 	return result;
@@ -95,23 +90,6 @@ init_from_key_file_vys(GKeyFile *kf, struct vys_configuration *config)
 		          SIGNAL_MULTICAST_ADDRESS_KEY,
 		          err->message);
 		g_error_free(err);
-	}
-
-	guint64 resolve_addr_timeout_ms = g_key_file_get_uint64(
-		kf, VYS_CONFIG_GROUP_NAME, RESOLVE_ADDR_TIMEOUT_MS_KEY, &err);
-	if (err == NULL) {
-		config->resolve_addr_timeout_ms = (unsigned)resolve_addr_timeout_ms;
-		if (config->resolve_addr_timeout_ms != resolve_addr_timeout_ms)
-			MSG_ERROR(&(config->error_record), -1,
-			          "'%s' field value is too large",
-			          RESOLVE_ADDR_TIMEOUT_MS_KEY);
-	} else {
-		MSG_ERROR(&(config->error_record), -1,
-		          "Failed to parse '%s' field: %s",
-		          RESOLVE_ADDR_TIMEOUT_MS_KEY,
-		          err->message);
-		g_error_free(err);
-
 	}
 }
 
