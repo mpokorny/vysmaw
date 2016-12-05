@@ -72,9 +72,6 @@
 # define COND_SIGNAL(c) g_cond_signal(c)
 #endif
 
-#define VERB_ERR(records, err, fn)                                      \
-	MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
-
 /* vysmaw configuration file keys */
 #define VYSMAW_CONFIG_GROUP_NAME "vysmaw"
 #define SPECTRUM_BUFFER_POOL_SIZE_KEY "spectrum_buffer_pool_size"
