@@ -88,13 +88,115 @@ struct vyssim_context {
 	struct mcast_context mcast_ctx;
 	struct server_context server_ctx;
 	struct dataset_parameters params;
+	struct vys_configuration *vconfig;
 	MPI_Comm comm;
 
-	unsigned signal_msg_num_spectra;
 	unsigned data_buffer_length_sec;
 	unsigned num_spw;
 	struct spectral_window_descriptor *spw_descriptors;
 };
+
+int resolve_addr(
+	struct vyssim_context *vyssim, struct vys_error_record **error_record)
+	__attribute__((nonnull(1)));
+
+int get_cm_event(
+	struct rdma_event_channel *channel, enum rdma_cm_event_type type,
+	struct rdma_cm_event **out_ev, struct vys_error_record **error_record)
+	__attribute__((nonnull(1)));
+
+int
+resolve_addr(struct vyssim_context *vyssim,
+             struct vys_error_record **error_record)
+{
+	int rc;
+	struct mcast_context *ctx = &(vyssim->mcast_ctx);
+	struct rdma_addrinfo *bind_rai = NULL;
+	struct rdma_addrinfo *mcast_rai = NULL;
+	struct rdma_addrinfo hints;
+
+	memset(&hints, 0, sizeof (hints));
+
+	hints.ai_port_space = RDMA_PS_UDP;
+	if (vyssim->bind_addr) {
+		hints.ai_flags = RAI_PASSIVE;
+		rc = rdma_getaddrinfo(vyssim->bind_addr, NULL, &hints, &bind_rai);
+		if (G_UNLIKELY(rc != 0)) {
+			VERB_ERR(error_record, errno, "rdma_getaddrinfo (bind)");
+			return rc;
+		}
+
+		/* bind to a specific adapter if requested to do so */
+		rc = rdma_bind_addr(ctx->id, bind_rai->ai_src_addr);
+		if (G_UNLIKELY(rc != 0)) {
+			VERB_ERR(error_record, errno, "rdma_bind_addr");
+			return rc;
+		}
+		/* A PD is created when we bind. Copy it to the mcast_context so it can be
+		 * used later on */
+		ctx->pd = ctx->id->pd;
+	}
+
+	hints.ai_flags = 0;
+	rc = rdma_getaddrinfo(vyssim->vconfig->signal_multicast_address, NULL,
+	                      &hints, &mcast_rai);
+	if (G_UNLIKELY(rc != 0)) {
+		VERB_ERR(error_record, errno, "rdma_getaddrinfo (mcast)");
+		return rc;
+	}
+
+	rc = rdma_resolve_addr(
+		ctx->id,
+		(bind_rai != NULL) ? bind_rai->ai_src_addr : NULL,
+		mcast_rai->ai_dst_addr,
+		vyssim->vconfig->resolve_addr_timeout_ms);
+	if (G_UNLIKELY(rc != 0)) {
+		VERB_ERR(error_record, errno, "rdma_resolve_addr");
+		return rc;
+	}
+
+	rc = get_cm_event(
+		ctx->event_channel, RDMA_CM_EVENT_ADDR_RESOLVED, NULL, error_record);
+	if (G_UNLIKELY(rc != 0))
+		return rc;
+
+	memcpy(&ctx->sockaddr, mcast_rai->ai_dst_addr,
+	       sizeof(struct sockaddr));
+
+	return 0;
+}
+
+int
+get_cm_event(struct rdma_event_channel *channel,
+             enum rdma_cm_event_type type,
+             struct rdma_cm_event **out_ev,
+             struct vys_error_record **error_record)
+{
+	int rc;
+	struct rdma_cm_event *event = NULL;
+
+	rc = rdma_get_cm_event(channel, &event);
+	if (G_UNLIKELY(rc != 0)) {
+		VERB_ERR(error_record, errno, "rdma_get_cm_event");
+		return -1;
+	}
+
+	/* Verify the event is the expected type */
+	if (event->event != type) {
+		MSG_ERROR(error_record, -1, "event: %s, expecting: %s, status: %s",
+		          rdma_event_str(event->event), rdma_event_str(type),
+		          strerror(-event->status));
+		rc = -1;
+	}
+
+	/* Pass the event back to the user if requested */
+	if (out_ev == NULL)
+		rdma_ack_cm_event(event);
+	else
+		*out_ev = event;
+
+	return rc;
+}
 
 int
 main(int argc, char *argv[])
@@ -126,7 +228,7 @@ main(int argc, char *argv[])
 			break;
 
 		case 'l':
-			vyssim.signal_msg_num_spectra = (unsigned)atoi(optarg);
+			vyssim.mcast_ctx.signal_msg_num_spectra = (unsigned)atoi(optarg);
 			break;
 
 		case 'f':
@@ -154,8 +256,13 @@ main(int argc, char *argv[])
 	}
 
 	vyssim.bind_addr = vys_get_ipoib_addr();
-	if (vyssim.bind_addr == NULL)
+	if (vyssim.bind_addr == NULL) {
+		fprintf(stderr, "unable to determine IP address of IPOIB interface\n");
 		goto cleanup_and_return;
+	}
+	inet_pton(AF_INET, vyssim.bind_addr, &(vyssim.sockaddr.sin_addr));
+	vyssim.sockaddr.sin_family = AF_INET;
+	vyssim.sockaddr.sin_port = 0;
 
 #if !GLIB_CHECK_VERSION(2,32,0)
 	g_thread_init(NULL);
@@ -175,9 +282,9 @@ main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &num_servers);
 
 	/* adjust parameter values */
-	if (vyssim.signal_msg_num_spectra < 1) {
+	if (vyssim.mcast_ctx.signal_msg_num_spectra < 1) {
 		fprintf(stderr, "using signal msg block length value of 1\n");
-		vyssim.signal_msg_num_spectra = 1;
+		vyssim.mcast_ctx.signal_msg_num_spectra = 1;
 	}
 	if (vyssim.data_buffer_length_sec < 1) {
 		fprintf(stderr, "using data buffer length value of 1 sec\n");
@@ -187,7 +294,7 @@ main(int argc, char *argv[])
 	/* distribute products among all servers */
 	unsigned sto_group_size =
 		(vyssim.params.num_spectral_windows * vyssim.params.num_stokes)
-		/ num_servers; // number of products per server
+		/ num_servers;// min number of products per server
 	if (sto_group_size == 0) {
 		fprintf(stderr,
 		        "require reduced number of servers (no more than %u for "
@@ -196,13 +303,18 @@ main(int argc, char *argv[])
 		        vyssim.params.num_stokes);
 		goto cleanup_and_return;
 	}
-	/* power of two products per server*/
+	/* min power of two products per server*/
 	sto_group_size =
 		1 << g_bit_nth_msf(sto_group_size, 8 * sizeof(unsigned));
+	/* distribute by no more than num_stokes products at a time */
 	sto_group_size = MIN(sto_group_size, vyssim.params.num_stokes);
+	/* number of groups a spectral window's stokes products are divided into */
 	unsigned num_sto_groups = vyssim.params.num_stokes / sto_group_size;
+	/* total number of groups of stokes products to distribute  */
 	unsigned num_groups =
 		vyssim.params.num_spectral_windows * num_sto_groups;
+	/* distribute groups (spectral window plus a number of stokes products) in
+	 * round-robin order to all processes (servers) */
 	GArray *spws = g_array_new(
 		FALSE, FALSE, sizeof(struct spectral_window_descriptor));
 	for (unsigned grp = rank; grp < num_groups; grp += num_servers) {
@@ -219,7 +331,12 @@ main(int argc, char *argv[])
 	vyssim.spw_descriptors =
 		(struct spectral_window_descriptor *)g_array_free(spws, FALSE);
 
+	// TODO: allow configuration file path
+	vyssim.vconfig = vys_configuration_new(NULL);
+
 cleanup_and_return:
+	if (vyssim.vconfig != NULL)
+		vys_configuration_free(vyssim.vconfig);
 	if (vyssim.spw_descriptors != NULL)
 		g_free(vyssim.spw_descriptors);
 	if (vyssim.bind_addr != NULL)
