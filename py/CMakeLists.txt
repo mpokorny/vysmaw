@@ -12,3 +12,5 @@ link_directories(../src)
 add_library(cy_vysmaw MODULE ${cy_vysmaw})
 target_link_libraries(cy_vysmaw vysmaw)
 python_extension_module(cy_vysmaw)
+target_compile_options(cy_vysmaw PRIVATE
+  -fno-short-enums)

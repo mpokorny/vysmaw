@@ -16,6 +16,7 @@ target_include_directories(vys PRIVATE
   ${GLIB2_INCLUDE_DIRS}
   .)
 target_compile_options(vys PRIVATE
+  -fno-short-enums
   ${GLIB2_CFLAGS}
   ${GLIB2_CFLAGS_OTHER})
 target_compile_definitions(vys PRIVATE
@@ -36,6 +37,7 @@ target_include_directories(vysmaw PRIVATE
   ${GTHREAD2_INCLUDE_DIRS}
   .)
 target_compile_options(vysmaw PRIVATE
+  -fno-short-enums
   ${GTHREAD2_CFLAGS}
   ${GTHREAD2_CFLAGS_OTHER})
 target_compile_definitions(vysmaw PRIVATE

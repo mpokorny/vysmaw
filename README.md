@@ -121,6 +121,12 @@ inefficient callback will result in the client not receiving all the spectra
 that it wishes to receive (although such a callback will not affect other
 clients, or the correlator back-end.)
 
+#### Building a client application
+
+To ensure binary compatibility for servers and clients, applications should be
+compiled with the (gcc) "-fno-short-enums" flag. This advice applies to C, C++
+and Cython applications.
+
 ## Usage
 
 Every client that initializes the library receives upon return from the

@@ -16,6 +16,7 @@ target_include_directories(vyssim PRIVATE
   ${GTHREAD2_INCLUDE_DIRS}
   ../src)
 target_compile_options(vyssim PRIVATE
+  -fno-short-enums
   ${MPI_C_COMPILE_FLAGS}
   ${GTHREAD2_CFLAGS}
   ${GTHREAD2_CFLAGS_OTHER})
