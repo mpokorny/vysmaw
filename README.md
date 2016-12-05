@@ -46,7 +46,10 @@ PYTHON_EXECUTABLE=$( python-config --prefix )/bin/python
 PYTHON_LIBRARY=$( ls $( python-config --prefix )/lib/libpython*.so )
 PYTHON_INCLUDE_DIR=$( ls -d $( python-config --prefix )/include/python* )
 
-CMAKE="~/stow/cmake-3.6.3/bin/cmake -DCMAKE_BUILD_TYPE=Debug \
+BUILD_DIR=./build
+
+CMAKE="mkdir -p $BUILD_DIR && cd $BUILD_DIR && \
+ ~/stow/cmake-3.6.3/bin/cmake -DCMAKE_BUILD_TYPE=Debug \
  -DCMAKE_C_COMPILER=$GCC -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE \
  -DPYTHON_LIBRARY=$PYTHON_LIBRARY -DPYTHON_INCLUDE_DIR=$PYTHON_INCLUDE_DIR .."
 echo $CMAKE
@@ -61,7 +64,10 @@ PYTHON_EXECUTABLE=$( which python3 )
 PYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.5m.so.1.0
 PYTHON_INCLUDE_DIR=/usr/include/python3.5m
 
-CMAKE="cmake -DCMAKE_C_COMPILER=$GCC \
+BUILD_DIR=./build
+
+CMAKE="mkdir -p $BUILD_DIR && cd $BUILD_DIR && \
+ cmake -DCMAKE_C_COMPILER=$GCC \
  -DPYTHON_EXECUTABLE=$PYTHON_EXECUTABLE -DPYTHON_LIBRARY=$PYTHON_LIBRARY \
  -DPYTHON_INCLUDE_DIR=$PYTHON_INCLUDE_DIR .."
 echo $CMAKE
