@@ -81,16 +81,28 @@ cmake .. # replace with your cmake command
 
 ## Build artifacts
 
+Note that there is no "install" makefile target yet. If you intend to build and
+run sample code, you may have to set PYTHONPATH to point to the `py`
+sub-directory of the build directory.
+
+### vysmaw
+
 The two primary artifacts produced by the build are a C language shared library,
 and a Python extension with a Python/Cython interface to the shared library.
+
+### vys
 
 A smaller artifact is a _vys_ system configuration library, which supports both
 _vysmaw_ and the visibility stream producers (_i.e._, the sending processes: the
 CBE or a simulator).
 
-Note that there is no "install" makefile target yet. If you intend to build and
-run sample code, you may have to set PYTHONPATH to point to the `py`
-sub-directory of the build directory.
+### vyssim
+
+A distributed visibility stream simulator application. This application must be
+launched (and is compiled) as an MPI application, using any MPI job launcher
+that is compatible with the MPI library used to build the application. For the
+time being, the only further usage instruction is available by starting the
+application with the ```-h``` flag.
 
 ## Configuration files
 
