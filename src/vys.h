@@ -76,6 +76,9 @@ struct vys_configuration {
 	/* multicast address for signal messages; expected format is dotted quad IP
 	 * address string */
 	char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
+
+	/* timeout, in milliseconds, to resolve InfiniBand/RDMA address */
+	unsigned resolve_addr_timeout_ms;
 };
 
 extern struct vys_configuration *vys_configuration_new(

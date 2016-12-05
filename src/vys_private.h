@@ -25,6 +25,7 @@
 /* vys configuration file keys */
 #define VYS_CONFIG_GROUP_NAME "vys"
 #define SIGNAL_MULTICAST_ADDRESS_KEY "signal_multicast_address"
+#define RESOLVE_ADDR_TIMEOUT_MS_KEY "resolve_addr_timeout_ms"
 
 extern char *config_vys_base(void)
 	__attribute__((malloc,returns_nonnull));

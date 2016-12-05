@@ -36,7 +36,6 @@
 #define DEFAULT_QUEUE_RESUME_OVERHEAD 100
 #define DEFAULT_MAX_STARVATION_LATENCY 100
 #define DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS 1000
-#define DEFAULT_RESOLVE_ADDR_TIMEOUT_MS 1000
 #define DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC (60 * 60 * 12)
 #define DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS 1000
 #define DEFAULT_SIGNAL_RECEIVE_MAX_POSTED 10000
@@ -96,9 +95,6 @@ default_config_vysmaw()
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      RESOLVE_ROUTE_TIMEOUT_MS_KEY,
 	                      DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS);
-	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
-	                      RESOLVE_ADDR_TIMEOUT_MS_KEY,
-	                      DEFAULT_RESOLVE_ADDR_TIMEOUT_MS);
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      INACTIVE_SERVER_TIMEOUT_SEC_KEY,
 	                      DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC);
@@ -189,13 +185,15 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		.error_record = NULL
 	};
 	init_from_key_file_vys(kf, &vys_cfg);
-	if (vys_cfg.error_record == NULL)
+	if (vys_cfg.error_record == NULL) {
 		g_strlcpy(config->signal_multicast_address,
 		          vys_cfg.signal_multicast_address,
 		          sizeof(config->signal_multicast_address));
-	else
+		config->resolve_addr_timeout_ms = vys_cfg.resolve_addr_timeout_ms;
+	} else {
 		config->error_record = vys_error_record_concat(
 			vys_cfg.error_record, config->error_record);
+	}
 
 	/* vysmaw group configuration */
 	config->spectrum_buffer_pool_size =
@@ -220,8 +218,6 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		parse_uint64(kf, MAX_STARVATION_LATENCY_KEY, config);
 	config->resolve_route_timeout_ms =
 		parse_uint64(kf, RESOLVE_ROUTE_TIMEOUT_MS_KEY, config);
-	config->resolve_addr_timeout_ms =
-		parse_uint64(kf, RESOLVE_ADDR_TIMEOUT_MS_KEY, config);
 	config->inactive_server_timeout_sec =
 		parse_uint64(kf, INACTIVE_SERVER_TIMEOUT_SEC_KEY, config);
 	config->shutdown_check_interval_ms =
