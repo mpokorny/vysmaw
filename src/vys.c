@@ -17,6 +17,7 @@
 //
 #include <vys_private.h>
 #include <glib.h>
+#include <string.h>
 
 struct vys_configuration *
 vys_configuration_new(const char *path)
