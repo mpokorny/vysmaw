@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define RESOLVE_ADDR_TIMEOUT_MS 1000
+
 #define SIGNAL_MSG_MAX_POSTED 1000
 #define SIGNAL_MSG_QUEUE_LENGTH (2 * SIGNAL_MSG_MAX_POSTED)
 #define SIGNAL_MSG_BLOCK_LENGTH (4 * SIGNAL_MSG_QUEUE_LENGTH)
@@ -149,7 +151,7 @@ resolve_addr(struct vyssim_context *vyssim,
 		ctx->id,
 		(bind_rai != NULL) ? bind_rai->ai_src_addr : NULL,
 		mcast_rai->ai_dst_addr,
-		vyssim->vconfig->resolve_addr_timeout_ms);
+		RESOLVE_ADDR_TIMEOUT_MS);
 	if (G_UNLIKELY(rc != 0)) {
 		VERB_ERR(error_record, errno, "rdma_resolve_addr");
 		return rc;
