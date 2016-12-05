@@ -113,6 +113,9 @@ extern char *vys_get_ipoib_addr(void)
 			vys_error_record_desc_dup_printf( \
 				*(records), (err), G_STRLOC ": " format, ##__VA_ARGS__); }
 
+#define VERB_ERR(records, err, fn)                                      \
+	MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
+
 #ifdef __cplusplus
 }
 #endif
