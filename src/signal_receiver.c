@@ -183,7 +183,8 @@ get_cm_event(struct rdma_event_channel *channel,
 
 	int rc = rdma_get_cm_event(channel, &event);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_record, errno, "rdma_get_cm_event");
+		MSG_ERROR(error_record, errno, "rdma_get_cm_event (%s): %s",
+		          rdma_event_str(type), strerror(errno));
 		return rc;
 	}
 
@@ -299,16 +300,9 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		VERB_ERR(error_record, errno, "rdma_create_event_channel");
 		return -1;
 	}
-	int rc = set_nonblocking(context->event_channel->fd);
-	if (G_UNLIKELY(rc != 0)) {
-		MSG_ERROR(error_record, errno,
-		          "failed to set multicast completion event channel to "
-		          "non-blocking: %s", strerror(errno));
-		return -1;
-	}
 
 	/* rdma id */
-	rc = rdma_create_id(
+	int rc = rdma_create_id(
 		context->event_channel, &context->id, context, RDMA_PS_UDP);
 	if (G_UNLIKELY(rc != 0)) {
 		VERB_ERR(error_record, errno, "rdma_create_id");
@@ -412,6 +406,14 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	context->remote_qpn = event->param.ud.qp_num;
 	context->remote_qkey = event->param.ud.qkey;
 	rdma_ack_cm_event(event);
+
+	rc = set_nonblocking(context->event_channel->fd);
+	if (G_UNLIKELY(rc != 0)) {
+		MSG_ERROR(error_record, errno,
+		          "failed to set multicast completion event channel to "
+		          "non-blocking: %s", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
