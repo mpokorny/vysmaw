@@ -427,11 +427,12 @@ cdef class Result:
 
     @property
     def syserr_desc(self):
+        if self._c_result[0].syserr_desc is NULL:
+            return None
+        desc = <bytes>self._c_result[0].syserr_desc
         return list(
             filter(
-                lambda s: len(s) > 0,
-                (<bytes>self._c_result[0].syserr_desc).decode('ascii').\
-                split('\n')))
+                lambda s: len(s) > 0, desc.decode('ascii').split('\n')))
 
 cdef class Message:
 
