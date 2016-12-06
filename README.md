@@ -486,3 +486,134 @@ if handle is not None:
 # display the message
 print("{} callbacks, {} spectra".format(num_cbs, num_spectra))
 ```
+
+### sample4 (C++)
+
+This example provides a sample application written in C++. It can be used as a
+simple, diagnostic vysmaw application, or as a basis for developing a more
+interesting application.
+
+``` c++
+#include <iostream>
+#include <array>
+#include <memory>
+#include <csignal>
+#include <vysmaw.h>
+
+// max time to wait for message on queue
+#define QUEUE_TIMEOUT_MICROSEC 100000
+
+using namespace std;
+
+namespace std {
+	// a default_delete specialization for struct vysmaw_message
+	template <> struct default_delete<struct vysmaw_message> {
+		void operator()(struct vysmaw_message *msg) {
+			vysmaw_message_unref(msg);
+		}
+	};
+
+	// a default_delete specialization for struct vysmaw_configuration
+	template <> struct default_delete<struct vysmaw_configuration> {
+		void operator()(struct vysmaw_configuration *conf) {
+			vysmaw_configuration_free(conf);
+		}
+	};
+}
+
+// a filter that accepts everything
+void
+filter(const uint8_t stations[2], uint8_t spectral_window_index,
+       uint8_t stokes_index, const struct vys_spectrum_info *infos,
+       uint8_t num_infos, void *user_data, bool *pass_filter)
+{
+	for (auto i = 0; i < num_infos; ++i)
+		*pass_filter++ = true;
+}
+
+// handle sigint for user exit condition
+sig_atomic_t sigint_occurred = false;
+void sigint_handler(int p)
+{
+	sigint_occurred = true;
+}
+
+// get a message from a message queue, with a timeout to support user interrupt
+// handling
+unique_ptr<struct vysmaw_message>
+pop(vysmaw_message_queue q)
+{
+	return unique_ptr<struct vysmaw_message>(
+		vysmaw_message_queue_timeout_pop(q, QUEUE_TIMEOUT_MICROSEC));
+}
+
+int
+main()
+{
+	// initialize vysmaw configuration
+	unique_ptr<struct vysmaw_configuration>
+		config(vysmaw_configuration_new(nullptr));
+
+	// one consumer, using filter()
+	struct vysmaw_consumer consumer = {
+		.filter = filter
+	};
+
+	// this application keeps count of the message types it receives
+	array<unsigned,VYSMAW_MESSAGE_END + 1> counters;
+	counters.fill(0);
+	
+	// catch SIGINT to exit gracefully
+	bool interrupted = false;
+	signal(SIGINT, sigint_handler);
+
+	// start vysmaw client
+	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
+
+	// take messages until a VYSMAW_MESSAGE_END appears
+	unique_ptr<struct vysmaw_message> message = move(pop(consumer.queue));
+	while (!message || message->typ != VYSMAW_MESSAGE_END) {
+		// start shutdown if requested by user
+		if (sigint_occurred && !interrupted) {
+			vysmaw_shutdown(handle);
+			interrupted = true;
+		}
+		// record message type
+		if (message)
+			++counters[message->typ];
+		// get next message
+		message = move(pop(consumer.queue));
+	}
+	++counters[message->typ];
+
+	// display counts of received messages
+	for (int m = VYSMAW_MESSAGE_VALID_BUFFER; m <= VYSMAW_MESSAGE_END; ++m)
+		cout << m << ": " << counters[m] << endl;
+
+	// display message for end condition
+	switch (message->content.result.code) {
+	case vysmaw_result::VYSMAW_NO_ERROR:
+		cout << "ended without error" << endl;
+		break;
+
+	case vysmaw_result::VYSMAW_SYSERR:
+		cout << "ended with errors" << endl
+		     << message->content.result.syserr_desc;
+		break;
+
+	case vysmaw_result::VYSMAW_ERROR_BUFFPOOL:
+		cout << "ended with fatal 'buffpool' error" << endl;
+		break;
+
+	default:
+		break;
+	}
+	// release the last message and shut down the library if it hasn't already
+	// been done
+	message.reset();
+	if (!interrupted) vysmaw_shutdown(handle);
+
+	return 0;
+}
+```
+
