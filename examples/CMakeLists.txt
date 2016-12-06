@@ -21,3 +21,7 @@ add_cython_target(sample3 EMBED_MAIN)
 add_executable(sample3 ${sample3})
 target_link_libraries(sample3 vysmaw)
 python_standalone_executable(sample3)
+
+add_executable(sample4 sample4.cc)
+target_link_libraries(sample4 vysmaw)
+target_compile_options(sample4 PRIVATE -Wall -Werror)
