@@ -294,7 +294,7 @@ any associated data.
 
 All sample code can be found under the `examples` project directory.
 
-### sample1
+### sample1 (mostly Python)
 
 This application is trivial in that it uses a callback that selects no
 spectra. It will run to completion on any machine, even in the absence of an
@@ -349,7 +349,7 @@ msg.unref()
 Note that the above uses the start_py method, which is convenient for
 development and testing, but is not recommended for production code.
 
-### sample2
+### sample2 (Python with Cython callback)
 
 This example has the same functionality as sample1, but, with a bit more usage
 of Cython and the vysmaw Cython API (cy_vysmaw) than sample1, its implementation
@@ -383,7 +383,7 @@ handle, consumers = config.start(1, f, NULL)
 # ... the remainder being the same code as in sample1
 ```
 
-### sample3
+### sample3 (optimized Cython)
 
 This example demonstrates several Cython optimization techniques, as well as
 providing a non-trivial callback function predicate.
@@ -393,6 +393,7 @@ from vysmaw cimport *
 from libc.stdint cimport *
 from libc.stdlib cimport *
 from cy_vysmaw cimport *
+from cpython cimport PyErr_CheckSignals
 import cy_vysmaw
 import signal
 
@@ -470,6 +471,7 @@ while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
             handle = None
         interrupted = False
     msg = vysmaw_message_queue_timeout_pop(queue, 500000)
+    PyErr_CheckSignals()
 
 # show the end message
 py_msg = Message.wrap(msg) # this steals the message reference
