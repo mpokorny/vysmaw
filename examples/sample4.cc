@@ -26,14 +26,15 @@
 
 using namespace std;
 
-// a default_delete specialization for struct vysmaw_message
 namespace std {
+	// default_delete specialization for struct vysmaw_message
 	template <> struct default_delete<struct vysmaw_message> {
 		void operator()(struct vysmaw_message *msg) {
 			vysmaw_message_unref(msg);
 		}
 	};
 
+	// default_delete specialization for struct vysmaw_configuration
 	template <> struct default_delete<struct vysmaw_configuration> {
 		void operator()(struct vysmaw_configuration *conf) {
 			vysmaw_configuration_free(conf);
@@ -128,7 +129,7 @@ main()
 	default:
 		break;
 	}
-	// release the last message and shutdown the library if it hasn't already
+	// release the last message and shut down the library if it hasn't already
 	// been done
 	message.reset();
 	if (!interrupted) vysmaw_shutdown(handle);
