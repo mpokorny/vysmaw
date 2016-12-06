@@ -20,6 +20,7 @@ from vysmaw cimport *
 from libc.stdint cimport *
 from libc.stdlib cimport *
 from cy_vysmaw cimport *
+from cpython cimport PyErr_CheckSignals
 import cy_vysmaw
 import signal
 
@@ -97,6 +98,7 @@ while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
             handle = None
         interrupted = False
     msg = vysmaw_message_queue_timeout_pop(queue, 500000)
+    PyErr_CheckSignals()
 
 # show the end message
 py_msg = Message.wrap(msg) # this steals the message reference
