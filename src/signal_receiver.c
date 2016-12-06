@@ -462,6 +462,9 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 		g_free(context->wcs);
 
 	context->pollfds[RECEIVE_COMPLETION_FD_INDEX].fd = -1;
+
+	if (context->shared->signal_msg_buffers != NULL)
+		buffer_pool_free(context->shared->signal_msg_buffers);
 	return result;
 }
 
