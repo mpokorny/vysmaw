@@ -905,7 +905,6 @@ signal_data_path_end_and_return:
 
 	g_async_queue_unref(shared->signal_msg_queue);
 
-	handle_unref(shared->handle);
 	g_free(shared);
 	return NULL;
 }

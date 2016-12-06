@@ -1189,13 +1189,13 @@ spectrum_reader(struct spectrum_reader_context *shared)
 
 	/* post result message to all consumer queues */
 	post_msg(shared->handle, msg);
+	handle_unref(shared->handle); // end message has been posted
 	data_path_message_free(context.end_msg);
 
 	g_checksum_free(context.checksum);
 	g_array_free(context.pollfds, TRUE);
 	g_array_free(context.new_pollfds, TRUE);
 	g_async_queue_unref(shared->read_request_queue);
-	handle_unref(shared->handle);
 	g_free(shared);
 	return NULL;
 }

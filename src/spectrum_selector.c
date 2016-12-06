@@ -145,7 +145,6 @@ spectrum_selector(struct spectrum_selector_context *context)
 	g_hash_table_destroy(prev_eagerly_forwarded);
 	g_async_queue_unref(context->signal_msg_queue);
 	g_async_queue_unref(context->read_request_queue);
-	handle_unref(context->handle);
 	g_free(context);
 	return NULL;
 }

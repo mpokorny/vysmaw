@@ -273,6 +273,7 @@ handle_unref(vysmaw_handle handle)
 		}
 
 		MUTEX_CLEAR(handle->mtx);
+		g_free(handle);
 	}
 }
 
@@ -563,7 +564,7 @@ message_queue_force_push_one_unlocked(struct vysmaw_message *msg,
 	 * automatic queue reclamation */
 	message_queue_ref(queue);
 	queue->depth++;
-	g_async_queue_push_unlocked(queue->q, message_ref(msg));
+	g_async_queue_push_unlocked(queue->q, msg);
 }
 
 void
@@ -680,7 +681,7 @@ init_signal_receiver(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 {
 	struct signal_receiver_context *context =
 		g_new0(struct signal_receiver_context, 1);
-	context->handle = handle_ref(handle);
+	context->handle = handle;
 	context->loop_fd = loop_fd;
 	context->signal_msg_queue = g_async_queue_ref(signal_msg_queue);
 	handle->signal_receiver_thread =
@@ -699,7 +700,7 @@ init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 {
 	struct spectrum_selector_context *context =
 		g_new(struct spectrum_selector_context, 1);
-	context->handle = handle_ref(handle);
+	context->handle = handle;
 	context->signal_msg_queue = g_async_queue_ref(signal_msg_queue);
 	context->read_request_queue = g_async_queue_ref(read_request_queue);
 	context->signal_msg_buffers = signal_msg_buffers;
@@ -716,7 +717,7 @@ init_spectrum_reader(vysmaw_handle handle, GAsyncQueue *read_request_queue,
 {
 	struct spectrum_reader_context *context =
 		g_new(struct spectrum_reader_context, 1);
-	context->handle = handle_ref(handle);
+	context->handle = handle;
 	context->loop_fd = loop_fd;
 	context->signal_msg_buffers = signal_msg_buffers;
 	context->signal_msg_num_spectra = signal_msg_num_spectra;

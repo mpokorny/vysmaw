@@ -39,6 +39,7 @@ vysmaw_message_queue_timeout_pop(vysmaw_message_queue queue, uint64_t timeout)
 	result = g_async_queue_timed_pop_unlocked(queue->q, &end);
 #endif
 	if (result != NULL) queue->depth--;
+	g_assert(queue->depth >= 0);
 	g_async_queue_unlock(queue->q);
 	/* release message's queue reference */
 	if (result != NULL) message_queue_unref(queue);
@@ -51,6 +52,7 @@ vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
 	g_async_queue_lock(queue->q);
 	struct vysmaw_message *result = g_async_queue_try_pop_unlocked(queue->q);
 	if (result != NULL) queue->depth--;
+	g_assert(queue->depth >= 0);
 	g_async_queue_unlock(queue->q);
 	/* release message's queue reference */
 	if (result != NULL) message_queue_unref(queue);
@@ -89,7 +91,10 @@ vysmaw_start(const struct vysmaw_configuration *config,
 
 	/* "global" handle initialization */
 	vysmaw_handle result = g_new0(struct _vysmaw_handle, 1);
-	result->refcount = 1;
+	/* result is initialized with a reference count of 2: one for the caller,
+	 * and another for the end message that we guarantee will be posted for
+	 * every consumer */
+	result->refcount = 2;
 	MUTEX_INIT(result->mtx);
 	result->in_shutdown = false;
 	result->result = NULL;
@@ -139,6 +144,7 @@ vysmaw_start(const struct vysmaw_configuration *config,
 		};
 		struct vysmaw_message *msg = end_message_new(result, &rc);
 		post_msg(result, msg);
+		handle_unref(result); // end message has been posted
 	}
 	return result;
 }
