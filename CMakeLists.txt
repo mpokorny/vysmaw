@@ -13,15 +13,11 @@ set(CMAKE_C_FLAGS
   "${CMAKE_C_FLAGS} -fno-short-enums")
 set(CMAKE_C_FLAGS_RELEASE
   "${CMAKE_C_FLAGS_RELEASE} -Ofast")
-set(CMAKE_C_FLAGS_DEBUG
-  "${CMAKE_C_FLAGS_DEBUG} -fno-short-enums")
 
 set(CMAKE_CXX_FLAGS
   "${CMAKE_CXX_FLAGS} -fno-short-enums")
 set(CMAKE_CXX_FLAGS_RELEASE
   "${CMAKE_CXX_FLAGS_RELEASE} -Ofast")
-set(CMAKE_CXX_FLAGS_DEBUG
-  "${CMAKE_CXX_FLAGS_DEBUG} -fno-short-enums")
 
 add_subdirectory(src)
 add_subdirectory(py)
