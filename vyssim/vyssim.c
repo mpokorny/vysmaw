@@ -44,9 +44,9 @@
 			_result; })
 # define Mutex GMutex *
 # define MUTEX_INIT(m) { m = g_mutex_new(); }
-# define MUTEX_CLEAR(m) g_mutex_free(m)
-# define MUTEX_LOCK(m) g_mutex_lock(m)
-# define MUTEX_UNLOCK(m) g_mutex_unlock(m)
+# define MUTEX_CLEAR(m) { if ((m) != NULL) g_mutex_free(m); }
+# define MUTEX_LOCK(m) { if ((m) != NULL) g_mutex_lock(m); }
+# define MUTEX_UNLOCK(m) { if ((m) != NULL) g_mutex_unlock(m); }
 # define RecMutex GStaticRecMutex
 # define REC_MUTEX_INIT g_static_rec_mutex_init
 # define REC_MUTEX_CLEAR g_static_rec_mutex_free
@@ -54,9 +54,9 @@
 # define REC_MUTEX_UNLOCK g_static_rec_mutex_unlock
 # define Cond GCond *
 # define COND_INIT(c) { c = g_cond_new(); }
-# define COND_CLEAR(c) g_cond_free(c)
-# define COND_WAIT(c, m) g_cond_wait(c, m)
-# define COND_SIGNAL(c) g_cond_signal(c)
+# define COND_CLEAR(c) { if ((c) != NULL) g_cond_free(c); }
+# define COND_WAIT(c, m) { if ((c) != NULL && (m) != NULL) g_cond_wait(c, m); }
+# define COND_SIGNAL(c) { if ((c) != NULL) g_cond_signal(c); }
 #endif
 
 #define NUM_BASELINES(na) (((na) * ((na) - 1)) / 2)
@@ -1243,33 +1243,19 @@ fin(struct vyssim_context *vyssim, struct vys_error_record **error_record)
 
 	/* drain queue, then set signal_msg_num_spectra to zero to signal data
 	 * generation thread should exit */
-#if !GLIB_CHECK_VERSION(2,32,0)
-	if (ctx->queue_mutex != NULL) {
-#endif
-		MUTEX_LOCK(ctx->queue_mutex);
-		ctx->num_queued = 0;
-		vyssim->mcast_ctx.signal_msg_num_spectra = 0;
-#if !GLIB_CHECK_VERSION(2,32,0)
-		if (ctx->queue_changed_condition != NULL)
-#endif
-			COND_SIGNAL(ctx->queue_changed_condition);
-		MUTEX_UNLOCK(ctx->queue_mutex);
-#if !GLIB_CHECK_VERSION(2,32,0)
-	}
-#endif
+	MUTEX_LOCK(ctx->queue_mutex);
+	ctx->num_queued = 0;
+	vyssim->mcast_ctx.signal_msg_num_spectra = 0;
+	COND_SIGNAL(ctx->queue_changed_condition);
+	MUTEX_UNLOCK(ctx->queue_mutex);
+
 	/* join data generation thread, clean up its resources -- make sure to clean
 	 * up data queue once again */
 	if (ctx->gen_thread != NULL)
 		g_thread_join(ctx->gen_thread);
 
-#if !GLIB_CHECK_VERSION(2,32,0)
-	if (ctx->queue_changed_condition != NULL)
-#endif
-		COND_CLEAR(ctx->queue_changed_condition);
-#if !GLIB_CHECK_VERSION(2,32,0)
-	if (ctx->queue_mutex != NULL)
-#endif
-		MUTEX_CLEAR(ctx->queue_mutex);
+	COND_CLEAR(ctx->queue_changed_condition);
+	MUTEX_CLEAR(ctx->queue_mutex);
 
 	if (ctx->data_buffer_block != NULL)
 		g_free(ctx->data_buffer_block);

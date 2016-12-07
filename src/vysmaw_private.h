@@ -57,9 +57,9 @@
 			_result; })
 # define Mutex GMutex *
 # define MUTEX_INIT(m) { m = g_mutex_new(); }
-# define MUTEX_CLEAR(m) g_mutex_free(m)
-# define MUTEX_LOCK(m) g_mutex_lock(m)
-# define MUTEX_UNLOCK(m) g_mutex_unlock(m)
+# define MUTEX_CLEAR(m) { if ((m) != NULL) g_mutex_free(m); }
+# define MUTEX_LOCK(m) { if ((m) != NULL) g_mutex_lock(m); }
+# define MUTEX_UNLOCK(m) { if ((m) != NULL) g_mutex_unlock(m); }
 # define RecMutex GStaticRecMutex
 # define REC_MUTEX_INIT g_static_rec_mutex_init
 # define REC_MUTEX_CLEAR g_static_rec_mutex_free
@@ -67,9 +67,9 @@
 # define REC_MUTEX_UNLOCK g_static_rec_mutex_unlock
 # define Cond GCond *
 # define COND_INIT(c) { c = g_cond_new(); }
-# define COND_CLEAR(c) g_cond_free(c)
-# define COND_WAIT(c, m) g_cond_wait(c, m)
-# define COND_SIGNAL(c) g_cond_signal(c)
+# define COND_CLEAR(c) { if ((c) != NULL) g_cond_free(c); }
+# define COND_WAIT(c, m) { if ((c) != NULL && (m) != NULL) g_cond_wait(c, m); }
+# define COND_SIGNAL(c) { if ((c) != NULL) g_cond_signal(c); }
 #endif
 
 /* vysmaw configuration file keys */
