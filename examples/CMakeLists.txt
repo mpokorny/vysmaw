@@ -9,6 +9,11 @@ find_package(Cython)
 include_directories(../py ../src)
 link_directories(../py ../src)
 
+set(CMAKE_C_FLAGS
+  "${CMAKE_C_FLAGS} -fno-short-enums")
+set(CMAKE_CXX_FLAGS
+  "${CMAKE_CXX_FLAGS} -fno-short-enums")
+
 add_cython_target(sample1 EMBED_MAIN)
 add_executable(sample1 ${sample1})
 python_standalone_executable(sample1)
@@ -24,4 +29,5 @@ python_standalone_executable(sample3)
 
 add_executable(sample4 sample4.cc)
 target_link_libraries(sample4 vysmaw)
-target_compile_options(sample4 PRIVATE -Wall -Werror)
+target_compile_options(sample4 PRIVATE
+  -Wall -Werror)
