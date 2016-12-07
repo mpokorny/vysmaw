@@ -966,7 +966,7 @@ on_poll_events(struct spectrum_reader_context_ *context,
 	for (unsigned i = NUM_FIXED_FDS; i < context->pollfds->len; ++i) {
 		struct pollfd *ev_pollfd =
 			&g_array_index(context->pollfds, struct pollfd, i);
-		int rc1;
+		int rc1 = 0;
 		if (ev_pollfd->revents & POLLIN) {
 			rc1 = on_read_completion(context, i, error_record);
 		} else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
