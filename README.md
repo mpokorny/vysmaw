@@ -311,19 +311,20 @@ development and testing, but is not recommended for production code.
 
 ### sample2 (Python with Cython callback)
 
-The [sample2](examples/sample2.pyx) application has the same functionality as
-sample1, but, with a bit more usage of Cython and the vysmaw Cython API
-(cy_vysmaw) than [sample1](examples/sample1.pyx), its implementation avoids
-locking the Python GIL in the callback function predicate.
+The [sample2](examples/sample2.pyx) application has the same functionality
+as [sample1](examples/sample1.pyx), but, with a bit more usage of Cython and the
+vysmaw Cython API (cy_vysmaw) than [sample1](examples/sample1.pyx), its
+implementation avoids locking the Python GIL in the callback function predicate.
 
 ### sample3 (optimized Cython)
 
 The [sample3](examples/sample3.pyx) application demonstrates several Cython
 optimization techniques, as well as providing a non-trivial callback function
-predicate.
+predicate. It implements a message processing loop in Cython that compiles
+entirely to C, without entry to the Python interpreter.
 
 ### sample4 (C++)
 
-The [sample4](examples/sample4.cc) is a sample application written in C++. It
-can be used as a simple, diagnostic vysmaw application, or as a basis for
-developing a more interesting application.
+[sample4](examples/sample4.cc) is an application written in C++. It can be used
+as a simple, diagnostic vysmaw application, or as the basis for developing a
+more interesting application.
