@@ -12,6 +12,7 @@
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <sys/timerfd.h>
+#include <buffer_pool.h>
 
 #if GLIB_CHECK_VERSION(2,32,0)
 # define THREAD_INIT while (false)
@@ -103,10 +104,8 @@ struct mcast_context {
 	uint32_t remote_qpn;
 	uint32_t remote_qkey;
 	struct ibv_mr *mr;
-	Mutex signal_msg_buffers_mtx;
+	struct buffer_pool *signal_msg_pool;
 	unsigned signal_msg_num_spectra;
-	struct signal_msg *signal_msg_block;
-	GTrashStack *signal_msg_buffers;
 	unsigned num_wr;
 	unsigned max_wr;
 	unsigned num_not_ack;
@@ -253,9 +252,7 @@ set_nonblocking(int fd)
 static void
 free_signal_msg(struct mcast_context *ctx, struct vys_signal_msg *msg)
 {
-	MUTEX_LOCK(ctx->signal_msg_buffers_mtx);
-	g_trash_stack_push(&(ctx->signal_msg_buffers), msg);
-	MUTEX_UNLOCK(ctx->signal_msg_buffers_mtx);
+	buffer_pool_push(ctx->signal_msg_pool, msg);
 }
 
 static void
@@ -293,11 +290,8 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
 	struct mcast_context *mcast_ctx = &(vyssim->mcast_ctx);
 	struct server_context *server_ctx = &(vyssim->server_ctx);
 
-	MUTEX_LOCK(mcast_ctx->signal_msg_buffers_mtx);
 	struct vys_signal_msg *result =
-		g_trash_stack_pop(&(mcast_ctx->signal_msg_buffers));
-	g_assert(result != NULL);
-	MUTEX_UNLOCK(mcast_ctx->signal_msg_buffers_mtx);
+		buffer_pool_pop(mcast_ctx->signal_msg_pool);
 	struct vys_signal_msg_payload *payload = &(result->payload);
 	payload->sockaddr = vyssim->sockaddr;
 	payload->num_channels = vyssim->params.num_channels;
@@ -505,23 +499,15 @@ create_mcast_resources(struct mcast_context *ctx,
 	ctx->wc = g_new(struct ibv_wc, ctx->max_wr);
 
 	/* reserve and register memory for signal_msg instances */
-	size_t signal_msg_block_size =
-		SIGNAL_MSG_BLOCK_LENGTH *
-		SIZEOF_VYS_SIGNAL_MSG(ctx->signal_msg_num_spectra);
-	ctx->signal_msg_block = g_malloc(signal_msg_block_size);
+	ctx->signal_msg_pool =
+		buffer_pool_new(
+			SIGNAL_MSG_BLOCK_LENGTH,
+			SIZEOF_VYS_SIGNAL_MSG(ctx->signal_msg_num_spectra));
 	ctx->mr = rdma_reg_msgs(
-		ctx->id, ctx->signal_msg_block, signal_msg_block_size);
+		ctx->id, ctx->signal_msg_pool->pool, ctx->signal_msg_pool->pool_size);
 	if (G_UNLIKELY(ctx->mr == NULL)) {
 		VERB_ERR(error_record, errno, "rdma_reg_msgs");
 		return -1;
-	}
-
-	/* manage signal_msg instances using a GTrashStack */
-	ctx->signal_msg_buffers = NULL;
-	for (unsigned i = 0; i < SIGNAL_MSG_BLOCK_LENGTH; ++i) {
-		void *buff = (void *)ctx->signal_msg_block +
-			i * SIZEOF_VYS_SIGNAL_MSG(ctx->signal_msg_num_spectra);
-		g_trash_stack_push(&(ctx->signal_msg_buffers), buff);
 	}
 
 	ctx->num_not_ack = 0;
@@ -535,8 +521,6 @@ init_multicast(struct vyssim_context *vyssim,
 {
 	int result = -1;
 	struct mcast_context *ctx = &(vyssim->mcast_ctx);
-
-	MUTEX_INIT(ctx->signal_msg_buffers_mtx);
 
 	ctx->event_channel = rdma_create_event_channel();
 	if (G_UNLIKELY(ctx->event_channel == NULL)) {
@@ -694,17 +678,20 @@ init(struct vyssim_context *vyssim, struct vys_error_record **error_record)
 
 	ctx->num_queued = 0;
 	MUTEX_INIT(ctx->queue_mutex);
+#if !GLIB_CHECK_VERSION(2,32,0)
 	if (G_UNLIKELY(ctx->queue_mutex == NULL)) {
 		MSG_ERROR(error_record, -1, "%s", "failed to create data queue mutex");
 		return -1;
 	}
+#endif
 	COND_INIT(ctx->queue_changed_condition);
+#if !GLIB_CHECK_VERSION(2,32,0)
 	if (G_UNLIKELY(ctx->queue_changed_condition == NULL)) {
 		MSG_ERROR(error_record, -2, "%s",
 		          "failed to create data queue condition variable");
 		return -1;
 	}
-
+#endif
 	/* synchronize data generation clocks */
 	vyssim->epoch_ms = g_get_real_time() / 1000;
 	MPI_Bcast(&vyssim->epoch_ms, 1, MPI_UINT64_T, 0, vyssim->comm);
@@ -1211,8 +1198,8 @@ destroy_mcast_resources(struct mcast_context *ctx,
 	if (ctx->comp_channel != NULL)
 		ibv_destroy_comp_channel(ctx->comp_channel);
 
-	if (ctx->signal_msg_block != NULL)
-		g_free(ctx->signal_msg_block);
+	if (ctx->signal_msg_pool != NULL)
+		buffer_pool_free(ctx->signal_msg_pool);
 	if (ctx->id != NULL) {
 		rc = rdma_destroy_id(ctx->id);
 		if (G_UNLIKELY(rc != 0)) {
@@ -1246,9 +1233,6 @@ fin_multicast(struct vyssim_context *vyssim,
 	if (ctx->event_channel != NULL)
 		rdma_destroy_event_channel(ctx->event_channel);
 
-	if (ctx->signal_msg_buffers_mtx != NULL)
-		g_mutex_free(ctx->signal_msg_buffers_mtx);
-
 	return result;
 }
 
@@ -1259,23 +1243,32 @@ fin(struct vyssim_context *vyssim, struct vys_error_record **error_record)
 
 	/* drain queue, then set signal_msg_num_spectra to zero to signal data
 	 * generation thread should exit */
+#if !GLIB_CHECK_VERSION(2,32,0)
 	if (ctx->queue_mutex != NULL) {
+#endif
 		MUTEX_LOCK(ctx->queue_mutex);
 		ctx->num_queued = 0;
 		vyssim->mcast_ctx.signal_msg_num_spectra = 0;
+#if !GLIB_CHECK_VERSION(2,32,0)
 		if (ctx->queue_changed_condition != NULL)
+#endif
 			COND_SIGNAL(ctx->queue_changed_condition);
 		MUTEX_UNLOCK(ctx->queue_mutex);
+#if !GLIB_CHECK_VERSION(2,32,0)
 	}
-
+#endif
 	/* join data generation thread, clean up its resources -- make sure to clean
 	 * up data queue once again */
 	if (ctx->gen_thread != NULL)
 		g_thread_join(ctx->gen_thread);
 
+#if !GLIB_CHECK_VERSION(2,32,0)
 	if (ctx->queue_changed_condition != NULL)
+#endif
 		COND_CLEAR(ctx->queue_changed_condition);
+#if !GLIB_CHECK_VERSION(2,32,0)
 	if (ctx->queue_mutex != NULL)
+#endif
 		MUTEX_CLEAR(ctx->queue_mutex);
 
 	if (ctx->data_buffer_block != NULL)

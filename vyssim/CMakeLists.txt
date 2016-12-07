@@ -10,7 +10,9 @@ pkg_check_modules(GTHREAD2 REQUIRED gthread-2.0)
 set(CMAKE_C_FLAGS
   "${CMAKE_C_FLAGS} -Wall -Werror")
 
-add_executable(vyssim vyssim.c)
+add_executable(vyssim
+  ../src/buffer_pool.c
+  vyssim.c)
 target_include_directories(vyssim PRIVATE
   ${MPI_C_INCLUDE_PATH}
   ${GTHREAD2_INCLUDE_DIRS}
