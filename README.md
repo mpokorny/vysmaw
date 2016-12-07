@@ -303,9 +303,8 @@ end-of-data-stream message to stdout, since no spectra are selected.
 
 If there is no InfiniBand HCA, the library will immediately signal the end of
 the data stream, and provide error messages to the client in the
-end-of-data-stream message. Also, the OFS software insists on printing messages
-to stderr if no InifiniBand HCA is present, but these can be suppressed by
-redirecting stderr to `/dev/null`.
+end-of-data-stream message. Note that on some systems the OFS software may
+insist on printing messages to stderr if no InifiniBand HCA is present.
 
 Note that the sample uses the start_py method, which is convenient for
 development and testing, but is not recommended for production code.
