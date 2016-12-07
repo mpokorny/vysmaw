@@ -98,6 +98,10 @@ while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
             handle = None
         interrupted = False
     msg = vysmaw_message_queue_timeout_pop(queue, 500000)
+    # Must call PyErr_CheckSignals() for Python signal handling to occur. This
+    # is a sign that this 'while' loop compiles to C, and never enters the
+    # Python interpreter. [If a call to print() is added anywhere in this loop,
+    # the PyErr_CheckSignals call becomes unnecessary.]
     PyErr_CheckSignals()
 
 # show the end message
