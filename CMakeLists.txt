@@ -10,10 +10,14 @@ set(
   ${CMAKE_CURRENT_LIST_DIR}/cmake/Modules)
 
 set(CMAKE_C_FLAGS
-  "${CMAKE_C_FLAGS} -fno-short-enums")
+  "${CMAKE_C_FLAGS} -fno-short-enums -Ofast")
+set(CMAKE_C_FLAGS_DEBUG
+  "${CMAKE_C_FLAGS_DEBUG} -fno-short-enums")
 
 set(CMAKE_CXX_FLAGS
-  "${CMAKE_CXX_FLAGS} -fno-short-enums")
+  "${CMAKE_CXX_FLAGS} -fno-short-enums -Ofast")
+set(CMAKE_CXX_FLAGS_DEBUG
+  "${CMAKE_CXX_FLAGS_DEBUG} -fno-short-enums")
 
 add_subdirectory(src)
 add_subdirectory(py)
