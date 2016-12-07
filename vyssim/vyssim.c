@@ -1,3 +1,20 @@
+//
+// Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
+//
+// This file is part of vysmaw.
+//
+// vysmaw is free software: you can redistribute it and/or modify it under the
+// terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version.
+//
+// vysmaw is distributed in the hope that it will be useful, but WITHOUT ANY
+// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+// A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// vysmaw.  If not, see <http://www.gnu.org/licenses/>.
+//
 #include <mpi.h>
 #include <vys.h>
 #include <poll.h>
@@ -8,6 +25,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
+#include <locale.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
@@ -61,6 +80,14 @@
 
 #define NUM_BASELINES(na) (((na) * ((na) - 1)) / 2)
 
+#define DEFAULT_NUM_ANTENNAS 27
+#define DEFAULT_NUM_SPECTRAL_WINDOWS 4
+#define DEFAULT_NUM_CHANNELS 64
+#define DEFAULT_NUM_STOKES 4
+#define DEFAULT_INTEGRATION_TIME_MICROSEC 100000
+#define DEFAULT_SIGNAL_MSG_NUM_SPECTRA 32
+#define DEFAULT_DATA_BUFFER_LENGTH_SEC 5
+
 #define RESOLVE_ADDR_TIMEOUT_MS 1000
 #define LISTEN_BACKLOG 8
 #define SIGNAL_MSG_MAX_POSTED 1000
@@ -72,6 +99,8 @@
 #define MULTICAST_EVENT_FD 1
 #define TIMER_EVENT_FD 2
 #define NUM_EVENT_FDS 3
+
+#define VYSSIM_ARG_ERROR vyssim_arg_error_quark()
 
 struct spectral_window_descriptor {
 	unsigned index;
@@ -153,6 +182,15 @@ struct vyssim_context {
 	GArray *spw_descriptors;
 };
 
+enum vyssim_arg_error {
+	VYSSIM_ARG_ERROR_PARSE,
+	VYSSIM_ARG_ERROR_RANGE
+};
+
+static GQuark vyssim_arg_error_quark(void) __attribute__((pure));
+static void param_set_unsigned(
+	GHashTable *params, const gchar *name, unsigned value)
+	__attribute__((nonnull));
 static int set_nonblocking(int fd);
 static struct vys_signal_msg *gen_one_signal_msg(
 	struct vyssim_context *vyssim, GChecksum *checksum,
@@ -230,7 +268,7 @@ static int fin_multicast(
 static int fin(
 	struct vyssim_context *vyssim, struct vys_error_record **error_record)
 	__attribute__((nonnull));
-static void run(struct vyssim_context *vyssim)
+static int run(struct vyssim_context *vyssim)
 	__attribute__((nonnull));
 static void push_msg_to_queue(
 	struct vyssim_context *vyssim, struct vys_signal_msg *msg)
@@ -241,6 +279,62 @@ static struct vys_signal_msg *pop_msg_from_queue(
 static void free_signal_msg(
 	struct mcast_context *ctx, struct vys_signal_msg *msg)
 	__attribute__((nonnull));
+static gboolean parse_param(
+	const gchar *option_name, const gchar *value, GHashTable *params,
+	GError **error)
+	__attribute__((nonnull));
+static gchar * add_param(
+	GHashTable *params, const gchar *lname, const gchar *sname,
+	guint value, const gchar *desc, unsigned *where)
+	__attribute__((nonnull,returns_nonnull,malloc));
+static bool parse_options(
+	int *argc, char **argv[], unsigned *num_antennas,
+	unsigned *num_spectral_windows, unsigned *num_channels,
+	unsigned *num_stokes, unsigned *integration_time_microsec,
+	unsigned *signal_msg_num_spectra, unsigned *data_buffer_length_sec,
+	char **vys_configuration_path)
+	__attribute__((nonnull));
+
+static char num_antennas_lname[] = "num-antennas";
+static char num_antennas_sname[] = "a";
+static char num_spectral_windows_lname[] = "num-spectral-windows";
+static char num_spectral_windows_sname[] = "w";
+static char num_channels_lname[] = "num-channels";
+static char num_channels_sname[] = "c";
+static char num_stokes_lname[] = "num-stokes";
+static char num_stokes_sname[] = "k";
+static char integration_time_microsec_lname[] = "integration-time";
+static char integration_time_microsec_sname[] = "i";
+static char signal_msg_num_spectra_lname[] = "signal-message-length";
+static char signal_msg_num_spectra_sname[] = "l";
+static char data_buffer_length_sec_lname[] = "data-buffer-duration";
+static char data_buffer_length_sec_sname[] = "f";
+static char vys_configuration_path_lname[] = "vys";
+static char vys_configuration_path_sname[] = "v";
+static char summary[] =
+	"Distributed visibility stream simulator.\n"
+	"\n"
+	"This application is an MPI application. It may be run as a single\n"
+	"process, or as a set of multiple processes using an MPI job\n"
+	"launcher. Each of the spawned processes is multi-threaded; the\n"
+	"application requires an MPI thread level of MPI_THREAD_FUNNELED\n"
+	"or better to run. You must ensure that the application is started so\n"
+	"that the thread level requirement is met, whether or not the MPI job\n"
+	"launcher is used, depending on the MPI library implementation with\n"
+	"which the application was built.";
+
+static GQuark
+vyssim_arg_error_quark(void)
+{
+	return g_quark_from_static_string("vyssim-arg-error-quark");
+}
+
+static void
+param_set_unsigned(GHashTable *params, const gchar *name, unsigned value)
+{
+	unsigned *p = g_hash_table_lookup(params, (gchar *)name);
+	*p = value;
+}
 
 static int
 set_nonblocking(int fd)
@@ -1284,7 +1378,7 @@ fin(struct vyssim_context *vyssim, struct vys_error_record **error_record)
 	return rc;
 }
 
-static void
+static int
 run(struct vyssim_context *vyssim)
 {
 	struct vys_error_record *error_record = NULL;
@@ -1293,11 +1387,167 @@ run(struct vyssim_context *vyssim)
 		rc = send_msgs(vyssim, &error_record);
 	fin(vyssim, &error_record);
 	if (error_record != NULL) {
+		rc = -1;
 		char *errs = vys_error_record_to_string(&error_record);
 		fprintf(stderr, "vyssim failed:\n%s", errs);
 		g_free(errs);
 		vys_error_record_free(error_record);
+	} else {
+		rc = 0;
 	}
+	return rc;
+}
+
+static gboolean
+parse_param(const gchar *option_name, const gchar *value, GHashTable *params,
+            GError **error)
+{
+	const gchar *opt = option_name;
+	while (*opt == '-') ++opt;
+	char *end = NULL;
+	errno = 0;
+	gulong l = strtol(value, &end, 0);
+	if (*end != '\0' || errno == EINVAL) {
+		g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_PARSE,
+		            "Failed to parse option %s: %s", value, strerror(EINVAL));
+		return false;
+	}
+	if (strcmp(opt, num_stokes_lname) == 0
+	    || strcmp(opt, num_stokes_sname) == 0) {
+		if (!(l == 1 || l == 2 || l == 4)) {
+			g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_RANGE,
+			            "Option %s value must be 1, 2, or 4", option_name);
+			return false;
+		}
+	} else if (l <= 0) {
+		g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_RANGE,
+		            "Option %s value must be positive", option_name);
+		return false;
+	} else if (l > G_MAXUINT) {
+		g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_RANGE,
+		            "Option %s value must not exceed %u", option_name,
+		            G_MAXUINT);
+		return false;
+	}
+	param_set_unsigned(params, opt, (guint)l);
+	return true;
+}
+
+gchar *
+add_param(GHashTable *params, const gchar *lname, const gchar *sname,
+          guint value, const gchar *desc, unsigned *where)
+{
+	g_hash_table_insert(params, (gchar *)lname, where);
+	g_hash_table_insert(params, (gchar *)sname, where);
+	*where = value;
+	return g_strdup_printf("%s [default: %u]", desc, value);
+}
+
+static bool
+parse_options(int *argc, char **argv[], unsigned *num_antennas,
+              unsigned *num_spectral_windows, unsigned *num_channels,
+              unsigned *num_stokes, unsigned *integration_time_microsec,
+              unsigned *signal_msg_num_spectra,
+              unsigned *data_buffer_length_sec,
+              char **vys_configuration_path)
+{
+	GOptionContext *context = g_option_context_new(NULL);
+	g_option_context_set_summary(context, summary);
+	g_option_context_set_description(
+		context,
+		"Please contact <mpokorny@nrao.edu> for praise, curses, etc.");
+	g_option_context_set_help_enabled(context, true);
+	g_option_context_set_ignore_unknown_options(context, false);
+
+	GHashTable *params = g_hash_table_new(g_str_hash, g_str_equal);
+	GOptionGroup *main_group =
+		g_option_group_new("", "", "", params,
+		                   (GDestroyNotify)g_hash_table_destroy);
+	gchar *num_antennas_desc =
+		add_param(
+			params, num_antennas_lname, num_antennas_sname,
+			DEFAULT_NUM_ANTENNAS, "Number of antennas",
+			num_antennas);
+	gchar *num_spectral_windows_desc =
+		add_param(
+			params, num_spectral_windows_lname, num_spectral_windows_sname,
+			DEFAULT_NUM_SPECTRAL_WINDOWS, "Number of spectral windows",
+			num_spectral_windows);
+	gchar *num_channels_desc =
+		add_param(
+			params, num_channels_lname, num_channels_sname,
+			DEFAULT_NUM_CHANNELS, "Number of channels (per spw)",
+			num_channels);
+	gchar *num_stokes_desc =
+		add_param(
+			params, num_stokes_lname, num_stokes_sname,
+			DEFAULT_NUM_STOKES, "Number of stokes products (per spw)",
+			num_stokes);
+	gchar *integration_time_microsec_desc =
+		add_param(
+			params, integration_time_microsec_lname,
+			integration_time_microsec_sname,
+			DEFAULT_INTEGRATION_TIME_MICROSEC,
+			"Integration time (microseconds)", integration_time_microsec);
+	gchar *signal_msg_num_spectra_desc =
+		add_param(
+			params, signal_msg_num_spectra_lname, signal_msg_num_spectra_sname,
+			DEFAULT_SIGNAL_MSG_NUM_SPECTRA,
+			"Number of spectra per signal message", signal_msg_num_spectra);
+	gchar *data_buffer_length_sec_desc =
+		add_param(
+			params, data_buffer_length_sec_lname, data_buffer_length_sec_sname,
+			DEFAULT_DATA_BUFFER_LENGTH_SEC, "Data buffer length (seconds)",
+			data_buffer_length_sec);
+	*vys_configuration_path = NULL;
+	GOptionEntry entries[] = {
+		{num_antennas_lname, num_antennas_sname[0], 0,
+		 G_OPTION_ARG_CALLBACK, parse_param,
+		 num_antennas_desc, "N"},
+		{num_spectral_windows_lname, num_spectral_windows_sname[0], 0,
+		 G_OPTION_ARG_CALLBACK, parse_param,
+		 num_spectral_windows_desc, "N"},
+		{num_channels_lname, num_channels_sname[0], 0,
+		 G_OPTION_ARG_CALLBACK, parse_param,
+		 num_channels_desc, "N"},
+		{num_stokes_lname, num_stokes_sname[0], 0,
+		 G_OPTION_ARG_CALLBACK, parse_param,
+		 num_stokes_desc, "N"},
+		{integration_time_microsec_lname, integration_time_microsec_sname[0], 0,
+		 G_OPTION_ARG_CALLBACK, parse_param,
+		 integration_time_microsec_desc, "N"},
+		{signal_msg_num_spectra_lname, signal_msg_num_spectra_sname[0], 0,
+		 G_OPTION_ARG_CALLBACK, parse_param,
+		 signal_msg_num_spectra_desc, "N"},
+		{data_buffer_length_sec_lname, data_buffer_length_sec_sname[0], 0,
+		 G_OPTION_ARG_CALLBACK, parse_param,
+		 data_buffer_length_sec_desc, "N"},
+		{vys_configuration_path_lname, vys_configuration_path_sname[0], 0,
+		 G_OPTION_ARG_FILENAME, vys_configuration_path,
+		 "vys configuration file path", "PATH"},
+		{NULL}
+	};
+	g_option_group_add_entries(main_group, entries);
+	g_option_context_set_main_group(context, main_group);
+
+	bool rc;
+	GError *error = NULL;
+	if (g_option_context_parse(context, argc, argv, &error)) {
+		rc = true;
+	} else {
+		g_print("option parsing failed: %s\n", error->message);
+		g_error_free(error);
+		rc = false;
+	}
+	g_free(num_antennas_desc);
+	g_free(num_spectral_windows_desc);
+	g_free(num_channels_desc);
+	g_free(num_stokes_desc);
+	g_free(integration_time_microsec_desc);
+	g_free(signal_msg_num_spectra_desc);
+	g_free(data_buffer_length_sec_desc);
+	g_option_context_free(context);
+	return rc;
 }
 
 int
@@ -1305,57 +1555,20 @@ main(int argc, char *argv[])
 {
 	struct vyssim_context vyssim;
 	memset(&vyssim, 0, sizeof(vyssim));
+	setlocale(LC_ALL, "");
 
-	int op;
-	while ((op = getopt(argc, argv, "a:w:c:k:i:l:f:")) != -1) {
-		switch (op) {
-		case 'a':
-			vyssim.params.num_antennas = (unsigned)atoi(optarg);
-			break;
-
-		case 'w':
-			vyssim.params.num_spectral_windows = (unsigned)atoi(optarg);
-			break;
-
-		case 'c':
-			vyssim.params.num_channels = (unsigned)atoi(optarg);
-			break;
-
-		case 'k':
-			vyssim.params.num_stokes = (unsigned)atoi(optarg);
-			break;
-
-		case 'i':
-			vyssim.params.integration_time_microsec = (unsigned)atoi(optarg);
-			break;
-
-		case 'l':
-			vyssim.mcast_ctx.signal_msg_num_spectra = (unsigned)atoi(optarg);
-			break;
-
-		case 'f':
-			vyssim.data_buffer_length_sec = (unsigned)atoi(optarg);
-			break;
-
-		default:
-			fprintf(stderr,
-			        "usage: %s "
-			        "-l signal_msg_num_spectra "
-			        "-f data_buffer_length(sec) "
-			        "-a num_antennas -w num_spectral_windows "
-			        "-c num_channels -k num_stokes "
-			        "-i integration_time_microsec\n",
-			        argv[0]);
-			goto cleanup_and_return;
-			break;
-		}
-	}
-
-	if (!(vyssim.params.num_stokes == 1 || vyssim.params.num_stokes == 2
-	      || vyssim.params.num_stokes == 4)) {
-		fprintf(stderr, "num_stokes must be 1, 2, or 4\n");
+	int rc = EXIT_FAILURE;
+	char *vys_configuration_path;
+	if (!parse_options(&argc, &argv,
+	                   &vyssim.params.num_antennas,
+	                   &vyssim.params.num_spectral_windows,
+	                   &vyssim.params.num_channels,
+	                   &vyssim.params.num_stokes,
+	                   &vyssim.params.integration_time_microsec,
+	                   &vyssim.mcast_ctx.signal_msg_num_spectra,
+	                   &vyssim.data_buffer_length_sec,
+	                   &vys_configuration_path))
 		goto cleanup_and_return;
-	}
 
 	vyssim.bind_addr = vys_get_ipoib_addr();
 	if (vyssim.bind_addr == NULL) {
@@ -1381,16 +1594,6 @@ main(int argc, char *argv[])
 	MPI_Comm_rank(vyssim.comm, &rank);
 	int num_servers;
 	MPI_Comm_size(vyssim.comm, &num_servers);
-
-	/* adjust parameter values */
-	if (vyssim.mcast_ctx.signal_msg_num_spectra < 1) {
-		fprintf(stderr, "using signal msg block length value of 1\n");
-		vyssim.mcast_ctx.signal_msg_num_spectra = 1;
-	}
-	if (vyssim.data_buffer_length_sec < 1) {
-		fprintf(stderr, "using data buffer length value of 1 sec\n");
-		vyssim.data_buffer_length_sec = 1;
-	}
 
 	/* distribute products among all servers */
 	unsigned sto_group_size =
@@ -1428,10 +1631,12 @@ main(int argc, char *argv[])
 			spw_desc.stokes_indices[s] = sto_group * sto_group_size + s;
 		g_array_append_val(vyssim.spw_descriptors, spw_desc);
 	}
-	// TODO: allow configuration file path
-	vyssim.vconfig = vys_configuration_new(NULL);
 
-	run(&vyssim);
+	vyssim.vconfig = vys_configuration_new(vys_configuration_path);
+
+	rc = run(&vyssim);
+	if (rc == 0) rc = EXIT_SUCCESS;
+	else rc = EXIT_FAILURE;
 
 cleanup_and_return:
 	if (vyssim.vconfig != NULL)
