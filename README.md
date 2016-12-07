@@ -296,10 +296,10 @@ All sample code can be found under the `examples` project directory.
 
 ### sample1 (mostly Python)
 
-This application is trivial in that it uses a callback that selects no
-spectra. It will run to completion on any machine, even in the absence of an
-InfiniBand HCA. The application will simply print the end-of-data-stream message
-to stdout, since no spectra are selected.
+The [sample1](examples/sample1.pyx) application is trivial in that it uses a
+callback that selects no spectra. It will run to completion on any machine, even
+in the absence of an InfiniBand HCA. The application will simply print the
+end-of-data-stream message to stdout, since no spectra are selected.
 
 If there is no InfiniBand HCA, the library will immediately signal the end of
 the data stream, and provide error messages to the client in the
@@ -307,313 +307,24 @@ end-of-data-stream message. Also, the OFS software insists on printing messages
 to stderr if no InifiniBand HCA is present, but these can be suppressed by
 redirecting stderr to `/dev/null`.
 
-``` cython
-from vysmaw cimport *
-from libc.stdint cimport *
-import cy_vysmaw
-
-# A predicate that selects no spectra. The "pass_filter" array elements _must_
-# be assigned values, as they are always uninitialized at function entry.
-def cb(uint8_t[:] stns, uint8_t spw, uint8_t sto, 
-       vysmaw_spectrum_info[:] infos, bint[:] pass_filter):
-    for i in xrange(pass_filter.shape[0]):
-        pass_filter[i] = False
-    return
-
-# Use default configuration
-config = cy_vysmaw.Configuration()
-
-# Allocate client resources
-handle, consumers = config.start_py([cb])
-
-# Immediately shut down client resources, since we don't intend to receive
-# any spectra.
-handle.shutdown()
-
-# Messages should always be retrieved from the consumer queue until an
-# EndMessage appears; here, since no spectra are selected by the callback,
-# and the handle shutdown method has already been called, the only message
-# should be the EndMessage.
-msg = consumers[0].pop()
-assert(isinstance(msg, cy_vysmaw.EndMessage))
-
-# display the message
-print(str(msg))
-
-# unref the message; this would happen automatically when the msg variable
-# is reclaimed, but it's good practice to do this explicitly with every
-# message as soon as possible.
-msg.unref()
-```
-
-Note that the above uses the start_py method, which is convenient for
+Note that the sample uses the start_py method, which is convenient for
 development and testing, but is not recommended for production code.
 
 ### sample2 (Python with Cython callback)
 
-This example has the same functionality as sample1, but, with a bit more usage
-of Cython and the vysmaw Cython API (cy_vysmaw) than sample1, its implementation
-avoids locking the Python GIL in the callback function predicate.
-
-``` cython
-from vysmaw cimport *
-from libc.stdint cimport *
-from libc.stdlib cimport *
-from cy_vysmaw cimport *
-import cy_vysmaw
-
-# A predicate that selects no spectra. The "pass_filter" array elements _must_
-# be assigned values, as they are always uninitialized at function entry.
-cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto, 
-             const vysmaw_spectrum_info *infos, uint8_t num_infos,
-             void *user_data, bool *pass_filter) nogil:
-    for i in range(num_infos):
-        pass_filter[i] = False
-    return
-
-# Use default configuration
-cdef Configuration config = cy_vysmaw.Configuration()
-
-# Allocate client resources
-cdef vysmaw_spectrum_filter *f = \
-    <vysmaw_spectrum_filter *>malloc(sizeof(vysmaw_spectrum_filter))
-f[0] = cb
-handle, consumers = config.start(1, f, NULL)
-
-# ... the remainder being the same code as in sample1
-```
+The [sample2](examples/sample2.pyx) application has the same functionality as
+sample1, but, with a bit more usage of Cython and the vysmaw Cython API
+(cy_vysmaw) than [sample1](examples/sample1.pyx), its implementation avoids
+locking the Python GIL in the callback function predicate.
 
 ### sample3 (optimized Cython)
 
-This example demonstrates several Cython optimization techniques, as well as
-providing a non-trivial callback function predicate.
-
-``` cython
-from vysmaw cimport *
-from libc.stdint cimport *
-from libc.stdlib cimport *
-from cy_vysmaw cimport *
-from cpython cimport PyErr_CheckSignals
-import cy_vysmaw
-import signal
-
-cdef unsigned long num_cbs = 0
-DEF on_period = 1000000uLL
-DEF full_period = 4 * on_period
-
-# A predicate that selects spectra depending only on their timestamps. The
-# user_data argument is used to count the number of times the callback is
-# called.
-cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto, 
-             const vysmaw_spectrum_info *infos, uint8_t num_infos,
-             void *user_data, bool *pass_filter) nogil:
-    cdef unsigned long *ncb = <unsigned long *>user_data
-    for i in range(num_infos):
-        pass_filter[i] = (infos[i].timestamp % full_period) / on_period == 0
-    ncb[0] += 1
-    return
-
-# Use default configuration
-cdef Configuration config = cy_vysmaw.Configuration()
-
-# keep track of number of spectra received
-num_spectra = 0
-
-# set up signal handler to quit on SIGINT
-interrupted = False
-def interrupt(sig, frame):
-    global interrupted
-    interrupted = True
-    return
-signal.signal(signal.SIGINT, interrupt)
-
-# Allocate client resources
-cdef vysmaw_spectrum_filter *f = \
-    <vysmaw_spectrum_filter *>malloc(sizeof(vysmaw_spectrum_filter))
-f[0] = cb
-cdef void **u = <void **>malloc(sizeof(void *))
-u[0] = &num_cbs
-
-# start vysmaw client
-handle, consumers = config.start(1, f, u)
-
-free(f)
-free(u)
-
-# For maximum efficiency, one should work directly with unwrapped messages to
-# avoid allocating a Python object for every message. Doing so requires direct
-# access to the queue referenced by the consumer.
-cdef Consumer c0 = consumers[0]
-cdef vysmaw_message_queue queue = c0.queue()
-
-# Messages should always be retrieved from the consumer queue until an
-# EndMessage appears. A NULL-valued msg can appear here due to using a timeout
-# in getting a message from the queue in order to allow for interrupt handling.
-cdef vysmaw_message *msg = NULL
-while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
-    if msg is not NULL:
-        if msg[0].typ is VYSMAW_MESSAGE_VALID_BUFFER:
-            num_spectra += 1
-        # for other message types, which should be received much less frequently
-        # than the "valid buffer" messages, it could be convenient at this stage
-        # to wrap them in Python objects, like so: py_msg = Message.wrap(msg)
-
-        # must unref (unwrapped) vysmaw_messages explicitly, since Python
-        # reclamation won't do it for us [N.B. use only one of
-        # vysmaw_message_unref() or a Python wrappped messages's unref()
-        # method.]
-        vysmaw_message_unref(msg)
-
-    if interrupted:
-        if handle is not None:
-            handle.shutdown()
-            # handle is now invalid, so let's not use it again
-            handle = None
-        interrupted = False
-    msg = vysmaw_message_queue_timeout_pop(queue, 500000)
-    PyErr_CheckSignals()
-
-# show the end message
-py_msg = Message.wrap(msg) # this steals the message reference
-print(str(py_msg))
-py_msg.unref()
-
-# Call the handle's shutdown method (although reclamation of the Python handle
-# object would take care of it otherwise)
-if handle is not None:
-    handle.shutdown()
-
-# display the message
-print("{} callbacks, {} spectra".format(num_cbs, num_spectra))
-```
+The [sample3](examples/sample3.pyx) application demonstrates several Cython
+optimization techniques, as well as providing a non-trivial callback function
+predicate.
 
 ### sample4 (C++)
 
-This example provides a sample application written in C++. It can be used as a
-simple, diagnostic vysmaw application, or as a basis for developing a more
-interesting application.
-
-``` c++
-#include <iostream>
-#include <array>
-#include <memory>
-#include <csignal>
-#include <vysmaw.h>
-
-// max time to wait for message on queue
-#define QUEUE_TIMEOUT_MICROSEC 100000
-
-using namespace std;
-
-namespace std {
-	// a default_delete specialization for struct vysmaw_message
-	template <> struct default_delete<struct vysmaw_message> {
-		void operator()(struct vysmaw_message *msg) {
-			vysmaw_message_unref(msg);
-		}
-	};
-
-	// a default_delete specialization for struct vysmaw_configuration
-	template <> struct default_delete<struct vysmaw_configuration> {
-		void operator()(struct vysmaw_configuration *conf) {
-			vysmaw_configuration_free(conf);
-		}
-	};
-}
-
-// a filter that accepts everything
-void
-filter(const uint8_t stations[2], uint8_t spectral_window_index,
-       uint8_t stokes_index, const struct vys_spectrum_info *infos,
-       uint8_t num_infos, void *user_data, bool *pass_filter)
-{
-	for (auto i = 0; i < num_infos; ++i)
-		*pass_filter++ = true;
-}
-
-// handle sigint for user exit condition
-sig_atomic_t sigint_occurred = false;
-void sigint_handler(int p)
-{
-	sigint_occurred = true;
-}
-
-// get a message from a message queue, with a timeout to support user interrupt
-// handling
-unique_ptr<struct vysmaw_message>
-pop(vysmaw_message_queue q)
-{
-	return unique_ptr<struct vysmaw_message>(
-		vysmaw_message_queue_timeout_pop(q, QUEUE_TIMEOUT_MICROSEC));
-}
-
-int
-main()
-{
-	// initialize vysmaw configuration
-	unique_ptr<struct vysmaw_configuration>
-		config(vysmaw_configuration_new(nullptr));
-
-	// one consumer, using filter()
-	struct vysmaw_consumer consumer = {
-		.filter = filter
-	};
-
-	// this application keeps count of the message types it receives
-	array<unsigned,VYSMAW_MESSAGE_END + 1> counters;
-	counters.fill(0);
-	
-	// catch SIGINT to exit gracefully
-	bool interrupted = false;
-	signal(SIGINT, sigint_handler);
-
-	// start vysmaw client
-	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
-
-	// take messages until a VYSMAW_MESSAGE_END appears
-	unique_ptr<struct vysmaw_message> message = move(pop(consumer.queue));
-	while (!message || message->typ != VYSMAW_MESSAGE_END) {
-		// start shutdown if requested by user
-		if (sigint_occurred && !interrupted) {
-			vysmaw_shutdown(handle);
-			interrupted = true;
-		}
-		// record message type
-		if (message)
-			++counters[message->typ];
-		// get next message
-		message = move(pop(consumer.queue));
-	}
-	++counters[message->typ];
-
-	// display counts of received messages
-	for (int m = VYSMAW_MESSAGE_VALID_BUFFER; m <= VYSMAW_MESSAGE_END; ++m)
-		cout << m << ": " << counters[m] << endl;
-
-	// display message for end condition
-	switch (message->content.result.code) {
-	case vysmaw_result::VYSMAW_NO_ERROR:
-		cout << "ended without error" << endl;
-		break;
-
-	case vysmaw_result::VYSMAW_SYSERR:
-		cout << "ended with errors" << endl
-		     << message->content.result.syserr_desc;
-		break;
-
-	case vysmaw_result::VYSMAW_ERROR_BUFFPOOL:
-		cout << "ended with fatal 'buffpool' error" << endl;
-		break;
-
-	default:
-		break;
-	}
-	// release the last message and shut down the library if it hasn't already
-	// been done
-	message.reset();
-	if (!interrupted) vysmaw_shutdown(handle);
-
-	return 0;
-}
-```
-
+The [sample4](examples/sample4.cc) is a sample application written in C++. It
+can be used as a simple, diagnostic vysmaw application, or as a basis for
+developing a more interesting application.
