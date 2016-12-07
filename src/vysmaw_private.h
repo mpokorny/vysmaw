@@ -252,8 +252,6 @@ extern void get_shutdown_parameters(
 extern struct vysmaw_message *message_ref(
 	struct vysmaw_message *message)
 	__attribute__((nonnull,returns_nonnull));
-struct vysmaw_message *message_queue_pop(vysmaw_message_queue queue)
-	__attribute__((nonnull,returns_nonnull));
 extern struct spectrum_buffer_pool *lookup_buffer_pool_from_collection(
 	struct vysmaw_message *message)
 	__attribute__((nonnull));

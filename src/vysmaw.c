@@ -22,7 +22,12 @@
 struct vysmaw_message *
 vysmaw_message_queue_pop(vysmaw_message_queue queue)
 {
-	return message_queue_pop(queue);
+	g_async_queue_lock(queue->q);
+	struct vysmaw_message *result = g_async_queue_pop_unlocked(queue->q);
+	queue->depth--;
+	g_async_queue_unlock(queue->q);
+	message_queue_unref(queue); // release message's queue reference
+	return result;
 }
 
 struct vysmaw_message *

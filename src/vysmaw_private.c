@@ -778,17 +778,6 @@ message_ref(struct vysmaw_message *message)
 	return message;
 }
 
-struct vysmaw_message *
-message_queue_pop(vysmaw_message_queue queue)
-{
-	g_async_queue_lock(queue->q);
-	struct vysmaw_message *result = g_async_queue_pop_unlocked(queue->q);
-	queue->depth--;
-	g_async_queue_unlock(queue->q);
-	message_queue_unref(queue); // release message's queue reference
-	return result;
-}
-
 struct data_path_message *
 data_path_message_new(unsigned max_spectra_per_signal)
 {
