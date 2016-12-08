@@ -68,6 +68,43 @@ pop(vysmaw_message_queue q)
 		vysmaw_message_queue_timeout_pop(q, QUEUE_TIMEOUT_MICROSEC));
 }
 
+// display counts of messages
+void
+show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
+{
+	for (unsigned m = VYSMAW_MESSAGE_VALID_BUFFER; m <= VYSMAW_MESSAGE_END;
+	     ++m) {
+		string name;
+		switch (m) {
+		case VYSMAW_MESSAGE_VALID_BUFFER:
+			name = "valid-buffer";
+			break;
+		case VYSMAW_MESSAGE_DIGEST_FAILURE:
+			name = "digest-failure";
+			break;
+		case VYSMAW_MESSAGE_QUEUE_OVERFLOW:
+			name = "queue-overflow";
+			break;
+		case VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
+			name = "data-buffer-starvation";
+			break;
+		case VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
+			name = "signal-buffer-starvation";
+			break;
+		case VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
+			name = "signal-receive-failure";
+			break;
+		case VYSMAW_MESSAGE_RDMA_READ_FAILURE:
+			name = "rdma-read-failure";
+			break;
+		case VYSMAW_MESSAGE_END:
+			name = "end";
+			break;
+		}
+		cout << m << ": " << counters[m] << endl;
+	}
+}
+
 int
 main()
 {
@@ -108,8 +145,7 @@ main()
 	++counters[message->typ];
 
 	// display counts of received messages
-	for (int m = VYSMAW_MESSAGE_VALID_BUFFER; m <= VYSMAW_MESSAGE_END; ++m)
-		cout << m << ": " << counters[m] << endl;
+	show_counters(counters);
 
 	// display message for end condition
 	switch (message->content.result.code) {
