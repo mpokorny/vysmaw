@@ -100,7 +100,7 @@ and a Python extension with a Python/Cython interface to the shared library.
 
 A smaller artifact is a _vys_ system configuration library, which supports both
 _vysmaw_ and the visibility stream producers (_i.e._, the sending processes: the
-CBE or a simulator).
+correlator back-end or a simulator).
 
 ### vyssim
 
@@ -153,60 +153,62 @@ allocated by the library for that client, and a visibility data queue reference.
 Upon initialization, a client provides the library with a callback function
 predicate that is used by the library to determine the visibility spectra that
 are to be delivered to the client _via_ the visibility data queue. Only those
-spectra that satisfy the predicate will be passed to the client on the data
-queue it receives after initialization. After initialization, the client must
-simply take items (_i.e._, spectra) from the queue repeatedly, eventually
-calling a shutdown function, and continuing to take items from the queue until a
-special, sentinel value is retrieved. For efficiency in the library
-implementation, the memory used to store spectra is, as described below, a
-limited resource, which requires that client applications make an effort to
-release references to spectral data as soon as possible. Failure to release
-spectral data references in the client application may result in failures of the
-client to receive all the spectra that it is expected.
+spectra that satisfy the predicate will be passed to the client on its data
+queue. After initialization, the client must simply take items (_i.e._, mostly
+spectra) from the queue repeatedly, eventually call a shutdown function, and
+continue to take items from the queue until a special, sentinel value is
+retrieved. For efficiency in the library implementation, the memory used to
+store spectra is, as described below, a limited resource, which requires that
+client applications make an effort to release references to spectral data as
+soon as possible. Failure to release spectral data references in the client
+application may result in failures of the client to receive all the spectra that
+are expected.
 
 ## vysmaw implementation
 
 This section is intended to provide insight into the implementation of the
 vysmaw system for vysmaw client application authors, but is not necessary to
-successfully write vysmaw client applications.
+successfully write vysmaw client applications. All of the conditions required of
+correct vysmaw client applications have already been summarized in the previous
+section.
 
-The "wcbe" application is a distributed application running on the VLA CBE
-cluster, which receives and processes the various WIDAR data products according
-to the requirements of each WIDAR configuration, and eventually writes
-visibility data to BDF files. The mapping of WIDAR data products to wcbe
-processes may change with every WIDAR reconfiguration according to the number of
-active sub-arrays, the CBE nodes that are in active use, and an opaque WIDAR
-product-to-CBE mapping algorithm implemented by wcbe. The vysmaw system operates
-_via_ a broadcast by wcbe of spectral metadata to clients as the data are being
-processed by each wcbe process, allowing clients to receive data from any CBE
-process without prior knowledge of the mapping of WIDAR products to CBE
-processes. These broadcast messages provide sufficient metadata to identify not
-only the identity of the visibility spectrum, but also the "location" of the
-spectrum in the CBE. Clients may then retrieve only those spectra which they
-require.
+The "wcbe" application is a distributed application running on the VLA
+correlator back-end (CBE) cluster, which receives and processes the various
+WIDAR correlator data products according to the requirements of each WIDAR
+configuration, and writes visibility data to BDF files. The mapping of WIDAR
+data products to wcbe processes may change with every WIDAR reconfiguration
+according to the number of active sub-arrays, the CBE nodes that are in active
+use, and an opaque WIDAR product-to-CBE mapping algorithm implemented by
+wcbe. The vysmaw system operates _via_ a broadcast by wcbe of spectral metadata
+to clients as the data are being processed by each wcbe process, allowing
+clients to receive data from any CBE process without prior knowledge of the
+mapping of WIDAR products to CBE processes. These broadcast messages provide
+sufficient metadata to identify not only the identity of the visibility
+spectrum, but also the "location" of the spectrum in the CBE. Clients may then
+retrieve only those spectra which they require.
 
 The current vysmaw implementation is based on OpenFabrics Enterprise
 Distribution (OFED)/OpenFabrics Software (OFS), which provides access to RDMA
 (Remote Direct Memory Access) and kernel bypass send/receive features of the
-InfiniBand fabric used by the CBE cluster. Both the metadata broadcast and
+InfiniBand fabric available to the CBE cluster. Both the metadata broadcast and
 spectrum retrieval functions described in the preceding paragraph are
 implemented using features of OFS. The use of these OFS features allows for
 efficient transfer of data over the fabric directly to the client library and
 application, but at the cost of requiring the active participation of the
 application in managing the resources used by the client library. This design
 nevertheless does not create any direct dependencies between vysmaw clients or
-between clients and the wcbe processes, which allows for a high level of
-isolation between all processes in the vysmaw system. In other words, failure of
-a client process to manage resources efficiently can only affect the data
-received by that process. Any dependencies that exist will only be at the level
-of system resource limitations; for example, two vysmaw clients running on a
-single node must share the available memory on that node (while the address
+between clients and the wcbe processes, allowing for a high level of isolation
+between all processes in the vysmaw system. In other words, failure of a client
+process to manage resources efficiently can only affect the data received by
+that process. Any inter-process dependencies that exist will only be at the
+level of system resource limitations; for example, two vysmaw clients running on
+a single node must share the available memory on that node (while the address
 spaces of the client processes remain distinct.)
 
 The most significant of the resources allocated by the vysmaw library for every
-client is so-called "registered memory." Registered memory is used by OFS
+client is so-called "registered memory." Registered memory is used by OFED/OFS
 routines to allow communication over OpenFabrics networks to bypass the
-operating system kernel, which is a key feature of its performance. All OFS
+operating system kernel, which is a key feature of OFED/OFS performance. All OFS
 send/receive and RDMA read/write operations require access to registered memory.
 Registered memory takes the form of physical memory locked in the virtual
 address space of the kernel. For highest performance, the vysmaw library does
@@ -214,8 +216,8 @@ _not_ copy data out of registered memory buffers prior to providing the client
 access to such buffers. The accounting of registered memory usage by a vysmaw
 client is handled by the library itself, although this requires the
 participation of the client application to notify the library when the
-application has finished accessing the contents of a buffer in registered
-memory in some cases.
+application has finished accessing the contents of a buffer in registered memory
+in some cases.
 
 ### metadata broadcast
 
@@ -226,19 +228,23 @@ required to explicitly release a reference to every buffer used for the
 metadata, it is nevertheless possible for the application to cause in the
 library the starvation of buffers available to receive the metadata messages.
 Although there is buffering between the metadata receive loop in vysmaw and the
-call to the client callback function (to minimize latency in the network
-communication loop), an inefficient callback may result in the receive loop
-running out of buffers into which to write the received metadata messages.
+call to the client callback function, an inefficient callback may result in the
+receive loop running out of buffers into which to write the received metadata
+messages. Buffering between the receive loop and the callback loop acts to
+minimize latency in the network communication loop as well as allowing the
+receipt of messages at peak rates exceeding the peak callback loop bandwidth,
+although not indefinitely.
 
 Note that the client callback function signature is designed for some amount of
 batch processing by the function. This design not only allows the library to
 invoke the callback less frequently than otherwise possible, but it is also
-aligned with the batching of metadata in the messages from the wcbe processes.
+aligned with the aggregation of metadata in the messages from the wcbe
+processes.
 
 The broadcast of spectrum metadata to vysmaw clients is currently implemented
 using multicast over InfiniBand. Although this implementation may change if the
-performance proves to be inadequate, the implications for client application
-authors should be unaffected by any such change.
+performance proves to be inadequate, client applications should be unaffected by
+any such change.
 
 ### spectral data
 
@@ -254,7 +260,7 @@ the "unref" function for the message (which must be done for every message,
 regardless of its type, but for reasons other than to avoid depletion of the
 available registered memory.) Note a Message in the Cython layer will
 automatically release its reference to the underlying C-level message when its
-Python reference count goes to zero, although it is good practice to call the
+Python reference count goes to zero. It is good practice, however, to call the
 "unref" function explicitly in client code to ensure the buffer is returned to
 the registered memory pool as soon as possible.
 
@@ -264,31 +270,33 @@ The spectral data in the CBE are maintained at the location indicated in the
 metadata broadcasts for a limited time. On the CBE side, the spectral data
 available to vysmaw are also required to be in registered memory, which is used
 for spectral data buffers on a rotating basis. Every spectrum for which metadata
-are broadcast will be available for reading from vysmaw client processes for a
+are broadcast will be available for reading by vysmaw client processes for a
 limited time. Each spectral data buffer hosted by some CBE process will
-eventually be reused by that process for other data. The protocol used by the
-vysmaw system includes a data validation step to ensure that the data received
-by a vysmaw client is that matching the metadata used to identify the
+eventually be reused by that process for other data. The protocol implemented by
+the vysmaw system includes a data validation step to ensure that the data
+received by a vysmaw client is that matching the metadata used to identify the
 spectrum. The length of time for which a spectrum is available is dependent upon
 the WIDAR dump rate for the product, and the amount of memory allocated by the
-CBE processes to contain spectral data buffers. At this time, a minimum value
-for the time that any spectral data buffer will be valid is undetermined,
-although, given the current CBE configuration, about two seconds is reasonable.
+CBE processes to contain spectral data buffers. Currently, a minimum value for
+the time that any spectral data buffer will be valid is undetermined, although,
+given the current CBE implementation, which does not yet implement a visibility
+stream for vysmaw, about two seconds is reasonable.
 
 The time difference of a CBE process sending a metadata broadcast for a given
 spectral data product, and a vysmaw client library thread reading that spectral
-data is the critical quantity in determining whether the spectral data is valid
-when it is received by the library. When that time difference increases, the
-likelihood that the spectral data will be valid when they arrive in the client
-process memory decreases. The only influence a client application can have on
-this latency period is through the time spent in the callback function
-predicate. Other sources of spectral data retrieval latency are network latency,
-latency introduced by the vysmaw library implementation, and a potential backlog
-in calls to the client predicate. To be clear, once a spectral data product has
-been read by the vysmaw library, it exists in the client's physical memory, and
-cannot be overwritten until the client releases the buffer reference. The
-application is notified when spectral data validation has failed, but without
-any associated data.
+data is the critical quantity in determining whether the spectral data are valid
+when they are received at the client process. When that time difference
+increases, the likelihood that the spectral data will be valid when they arrive
+in the client process memory decreases. The only influence a client application
+can have on this latency period is through the time spent in the callback
+function predicate. Other sources of spectral data retrieval latency are network
+latency, latency introduced by the vysmaw library implementation, and a
+potential backlog in calls to the client predicate or in processing RDMA read
+requests. To be clear, once a spectral data product has been read by the vysmaw
+library, it exists in the client's physical memory, and cannot be overwritten
+until the client releases the buffer reference. The client application is
+notified when spectral data validation has failed, without providing any
+associated, invalid data.
 
 ## Sample code
 
