@@ -58,6 +58,8 @@ static gdouble parse_double(
 	GKeyFile *kf, const gchar *key,
 	struct vysmaw_configuration *config)
 	__attribute__((nonnull));
+static GSList *all_consumers(vysmaw_handle handle)
+	__attribute__((nonnull,returns_nonnull,malloc));
 
 static gchar *
 default_config_vysmaw()
@@ -277,15 +279,17 @@ handle_unref(vysmaw_handle handle)
 	}
 }
 
-GSList *
+static GSList *
 all_consumers(vysmaw_handle handle)
 {
+	MUTEX_LOCK(handle->mtx);
 	GSList *result = NULL;
 	struct consumer *consumer = handle->consumers;
 	for (unsigned i = handle->num_consumers; i > 0; --i) {
 		result = g_slist_prepend(result, consumer);
 		++consumer;
 	}
+	MUTEX_UNLOCK(handle->mtx);
 	return result;
 }
 
@@ -364,10 +368,8 @@ signal_receive_failure_message_new(vysmaw_handle handle,
 void
 post_msg(vysmaw_handle handle, struct vysmaw_message *msg)
 {
-	MUTEX_LOCK(handle->mtx);
 	GSList *consumers = all_consumers(handle);
-	message_queues_push_unlocked(msg, consumers);
-	MUTEX_UNLOCK(handle->mtx);
+	message_queues_push(msg, consumers);
 	g_slist_free(consumers);
 }
 
@@ -828,21 +830,17 @@ valid_buffer_message_new(vysmaw_handle handle,
 }
 
 void
-message_queues_push_unlocked(struct vysmaw_message *msg, GSList *consumers)
-{
-	while (consumers != NULL) {
-		message_queue_push_one_unlocked(
-			message_ref(msg), (struct consumer *)(consumers->data));
-		consumers = g_slist_next(consumers);
-	}
-	vysmaw_message_unref(msg);
-}
-
-void
 message_queues_push(struct vysmaw_message *msg, GSList *consumers)
 {
 	MUTEX_LOCK(msg->handle->mtx);
-	message_queues_push_unlocked(msg, consumers);
+	while (consumers != NULL) {
+		struct consumer *c = consumers->data;
+		g_async_queue_lock(c->queue.q);
+		message_queue_push_one_unlocked(message_ref(msg), c);
+		g_async_queue_unlock(c->queue.q);
+		consumers = g_slist_next(consumers);
+	}
+	vysmaw_message_unref(msg);
 	MUTEX_UNLOCK(msg->handle->mtx);
 }
 

@@ -192,8 +192,6 @@ extern vysmaw_handle handle_ref(vysmaw_handle handle)
 	__attribute__((nonnull,returns_nonnull));
 extern void handle_unref(vysmaw_handle handle)
 	__attribute__((nonnull));
-extern GSList *all_consumers(vysmaw_handle handle)
-	__attribute__((nonnull,returns_nonnull,malloc));
 extern vysmaw_message_queue message_queue_ref(vysmaw_message_queue queue)
 	__attribute__((nonnull,returns_nonnull));
 extern void message_queue_unref(vysmaw_message_queue queue)

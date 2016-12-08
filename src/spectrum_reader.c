@@ -398,6 +398,8 @@ on_signal_message(struct spectrum_reader_context_ *context,
 			++consumers;
 			++info;
 		}
+		if (conn_ctx->established)
+			post_server_reads(context, conn_ctx, error_record);
 	}
 
 	return rc;
@@ -1191,6 +1193,9 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	post_msg(shared->handle, msg);
 	handle_unref(shared->handle); // end message has been posted
 	data_path_message_free(context.end_msg);
+
+	if (context.shared->signal_msg_buffers != NULL)
+		buffer_pool_free(context.shared->signal_msg_buffers);
 
 	g_checksum_free(context.checksum);
 	g_array_free(context.pollfds, TRUE);

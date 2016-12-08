@@ -43,7 +43,8 @@ vysmaw_message_queue_timeout_pop(vysmaw_message_queue queue, uint64_t timeout)
 	g_time_val_add(&end, timeout);
 	result = g_async_queue_timed_pop_unlocked(queue->q, &end);
 #endif
-	if (result != NULL) queue->depth--;
+	if (result != NULL)
+		queue->depth--;
 	g_assert(queue->depth >= 0);
 	g_async_queue_unlock(queue->q);
 	/* release message's queue reference */
@@ -56,7 +57,8 @@ vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
 {
 	g_async_queue_lock(queue->q);
 	struct vysmaw_message *result = g_async_queue_try_pop_unlocked(queue->q);
-	if (result != NULL) queue->depth--;
+	if (result != NULL)
+		queue->depth--;
 	g_assert(queue->depth >= 0);
 	g_async_queue_unlock(queue->q);
 	/* release message's queue reference */
