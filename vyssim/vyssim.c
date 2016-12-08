@@ -320,8 +320,7 @@ static char summary[] =
 	"application requires an MPI thread level of MPI_THREAD_FUNNELED\n"
 	"or better to run. You must ensure that the application is started so\n"
 	"that the thread level requirement is met, whether or not the MPI job\n"
-	"launcher is used, depending on the MPI library implementation with\n"
-	"which the application was built.";
+	"launcher is used.";
 
 static GQuark
 vyssim_arg_error_quark(void)
