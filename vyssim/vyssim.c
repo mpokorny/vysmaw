@@ -292,7 +292,7 @@ static bool parse_options(
 	unsigned *num_spectral_windows, unsigned *num_channels,
 	unsigned *num_stokes, unsigned *integration_time_microsec,
 	unsigned *signal_msg_num_spectra, unsigned *data_buffer_length_sec,
-	char **vys_configuration_path)
+	char **vys_configuration_path, GError **error)
 	__attribute__((nonnull));
 
 static char num_antennas_lname[] = "num-antennas";
@@ -1449,7 +1449,8 @@ parse_options(int *argc, char **argv[], unsigned *num_antennas,
               unsigned *num_stokes, unsigned *integration_time_microsec,
               unsigned *signal_msg_num_spectra,
               unsigned *data_buffer_length_sec,
-              char **vys_configuration_path)
+              char **vys_configuration_path,
+              GError **error)
 {
 	GOptionContext *context = g_option_context_new(NULL);
 	g_option_context_set_summary(context, summary);
@@ -1530,15 +1531,7 @@ parse_options(int *argc, char **argv[], unsigned *num_antennas,
 	g_option_group_add_entries(main_group, entries);
 	g_option_context_set_main_group(context, main_group);
 
-	bool rc;
-	GError *error = NULL;
-	if (g_option_context_parse(context, argc, argv, &error)) {
-		rc = true;
-	} else {
-		g_print("option parsing failed: %s\n", error->message);
-		g_error_free(error);
-		rc = false;
-	}
+	bool result = g_option_context_parse(context, argc, argv, error);
 	g_free(num_antennas_desc);
 	g_free(num_spectral_windows_desc);
 	g_free(num_channels_desc);
@@ -1547,7 +1540,7 @@ parse_options(int *argc, char **argv[], unsigned *num_antennas,
 	g_free(signal_msg_num_spectra_desc);
 	g_free(data_buffer_length_sec_desc);
 	g_option_context_free(context);
-	return rc;
+	return result;
 }
 
 int
@@ -1558,6 +1551,7 @@ main(int argc, char *argv[])
 	setlocale(LC_ALL, "");
 
 	int rc = EXIT_FAILURE;
+	GError *error = NULL;
 	char *vys_configuration_path;
 	if (!parse_options(&argc, &argv,
 	                   &vyssim.params.num_antennas,
@@ -1567,8 +1561,12 @@ main(int argc, char *argv[])
 	                   &vyssim.params.integration_time_microsec,
 	                   &vyssim.mcast_ctx.signal_msg_num_spectra,
 	                   &vyssim.data_buffer_length_sec,
-	                   &vys_configuration_path))
+	                   &vys_configuration_path,
+	                   &error)) {
+		g_print("option parsing failed: %s\n", error->message);
+		g_error_free(error);
 		goto cleanup_and_return;
+	}
 
 	vyssim.bind_addr = vys_get_ipoib_addr();
 	if (vyssim.bind_addr == NULL) {
