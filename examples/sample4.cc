@@ -101,7 +101,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 			name = "end";
 			break;
 		}
-		cout << m << ": " << counters[m] << endl;
+		cout << name << ": " << counters[m] << endl;
 	}
 }
 
