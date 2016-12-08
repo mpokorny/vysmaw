@@ -106,11 +106,19 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 }
 
 int
-main()
+main(int argc, char *argv[])
 {
+	unique_ptr<struct vysmaw_configuration> config;
+
 	// initialize vysmaw configuration
-	unique_ptr<struct vysmaw_configuration>
-		config(vysmaw_configuration_new(nullptr));
+	if (argc == 2)
+		config = move(
+			unique_ptr<struct vysmaw_configuration>(
+				vysmaw_configuration_new(argv[1])));
+	else
+		config = move(
+			unique_ptr<struct vysmaw_configuration>(
+				vysmaw_configuration_new(nullptr)));
 
 	// one consumer, using filter()
 	struct vysmaw_consumer consumer = {
