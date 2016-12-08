@@ -1406,26 +1406,26 @@ parse_param(const gchar *option_name, const gchar *value, GHashTable *params,
 	while (*opt == '-') ++opt;
 	char *end = NULL;
 	errno = 0;
-	gulong l = strtol(value, &end, 0);
+	glong l = strtol(value, &end, 0);
 	if (*end != '\0' || errno == EINVAL) {
 		g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_PARSE,
-		            "Failed to parse option %s: %s", value, strerror(EINVAL));
+		            "Failed to parse %s value: %s", value, strerror(EINVAL));
 		return false;
 	}
 	if (strcmp(opt, num_stokes_lname) == 0
 	    || strcmp(opt, num_stokes_sname) == 0) {
 		if (!(l == 1 || l == 2 || l == 4)) {
 			g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_RANGE,
-			            "Option %s value must be 1, 2, or 4", option_name);
+			            "%s value must be 1, 2, or 4", option_name);
 			return false;
 		}
 	} else if (l <= 0) {
 		g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_RANGE,
-		            "Option %s value must be positive", option_name);
+		            "%s value must be positive", option_name);
 		return false;
 	} else if (l > G_MAXUINT) {
 		g_set_error(error, VYSSIM_ARG_ERROR, VYSSIM_ARG_ERROR_RANGE,
-		            "Option %s value must not exceed %u", option_name,
+		            "%s value must not exceed %u", option_name,
 		            G_MAXUINT);
 		return false;
 	}
