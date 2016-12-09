@@ -19,6 +19,8 @@
 #include <array>
 #include <memory>
 #include <csignal>
+#include <map>
+#include <algorithm>
 #include <vysmaw.h>
 
 // max time to wait for message on queue
@@ -72,39 +74,25 @@ pop(vysmaw_message_queue q)
 void
 show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
+	static map<enum vysmaw_message_type,string> names;
+	names[VYSMAW_MESSAGE_VALID_BUFFER] = "valid-buffer";
+	names[VYSMAW_MESSAGE_DIGEST_FAILURE] = "digest-failure";
+	names[VYSMAW_MESSAGE_QUEUE_OVERFLOW] = "queue-overflow";
+	names[VYSMAW_MESSAGE_DATA_BUFFER_STARVATION] = "data-buffer-starvation";
+	names[VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION] = "signal-buffer-starvation";
+	names[VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE] = "signal-receive-failure";
+	names[VYSMAW_MESSAGE_RDMA_READ_FAILURE] = "rdma-read-failure";
+	names[VYSMAW_MESSAGE_END] = "end";
+
+	size_t max_name_len = 0;
+	for (auto it = names.cbegin(); it != names.cend(); ++it)
+		max_name_len = max((*it).second.length(), max_name_len);
+
 	for (unsigned m = VYSMAW_MESSAGE_VALID_BUFFER; m <= VYSMAW_MESSAGE_END;
 	     ++m) {
-		string name;
-		switch (m) {
-		case VYSMAW_MESSAGE_VALID_BUFFER:
-			name = "valid-buffer";
-			break;
-		case VYSMAW_MESSAGE_DIGEST_FAILURE:
-			name = "digest-failure";
-			break;
-		case VYSMAW_MESSAGE_QUEUE_OVERFLOW:
-			name = "queue-overflow";
-			break;
-		case VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
-			name = "data-buffer-starvation";
-			break;
-		case VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
-			name = "signal-buffer-starvation";
-			break;
-		case VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
-			name = "signal-receive-failure";
-			break;
-		case VYSMAW_MESSAGE_RDMA_READ_FAILURE:
-			name = "rdma-read-failure";
-			break;
-		case VYSMAW_MESSAGE_END:
-			name = "end";
-			break;
-		}
-		cout.width(sizeof("signal-buffer-starvation"));
-		cout << right << name;
-		cout << left << ": ";
-		cout << counters[m] << endl;
+		cout.width(max_name_len);
+		cout << right << names.at((enum vysmaw_message_type)m);
+		cout << ": " << counters[m] << endl;
 	}
 }
 
