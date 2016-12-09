@@ -1,0 +1,11 @@
+script: cmake
+
+compiler: gcc
+
+python:
+  - "2.7"
+  - "3.4"
+
+before_install:
+  - test -n $CC && unset CC
+  - test -n $CXX && unset CXX
