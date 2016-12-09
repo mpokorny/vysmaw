@@ -49,6 +49,7 @@ struct signal_receiver_context_ {
 	struct ibv_cq *cq;
 	struct ibv_wc *wcs;
 	struct ibv_mr *mr;
+	bool in_multicast;
 	uint32_t remote_qpn;
 	uint32_t remote_qkey;
 	unsigned num_posted_wr;
@@ -56,6 +57,7 @@ struct signal_receiver_context_ {
 	unsigned min_ack;
 	unsigned num_not_ack;
 	struct recv_wr *rem_wrs;
+	unsigned len_rem_wrs;
 };
 
 struct recv_wr {
@@ -104,8 +106,9 @@ static int poll_completions(
 	__attribute__((nonnull(1)));
 static unsigned create_new_wrs(struct signal_receiver_context_ *context)
 	__attribute__((nonnull));
-static void post_wrs(
-	struct signal_receiver_context_ *context, unsigned num_new_wrs)
+static int post_wrs(
+	struct signal_receiver_context_ *context,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int on_poll_events(
 	struct signal_receiver_context_ *context,
@@ -397,6 +400,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		VERB_ERR(error_record, errno, "rdma_join_multicast");
 		return -1;
 	}
+	context->in_multicast = true;
 	struct rdma_cm_event *event;
 	rc = get_cm_event(context->event_channel, RDMA_CM_EVENT_MULTICAST_JOIN,
 	                  &event, error_record);
@@ -422,21 +426,42 @@ start_signal_receive(struct signal_receiver_context_ *context,
 }
 
 static int
+leave_multicast(struct signal_receiver_context_ *context,
+                struct vys_error_record **error_record)
+{
+	int rc = 0;
+	if (context->in_multicast) {
+		context->in_multicast = false;
+		rc = rdma_leave_multicast(context->id, &context->sockaddr);
+		if (G_UNLIKELY(rc != 0))
+			VERB_ERR(error_record, errno, "rdma_leave_multicast");
+		if (context->id != NULL) {
+			struct ibv_qp_attr attr = {
+				.qp_state = IBV_QPS_ERR
+			};
+			rc = ibv_modify_qp(context->id->qp, &attr, IBV_QP_STATE);
+			if (G_UNLIKELY(rc != 0))
+				VERB_ERR(error_record, errno, "ibv_modify_qp");
+		}
+	}
+	return rc;
+}
+
+static int
 stop_signal_receive(struct signal_receiver_context_ *context,
                     struct vys_error_record **error_record)
 {
 	int result = 0;
 	int rc;
+
+	rc = leave_multicast(context, error_record);
+	if (G_UNLIKELY(rc != 0))
+		result = -1;
+
+	if (context->id != NULL)
+		rdma_destroy_qp(context->id);
+
 	ack_completions(context, 1);
-	if (context->id != NULL) {
-		rc = rdma_leave_multicast(context->id, &context->sockaddr);
-		if (G_UNLIKELY(rc != 0)) {
-			VERB_ERR(error_record, errno, "rdma_leave_multicast");
-			result = -1;
-		}
-		if (context->id->qp != NULL)
-			rdma_destroy_qp(context->id);
-	}
 	if (context->cq != NULL) {
 		rc = ibv_destroy_cq(context->cq);
 		if (G_UNLIKELY(rc != 0)) {
@@ -466,11 +491,14 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 		}
 		context->id = NULL;
 	}
+	if (context->event_channel != NULL) {
+		rdma_destroy_event_channel(context->event_channel);
+		context->event_channel = NULL;
+	}
 	if (context->wcs != NULL) {
 		g_free(context->wcs);
 		context->wcs = NULL;
 	}
-
 	context->pollfds[RECEIVE_COMPLETION_FD_INDEX].fd = -1;
 	context->num_posted_wr = 0;
 	return result;
@@ -525,21 +553,27 @@ poll_completions(struct signal_receiver_context_ *context,
 		for (int i = 0; i < nc; ++i) {
 			struct vys_signal_msg *s_msg =
 				(struct vys_signal_msg *)context->wcs[i].wr_id;
-			struct data_path_message *dp_msg =
-				data_path_message_new(context->shared->signal_msg_num_spectra);
 			if (G_LIKELY(context->wcs[i].status == IBV_WC_SUCCESS)) {
+				struct data_path_message *dp_msg = data_path_message_new(
+					context->shared->signal_msg_num_spectra);
 				/* got a signal message */
 				dp_msg->typ = DATA_PATH_SIGNAL_MSG;
 				dp_msg->signal_msg = s_msg;
+				/* send data_path_message downstream */
+				g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 			} else {
 				/* failed receive, put signal message buffer back into pool */
 				buffer_pool_push(context->shared->signal_msg_buffers, s_msg);
-				/* notify downstream of receive failure */
-				dp_msg->typ = DATA_PATH_RECEIVE_FAIL;
-				dp_msg->wc_status = context->wcs[i].status;
+				if (context->state == STATE_RUN) {
+					struct data_path_message *dp_msg = data_path_message_new(
+						context->shared->signal_msg_num_spectra);
+					/* notify downstream of receive failure */
+					dp_msg->typ = DATA_PATH_RECEIVE_FAIL;
+					dp_msg->wc_status = context->wcs[i].status;
+					/* send data_path_message downstream */
+					g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
+				}
 			}
-			/* send data_path_message downstream */
-			g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 		}
 	}
 	return 0;
@@ -562,44 +596,40 @@ create_new_wrs(struct signal_receiver_context_ *context)
 	return result;
 }
 
-static void
-post_wrs(struct signal_receiver_context_ *context, unsigned num_new_wrs)
+static int
+post_wrs(struct signal_receiver_context_ *context,
+         struct vys_error_record **error_record)
 {
+	int rc = 0;
 	if (G_LIKELY(context->rem_wrs != NULL)) {
 		if (G_LIKELY(context->state == STATE_RUN)) {
 			struct recv_wr *wrs = context->rem_wrs;
-			context->rem_wrs = NULL;
-			int rc = ibv_post_recv(
-				context->id->qp,
-				&wrs->ibv_recv_wr,
-				(struct ibv_recv_wr **)&context->rem_wrs);
-			if (G_LIKELY(rc == 0)) {
-				context->num_posted_wr += num_new_wrs;
-			} else {
-				/* hold on to the failed work requests, free those posted
-				 * successfully */
-				/* TODO: this assumes that there's nothing wrong with the
-				 * requests themselves, and that we've failed because of a
-				 * filled receive queue...is there some way of not making that
-				 * assumption? */
-				struct recv_wr *last_wr = NULL;
-				struct recv_wr *next_wr = wrs;
-				while (next_wr != context->rem_wrs) {
-					context->num_posted_wr++;
-					last_wr = next_wr;
-					next_wr = recv_wr_next(last_wr);
+			if (G_LIKELY(wrs != NULL)) {
+				context->rem_wrs = NULL;
+				rc = ibv_post_recv(
+					context->id->qp,
+					&wrs->ibv_recv_wr,
+					(struct ibv_recv_wr **)&context->rem_wrs);
+				if (G_LIKELY(rc == 0 || rc == ENOMEM)) {
+					rc = 0;
+					struct recv_wr *next_wr = wrs;
+					while (next_wr != context->rem_wrs) {
+						context->num_posted_wr++;
+						struct recv_wr *last_wr = next_wr;
+						next_wr = recv_wr_next(last_wr);
+						last_wr->ibv_recv_wr.next = NULL;
+						recv_wr_free(last_wr);
+					}
+				} else {
+					VERB_ERR(error_record, rc, "ibv_post_recv");
 				}
-				if (last_wr != NULL) last_wr->ibv_recv_wr.next = NULL;
-				else wrs = NULL;
 			}
-			/* Free posted work requests. Note that wrs should point to the head
-			 * of the list of successfully posted requests. */
-			recv_wr_free(wrs);
 		} else {
 			recv_wr_free(context->rem_wrs);
 			context->rem_wrs = NULL;
 		}
 	}
+	return rc;
 }
 
 static int
@@ -631,9 +661,10 @@ on_receive_completion(struct signal_receiver_context_ *context,
 	if (G_UNLIKELY(rc != 0))
 		return -1;
 
-	post_wrs(context, create_new_wrs(context));
+	create_new_wrs(context);
+	rc = post_wrs(context, error_record);
 
-	return 0;
+	return rc;
 }
 
 static int
@@ -650,7 +681,7 @@ to_quit_state(struct signal_receiver_context_ *context,
 	g_async_queue_push(context->shared->signal_msg_queue, quit_msg);
 	int rc = 0;
 	if (context->state != STATE_QUIT)
-		rc = stop_signal_receive(context, error_record);
+		rc = leave_multicast(context, error_record);
 	context->state = STATE_QUIT;
 	return rc;
 }
@@ -839,7 +870,11 @@ signal_receiver_loop(struct signal_receiver_context_ *context,
 		VERB_ERR(error_record, rc, "ibv_req_notify_cq");
 		return -1;
 	}
-	post_wrs(context, create_new_wrs(context));
+	create_new_wrs(context);
+	if (post_wrs(context, error_record) != 0) {
+		to_quit_state(context, NULL, error_record);
+		result = -1;
+	}
 	while (!quit) {
 		rc = 0;
 		int nfd = poll(context->pollfds, NUM_FDS, -1);
@@ -851,7 +886,7 @@ signal_receiver_loop(struct signal_receiver_context_ *context,
 			rc = -1;
 		}
 		if (G_UNLIKELY(rc != 0)) {
-			rc = to_quit_state(context, NULL, error_record);
+			to_quit_state(context, NULL, error_record);
 			result = -1;
 		}
 		quit = context->state == STATE_DONE && context->num_posted_wr == 0;
@@ -876,6 +911,7 @@ signal_receiver(struct signal_receiver_context *shared)
 	memset(&context, 0, sizeof(context));
 	context.shared = shared;
 	context.state = STATE_INIT;
+	context.in_multicast = false;
 
 	for (unsigned i = 0; i < NUM_FDS; ++i)
 		context.pollfds[i].fd = -1;
