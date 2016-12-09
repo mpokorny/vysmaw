@@ -465,6 +465,11 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 		rdma_destroy_qp(context->id);
 	}
 
+	if (context->rem_wrs != NULL) {
+		recv_wr_free(context->rem_wrs);
+		context->rem_wrs = NULL;
+	}
+
 	if (context->cq != NULL) {
 		rc = ibv_destroy_cq(context->cq);
 		if (G_UNLIKELY(rc != 0)) {
