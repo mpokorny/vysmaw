@@ -103,7 +103,7 @@ static void ack_completions(
 static int poll_completions(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
-	__attribute__((nonnull(1)));
+	__attribute__((nonnull));
 static unsigned create_new_wrs(struct signal_receiver_context_ *context)
 	__attribute__((nonnull));
 static int post_wrs(
@@ -458,10 +458,13 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 	if (G_UNLIKELY(rc != 0))
 		result = -1;
 
-	if (context->id != NULL)
-		rdma_destroy_qp(context->id);
-
 	ack_completions(context, 1);
+	if (context->id != NULL) {
+		if (G_UNLIKELY(poll_completions(context, error_record) != 0))
+			result = -1;
+		rdma_destroy_qp(context->id);
+	}
+
 	if (context->cq != NULL) {
 		rc = ibv_destroy_cq(context->cq);
 		if (G_UNLIKELY(rc != 0)) {
@@ -549,30 +552,32 @@ poll_completions(struct signal_receiver_context_ *context,
 	if (G_LIKELY(nc > 0)) {
 		g_assert(context->num_posted_wr >= nc);
 		context->num_posted_wr -= nc;
-		/* for each completion event, process the event */
-		for (int i = 0; i < nc; ++i) {
-			struct vys_signal_msg *s_msg =
-				(struct vys_signal_msg *)context->wcs[i].wr_id;
-			if (G_LIKELY(context->wcs[i].status == IBV_WC_SUCCESS)) {
+		if (G_LIKELY(context->state == STATE_RUN)) {
+			/* for each completion event, process the event */
+			for (int i = 0; i < nc; ++i) {
+				struct vys_signal_msg *s_msg =
+					(struct vys_signal_msg *)context->wcs[i].wr_id;
 				struct data_path_message *dp_msg = data_path_message_new(
 					context->shared->signal_msg_num_spectra);
-				/* got a signal message */
-				dp_msg->typ = DATA_PATH_SIGNAL_MSG;
-				dp_msg->signal_msg = s_msg;
-				/* send data_path_message downstream */
-				g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
-			} else {
-				/* failed receive, put signal message buffer back into pool */
-				buffer_pool_push(context->shared->signal_msg_buffers, s_msg);
-				if (context->state == STATE_RUN) {
-					struct data_path_message *dp_msg = data_path_message_new(
-						context->shared->signal_msg_num_spectra);
+				if (G_LIKELY(context->wcs[i].status == IBV_WC_SUCCESS)) {
+					/* got a signal message */
+					dp_msg->typ = DATA_PATH_SIGNAL_MSG;
+					dp_msg->signal_msg = s_msg;
+				} else {
+					/* failed receive, put signal message buffer back into pool */
+					buffer_pool_push(context->shared->signal_msg_buffers, s_msg);
 					/* notify downstream of receive failure */
 					dp_msg->typ = DATA_PATH_RECEIVE_FAIL;
 					dp_msg->wc_status = context->wcs[i].status;
-					/* send data_path_message downstream */
-					g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
-				}
+					}
+				/* send data_path_message downstream */
+				g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
+			}
+		} else {
+			for (int i = 0; i < nc; ++i) {
+				struct vys_signal_msg *s_msg =
+					(struct vys_signal_msg *)context->wcs[i].wr_id;
+				buffer_pool_push(context->shared->signal_msg_buffers, s_msg);
 			}
 		}
 	}
