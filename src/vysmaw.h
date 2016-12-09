@@ -46,7 +46,10 @@ struct vysmaw_configuration {
 	size_t spectrum_buffer_pool_size;
 
 	/* Maintain a single pool containing buffers sized to accommodate the
-	 * maximum expected size of a spectrum. */
+	 * maximum expected size of a spectrum.
+	 *
+	 * WARNING: setting this parameter to 'false' is not recommended at this
+	 * time, as the implementation is incomplete. */
 	bool single_spectrum_buffer_pool;
 
 	/* The maximum expected size in bytes of a single spectrum that the client
