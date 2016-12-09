@@ -1,5 +1,5 @@
 language: c
-script: cmake .
+script: $HOME/cmake-3.7.1/bin/cmake .
 compiler: gcc
 python:
   - "2.7"
@@ -14,6 +14,8 @@ addons:
       - python-dev
       - cython
 install:
-  - wget --no-check-certificate https://cmake.org/files/v3.7/cmake-3.7.1.tar.gz
-  - tar zxf cmake-3.7.1.tar.gz
-  - cd cmake-3.7.1 && ./configure && make && make install
+  - bash travis/install-cmake.sh
+cache:
+  directories:
+    - $HOME/cmake-3.7.1
+
