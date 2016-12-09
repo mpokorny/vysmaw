@@ -865,15 +865,18 @@ signal_receiver_loop(struct signal_receiver_context_ *context,
 {
 	int result = 0;
 	bool quit = false;
-	int rc = ibv_req_notify_cq(context->cq, 0);
-	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_record, rc, "ibv_req_notify_cq");
-		return -1;
-	}
-	create_new_wrs(context);
-	if (post_wrs(context, error_record) != 0) {
-		to_quit_state(context, NULL, error_record);
-		result = -1;
+	int rc;
+	if (context->pollfds[RECEIVE_COMPLETION_FD_INDEX].fd != -1) {
+		rc = ibv_req_notify_cq(context->cq, 0);
+		if (G_UNLIKELY(rc != 0)) {
+			VERB_ERR(error_record, rc, "ibv_req_notify_cq");
+			return -1;
+		}
+		create_new_wrs(context);
+		if (post_wrs(context, error_record) != 0) {
+			to_quit_state(context, NULL, error_record);
+			result = -1;
+		}
 	}
 	while (!quit) {
 		rc = 0;
