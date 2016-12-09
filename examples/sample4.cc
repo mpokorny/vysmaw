@@ -101,7 +101,10 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 			name = "end";
 			break;
 		}
-		cout << name << ": " << counters[m] << endl;
+		cout.width(sizeof("signal-buffer-starvation"));
+		cout << right << name;
+		cout << left << ": ";
+		cout << counters[m] << endl;
 	}
 }
 
@@ -153,6 +156,7 @@ main(int argc, char *argv[])
 	++counters[message->typ];
 
 	// display counts of received messages
+	if (interrupted) cout << endl;
 	show_counters(counters);
 
 	// display message for end condition
