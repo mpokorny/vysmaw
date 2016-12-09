@@ -45,6 +45,8 @@ struct buffer_pool {
 #endif
 };
 
+#define BUFFER_POOL_MIN_BUFFER_SIZE (sizeof(struct buffer_stack))
+
 struct buffer_pool *buffer_pool_new(size_t num_buffers, size_t buffer_size)
 	__attribute__((returns_nonnull,malloc));
 

@@ -107,12 +107,15 @@ vysmaw_start(const struct vysmaw_configuration *config,
 	result->result = NULL;
 	memcpy((void *)&result->config, config, sizeof(*config));
 	if (result->config.error_record == NULL) {
-		if (config->single_spectrum_buffer_pool) {
+		*(unsigned *)&result->config.max_spectrum_buffer_size =
+			MAX(result->config.max_spectrum_buffer_size,
+			    BUFFER_POOL_MIN_BUFFER_SIZE);
+		if (result->config.single_spectrum_buffer_pool) {
 			size_t num_buffers =
-				config->spectrum_buffer_pool_size
-				/ config->max_spectrum_buffer_size;
+				result->config.spectrum_buffer_pool_size
+				/ result->config.max_spectrum_buffer_size;
 			result->pool = spectrum_buffer_pool_new(
-				config->max_spectrum_buffer_size, num_buffers);
+				result->config.max_spectrum_buffer_size, num_buffers);
 			result->new_valid_buffer_fn = new_valid_buffer_from_pool;
 			result->lookup_buffer_pool_fn = lookup_buffer_pool_from_pool;
 			result->list_buffer_pools_fn = buffer_pool_list_from_pool;
