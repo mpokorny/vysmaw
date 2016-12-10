@@ -13,7 +13,8 @@ addons:
       - python
       - python-dev
       - cython
+      - ca-certificates
 install:
-  - wget http://cmake.org/files/v3.7/cmake-3.7.1.tar.gz
+  - wget https://cmake.org/files/v3.7/cmake-3.7.1.tar.gz
   - tar zxf cmake-3.7.1.tar.gz
   - cd cmake-3.7.1 && ./configure && make && make install
