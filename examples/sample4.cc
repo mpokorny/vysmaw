@@ -85,13 +85,23 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 	names[VYSMAW_MESSAGE_END] = "end";
 
 	size_t max_name_len = 0;
-	for (auto it = names.cbegin(); it != names.cend(); ++it)
-		max_name_len = max((*it).second.length(), max_name_len);
+	for (auto n : names)
+		max_name_len = max(n.second.length(), max_name_len);
 
-	for (unsigned m = VYSMAW_MESSAGE_VALID_BUFFER; m <= VYSMAW_MESSAGE_END;
-	     ++m) {
+	const enum vysmaw_message_type msg_types[] = {
+		VYSMAW_MESSAGE_VALID_BUFFER,
+		VYSMAW_MESSAGE_DIGEST_FAILURE,
+		VYSMAW_MESSAGE_QUEUE_OVERFLOW,
+		VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
+		VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
+		VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
+		VYSMAW_MESSAGE_RDMA_READ_FAILURE,
+		VYSMAW_MESSAGE_END
+	};
+
+	for (auto m : msg_types) {
 		cout.width(max_name_len);
-		cout << right << names.at((enum vysmaw_message_type)m);
+		cout << right << names.at(m);
 		cout << ": " << counters[m] << endl;
 	}
 }
