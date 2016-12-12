@@ -74,7 +74,7 @@ pop(vysmaw_message_queue q)
 void
 show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
-	static map<enum vysmaw_message_type,string> names;
+	map<enum vysmaw_message_type,string> names;
 	names[VYSMAW_MESSAGE_VALID_BUFFER] = "valid-buffer";
 	names[VYSMAW_MESSAGE_DIGEST_FAILURE] = "digest-failure";
 	names[VYSMAW_MESSAGE_QUEUE_OVERFLOW] = "queue-overflow";
