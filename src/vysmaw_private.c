@@ -696,7 +696,7 @@ init_signal_receiver(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 
 void
 init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-                       GAsyncQueue *read_request_queue,
+                       struct async_queue *read_request_queue,
                        struct buffer_pool *signal_msg_buffers,
                        unsigned signal_msg_num_spectra)
 {
@@ -704,7 +704,7 @@ init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 		g_new(struct spectrum_selector_context, 1);
 	context->handle = handle;
 	context->signal_msg_queue = g_async_queue_ref(signal_msg_queue);
-	context->read_request_queue = g_async_queue_ref(read_request_queue);
+	context->read_request_queue = async_queue_ref(read_request_queue);
 	context->signal_msg_buffers = signal_msg_buffers;
 	context->signal_msg_num_spectra = signal_msg_num_spectra;
 	handle->spectrum_selector_thread =
@@ -713,7 +713,8 @@ init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 }
 
 void
-init_spectrum_reader(vysmaw_handle handle, GAsyncQueue *read_request_queue,
+init_spectrum_reader(vysmaw_handle handle,
+                     struct async_queue *read_request_queue,
                      struct buffer_pool *signal_msg_buffers,
                      unsigned signal_msg_num_spectra, int loop_fd)
 {
@@ -723,7 +724,7 @@ init_spectrum_reader(vysmaw_handle handle, GAsyncQueue *read_request_queue,
 	context->loop_fd = loop_fd;
 	context->signal_msg_buffers = signal_msg_buffers;
 	context->signal_msg_num_spectra = signal_msg_num_spectra;
-	context->read_request_queue = g_async_queue_ref(read_request_queue);
+	context->read_request_queue = async_queue_ref(read_request_queue);
 	handle->spectrum_reader_thread =
 		THREAD_NEW("spectrum_reader", (GThreadFunc)spectrum_reader,
 		           context);
@@ -758,7 +759,7 @@ init_service_threads(vysmaw_handle handle)
 	init_signal_receiver(handle, signal_msg_queue, &signal_msg_buffers,
 	                     &signal_msg_num_spectra, loop_fds[0]);
 
-	GAsyncQueue *read_request_queue = g_async_queue_new();
+	struct async_queue *read_request_queue = async_queue_new();
 	init_spectrum_selector(handle, signal_msg_queue, read_request_queue,
 	                       signal_msg_buffers, signal_msg_num_spectra);
 
@@ -768,7 +769,7 @@ init_service_threads(vysmaw_handle handle)
 	MUTEX_UNLOCK(handle->gate.mtx);
 
 	g_async_queue_unref(signal_msg_queue);
-	g_async_queue_unref(read_request_queue);
+	async_queue_unref(read_request_queue);
 
 	return 0;
 }

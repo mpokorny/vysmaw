@@ -34,7 +34,8 @@
 
 #define CM_EVENT_FD_INDEX 0
 #define INACTIVITY_TIMER_FD_INDEX 1
-#define NUM_FIXED_FDS 2
+#define READ_REQUEST_QUEUE_FD_INDEX 2
+#define NUM_FIXED_FDS 3
 
 enum run_state {
 	STATE_INIT,
@@ -207,6 +208,14 @@ static int start_inactivity_timer(
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int stop_inactivity_timer(
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
+	__attribute__((nonnull));
+static int start_read_request_poll(
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
+	__attribute__((nonnull));
+static int stop_read_request_poll(
 	struct spectrum_reader_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
@@ -945,38 +954,50 @@ static int
 on_poll_events(struct spectrum_reader_context_ *context,
                struct vys_error_record **error_record)
 {
-	int rc = 0;
-
 	/* cm events */
+	int rc1 = 0;
 	struct pollfd *cm_pollfd =
 		&g_array_index(context->pollfds, struct pollfd, CM_EVENT_FD_INDEX);
 	if (cm_pollfd->revents & POLLIN) {
-		rc = on_cm_event(context, error_record);
+		rc1 = on_cm_event(context, error_record);
 	} else if (cm_pollfd->revents & (POLLERR | POLLHUP)) {
 		MSG_ERROR(error_record, -1, "%s",
 		          "rdma cm event channel ERR or HUP");
-		rc = -1;
+		rc1 = -1;
 	}
 
 	/* inactivity timer events */
+	int rc2 = 0;
 	struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
 	                                          INACTIVITY_TIMER_FD_INDEX);
 	if (tm_pollfd->revents & POLLIN)
-		rc = on_inactivity_timer_event(context, error_record);
+		rc2 = on_inactivity_timer_event(context, error_record);
+
+	/* read request events */
+	int rc3 = 0;
+	struct pollfd *rr_pollfd = &g_array_index(context->pollfds, struct pollfd,
+	                                          READ_REQUEST_QUEUE_FD_INDEX);
+	if (rr_pollfd->revents & POLLIN) {
+		struct data_path_message *msg =
+			async_queue_pop(context->shared->read_request_queue);
+		if (msg != NULL)
+			rc3 = on_data_path_message(context, msg, error_record);
+	}
 
 	/* read completion events */
+	int rc4 = 0;
 	for (unsigned i = NUM_FIXED_FDS; i < context->pollfds->len; ++i) {
 		struct pollfd *ev_pollfd =
 			&g_array_index(context->pollfds, struct pollfd, i);
-		int rc1 = 0;
+		int rc5 = 0;
 		if (ev_pollfd->revents & POLLIN) {
-			rc1 = on_read_completion(context, i, error_record);
+			rc5 = on_read_completion(context, i, error_record);
 		} else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
 			MSG_ERROR(error_record, -1, "%s",
 			          "connection event channel ERR or HUP");
-			rc1 = -1;
+			rc5 = -1;
 		}
-		if (rc == 0 && rc1 != 0) rc = rc1;
+		if (G_UNLIKELY(rc4 == 0 && rc5 != 0)) rc4 = rc5;
 	}
 	if (context->new_pollfds->len > 0) {
 		GArray *tmp = context->pollfds;
@@ -984,6 +1005,12 @@ on_poll_events(struct spectrum_reader_context_ *context,
 		context->new_pollfds = tmp;
 		g_array_set_size(context->new_pollfds, 0);
 	}
+	int rc;
+	if (G_UNLIKELY(rc1 != 0)) { rc = rc1; }
+	else if (G_UNLIKELY(rc2 != 0)) { rc = rc2; }
+	else if (G_UNLIKELY(rc3 != 0)) { rc = rc3; }
+	else if (G_UNLIKELY(rc4 != 0)) { rc = rc4; }
+	else { rc = 0; }
 	return rc;
 }
 
@@ -1026,7 +1053,7 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
 	while (!quit) {
 		int rc = 0;
 		int nfd = poll((struct pollfd *)(context->pollfds->data),
-		               context->pollfds->len, 0);
+		               context->pollfds->len, -1);
 		if (G_LIKELY(nfd > 0)) {
 			rc = on_poll_events(context, error_record);
 		} else if (G_UNLIKELY(nfd < 0 && errno != EINTR)) {
@@ -1034,12 +1061,7 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
 			          "spectrum_reader poll failed: %s", strerror(errno));
 			rc = -1;
 		}
-		int rc1 = 0;
-		struct data_path_message *msg =
-			g_async_queue_try_pop(context->shared->read_request_queue);
-		if (msg != NULL)
-			rc1 = on_data_path_message(context, msg, error_record);
-		if (G_UNLIKELY(rc != 0 || rc1 != 0)) {
+		if (G_UNLIKELY(rc != 0)) {
 			to_quit_state(context, NULL, error_record);
 			result = -1;
 		}
@@ -1098,6 +1120,27 @@ stop_inactivity_timer(struct spectrum_reader_context_ *context,
 }
 
 static int
+start_read_request_poll(struct spectrum_reader_context_ *context,
+                        struct vys_error_record **error_record)
+{
+	struct pollfd *qpfd = &g_array_index(context->pollfds, struct pollfd,
+	                                     READ_REQUEST_QUEUE_FD_INDEX);
+	qpfd->fd = async_queue_pop_fd(context->shared->read_request_queue);
+	qpfd->events = POLLIN;
+	return 0;
+}
+
+static int
+stop_read_request_poll(struct spectrum_reader_context_ *context,
+                        struct vys_error_record **error_record)
+{
+	struct pollfd *qpfd = &g_array_index(context->pollfds, struct pollfd,
+	                                     READ_REQUEST_QUEUE_FD_INDEX);
+	qpfd->fd = -1;
+	return 0;
+}
+
+static int
 loopback_msg(struct spectrum_reader_context_ *context,
              struct data_path_message *msg,
              struct vys_error_record **error_record)
@@ -1148,6 +1191,10 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	if (rc < 0)
 		goto cleanup_and_return;
 
+	rc = start_read_request_poll(&context, &error_record);
+	if (rc != 0)
+		goto cleanup_and_return;
+
 	READY(&shared->handle->gate);
 
 	context.state = STATE_RUN;
@@ -1163,6 +1210,8 @@ spectrum_reader(struct spectrum_reader_context *shared)
 		 * closed */
 		spectrum_reader_loop(&context, &error_record);
 	}
+
+	stop_read_request_poll(&context, &error_record);
 
 	stop_inactivity_timer(&context, &error_record);
 
@@ -1200,7 +1249,7 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	g_checksum_free(context.checksum);
 	g_array_free(context.pollfds, TRUE);
 	g_array_free(context.new_pollfds, TRUE);
-	g_async_queue_unref(shared->read_request_queue);
+	async_queue_unref(shared->read_request_queue);
 	g_free(shared);
 	return NULL;
 }

@@ -119,7 +119,7 @@ spectrum_selector(struct spectrum_selector_context *context)
 				}
 			}
 			if (selected) {
-				g_async_queue_push(context->read_request_queue, msg);
+				async_queue_push(context->read_request_queue, msg);
 			} else {
 				buffer_pool_push(context->signal_msg_buffers, msg->signal_msg);
 				data_path_message_free(msg);
@@ -128,23 +128,23 @@ spectrum_selector(struct spectrum_selector_context *context)
 		}
 		case DATA_PATH_QUIT:
 			quitting = true;
-			g_async_queue_push(context->read_request_queue, msg);
+			async_queue_push(context->read_request_queue, msg);
 			break;
 
 		case DATA_PATH_END:
 			quit = true;
-			g_async_queue_push(context->read_request_queue, msg);
+			async_queue_push(context->read_request_queue, msg);
 			break;
 
 		default:
-			g_async_queue_push(context->read_request_queue, msg);
+			async_queue_push(context->read_request_queue, msg);
 			break;
 		}
 	}
 
 	g_hash_table_destroy(prev_eagerly_forwarded);
 	g_async_queue_unref(context->signal_msg_queue);
-	g_async_queue_unref(context->read_request_queue);
+	async_queue_unref(context->read_request_queue);
 	g_free(context);
 	return NULL;
 }

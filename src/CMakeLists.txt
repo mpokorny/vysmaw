@@ -31,6 +31,7 @@ add_library(vysmaw SHARED
   signal_receiver.c
   spectrum_selector.c
   spectrum_reader.c
+  async_queue.c
   vysmaw.c)
 target_include_directories(vysmaw PRIVATE
   ${GTHREAD2_INCLUDE_DIRS}
