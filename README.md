@@ -179,18 +179,19 @@ configuration, and writes visibility data to BDF files. The mapping of WIDAR
 data products to wcbe processes may change with every WIDAR reconfiguration
 according to the number of active sub-arrays, the CBE nodes that are in active
 use, and an opaque WIDAR product-to-CBE mapping algorithm implemented by
-wcbe. The vysmaw system operates _via_ a broadcast by wcbe of spectral metadata
-to clients as the data are being processed by each wcbe process, allowing
-clients to receive data from any CBE process without prior knowledge of the
-mapping of WIDAR products to CBE processes. These broadcast messages provide
-sufficient metadata to identify not only the identity of the visibility
+wcbe. The vysmaw system operates _via_ a broadcast of signals by wcbe of
+spectral metadata and data location information to clients as the data are being
+processed by each wcbe process, allowing clients to receive data from any CBE
+process without prior knowledge of the mapping of WIDAR products to CBE
+processes. These signal messages provide sufficient metadata to identify not
+only the baseline, spectral window and stokes product of the visibility
 spectrum, but also the "location" of the spectrum in the CBE. Clients may then
 retrieve only those spectra which they require.
 
 The current vysmaw implementation is based on OpenFabrics Enterprise
 Distribution (OFED)/OpenFabrics Software (OFS), which provides access to RDMA
 (Remote Direct Memory Access) and kernel bypass send/receive features of the
-InfiniBand fabric available to the CBE cluster. Both the metadata broadcast and
+InfiniBand fabric available to the CBE cluster. Both the signal broadcast and
 spectrum retrieval functions described in the preceding paragraph are
 implemented using features of OFS. The use of these OFS features allows for
 efficient transfer of data over the fabric directly to the client library and
@@ -219,21 +220,21 @@ participation of the client application to notify the library when the
 application has finished accessing the contents of a buffer in registered memory
 in some cases.
 
-### metadata broadcast
+### signal broadcast
 
-The spectrum metadata are received by the vysmaw client library in a registered
-memory block. Access to these metadata are provided to the client application
-through the callback function predicate arguments. Although the client is not
-required to explicitly release a reference to every buffer used for the
-metadata, it is nevertheless possible for the application to cause in the
-library the starvation of buffers available to receive the metadata messages.
-Although there is buffering between the metadata receive loop in vysmaw and the
-call to the client callback function, an inefficient callback may result in the
-receive loop running out of buffers into which to write the received metadata
-messages. Buffering between the receive loop and the callback loop acts to
-minimize latency in the network communication loop as well as allowing the
-receipt of messages at peak rates exceeding the peak callback loop bandwidth,
-although not indefinitely.
+The signal messages are received by the vysmaw client library in a registered
+memory block. Access to the spectrum metadata of these messages is provided to
+the client application through the callback function predicate
+arguments. Although the client is not required to explicitly release a reference
+to every buffer used for the signal message, it is nevertheless possible for the
+application to cause in the library the starvation of buffers available to
+receive signal messages. Although there is buffering between the signal receive
+loop in vysmaw and the call to the client callback function, an inefficient
+callback may result in the receive loop running out of buffers into which to
+store the received signal messages. Buffering between the receive loop and the
+callback loop acts to minimize latency in the network communication loop as well
+as allowing the receipt of messages at peak rates exceeding the peak callback
+loop bandwidth, although not indefinitely.
 
 Note that the client callback function signature is designed for some amount of
 batch processing by the function. This design not only allows the library to
@@ -241,7 +242,7 @@ invoke the callback less frequently than otherwise possible, but it is also
 aligned with the aggregation of metadata in the messages from the wcbe
 processes.
 
-The broadcast of spectrum metadata to vysmaw clients is currently implemented
+The broadcast of signal messages to vysmaw clients is currently implemented
 using multicast over InfiniBand. Although this implementation may change if the
 performance proves to be inadequate, client applications should be unaffected by
 any such change.
@@ -252,13 +253,13 @@ All spectra whose metadata satisfy the client callback predicate are retrieved
 by the vysmaw library _via_ OFS RDMA into a registered memory block. These
 buffers are provided directly to the client application in the messages the
 client retrieves from the queue. To minimize the risk of causing starvation of
-buffers for receiving spectral data in the vysmaw library, clients should
+buffers for receipt of spectral data in the vysmaw library, clients should
 release the buffers referenced in the messages received on the queue as soon as
 possible. This generally means that the data should be read from the buffer by
 the client application code at most one time. A buffer is released by calling
 the "unref" function for the message (which must be done for every message,
 regardless of its type, but for reasons other than to avoid depletion of the
-available registered memory.) Note a Message in the Cython layer will
+available registered memory.) Note that a Message in the Cython layer will
 automatically release its reference to the underlying C-level message when its
 Python reference count goes to zero. It is good practice, however, to call the
 "unref" function explicitly in client code to ensure the buffer is returned to
