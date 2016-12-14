@@ -158,11 +158,11 @@ queue. After initialization, the client must simply take items (_i.e._, mostly
 spectra) from the queue repeatedly, eventually call a shutdown function, and
 continue to take items from the queue until a special, sentinel value is
 retrieved. For efficiency in the library implementation, the memory used to
-store spectra is, as described below, a limited resource, which requires that
-client applications make an effort to release references to spectral data as
-soon as possible. Failure to release spectral data references in the client
-application may result in failures of the client to receive all the spectra that
-are expected.
+store spectra is a limited resource, which requires that client applications
+make an effort to release references to spectral data as soon as
+possible. Failure to release spectral data references in the client application
+may result in failures of the client to receive all the spectra that are
+expected.
 
 ## Sample code
 
