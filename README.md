@@ -145,6 +145,17 @@ To ensure binary compatibility for servers and clients, applications should be
 compiled with the (gcc) "-fno-short-enums" flag. This advice applies to C, C++
 and Cython applications.
 
+### Running a client application
+
+Efficient access to InfiniBand resources by vysmaw requires a large amount of
+"locked" memory. However, many systems are configured to severely limit the
+amount of locked memory available to user processes. While this limit may be
+increased by using the `ulimit -l` command, there is often a hard limit on this
+value that cannot be overridden by most users. A failure to access the required
+amount of locked memory oftentimes appears as a failure to start an application,
+with InfiniBand-related warning messages referring to "rdma" or "cq" (the exact
+messages being dependent upon application error handling).
+
 ## Usage
 
 Every client that initializes the library receives upon return from the
