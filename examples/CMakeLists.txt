@@ -27,3 +27,5 @@ add_executable(sample4 sample4.cc)
 target_link_libraries(sample4 vysmaw)
 target_compile_options(sample4 PRIVATE
   -Wall -Werror)
+set_target_properties(sample4 PROPERTIES
+  LINK_FLAGS -static-libstdc++)
