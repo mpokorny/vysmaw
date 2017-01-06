@@ -60,8 +60,8 @@ struct spectrum_reader_context_ {
 struct server_connection_context {
 	struct rdma_cm_id *id;
 	struct ibv_wc *wcs;
+	uint32_t *rkeys;
 	GHashTable *mrs;
-	uint32_t rkey;
 	bool established;
 	unsigned max_posted_wr;
 	unsigned num_posted_wr;
@@ -81,6 +81,7 @@ enum rdma_req_result {
 struct rdma_req {
 	struct vysmaw_data_info data_info;
 	struct vys_spectrum_info spectrum_info;
+	uint8_t mr_id;
 	enum rdma_req_result result;
 	enum ibv_wc_status status;
 	GSList *consumers;
@@ -91,7 +92,8 @@ static bool verify_digest(
 	GChecksum *checksum, const float *buff, size_t buffer_size, uint8_t *digest)
 	__attribute__((nonnull));
 static struct rdma_req *new_rdma_req(
-	GSList *consumers, const struct vys_signal_msg_payload *payload,
+	GSList *consumers, const struct server_connection_context *conn_ctx,
+	const struct vys_signal_msg_payload *payload,
 	const struct vys_spectrum_info *spectrum_info)
 	__attribute__((nonnull,returns_nonnull,malloc));
 static void free_rdma_req(struct rdma_req *req)
@@ -147,8 +149,8 @@ static int post_server_reads(
 	__attribute__((nonnull));
 static int on_server_established(
 	struct spectrum_reader_context_ *context,
-	struct server_connection_context *conn_ctx, uint32_t rkey,
-	unsigned initiator_depth,
+	struct server_connection_context *conn_ctx,
+	uint32_t *rkeys, unsigned initiator_depth,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static GSequenceIter *find_server_connection_context_iter(
@@ -237,12 +239,14 @@ verify_digest(GChecksum *checksum, const float *buff, size_t buffer_size,
 }
 
 static struct rdma_req *
-new_rdma_req(GSList *consumers, const struct vys_signal_msg_payload *payload,
+new_rdma_req(GSList *consumers, const struct server_connection_context *conn_ctx,
+             const struct vys_signal_msg_payload *payload,
              const struct vys_spectrum_info *spectrum_info)
 {
 	struct rdma_req *result = g_slice_new(struct rdma_req);
 	memcpy(&(result->spectrum_info), spectrum_info,
 	       sizeof(result->spectrum_info));
+	result->mr_id = payload->mr_id;
 	result->data_info.num_channels = payload->num_channels;
 	result->data_info.stations[0] = payload->stations[0];
 	result->data_info.stations[1] = payload->stations[1];
@@ -351,6 +355,7 @@ initiate_server_connection(struct spectrum_reader_context_ *context,
 	struct server_connection_context *result =
 		g_slice_new0(struct server_connection_context);
 	result->id = id;
+	result->rkeys = NULL;
 	result->established = false;
 	result->reqs = g_queue_new();
 	set_max_posted_wr(context, result,
@@ -401,8 +406,9 @@ on_signal_message(struct spectrum_reader_context_ *context,
 		struct vys_spectrum_info *info = payload->infos;
 		for (unsigned i = payload->num_spectra; i > 0; --i) {
 			if (*consumers != NULL)
-				g_queue_push_tail(reqs,
-				                  new_rdma_req(*consumers, payload, info));
+				g_queue_push_tail(
+					reqs,
+					new_rdma_req(*consumers, conn_ctx, payload, info));
 			*consumers = NULL; //rdma req takes list
 			++consumers;
 			++info;
@@ -585,7 +591,7 @@ post_server_reads(struct spectrum_reader_context_ *context,
 			rc = rdma_post_read(
 				conn_ctx->id, req, req->message->content.valid_buffer.buffer,
 				req->message->content.valid_buffer.buffer_size, mr, 0,
-				req->spectrum_info.data_addr, conn_ctx->rkey);
+				req->spectrum_info.data_addr, conn_ctx->rkeys[req->mr_id]);
 			if (G_LIKELY(rc == 0))
 				conn_ctx->num_posted_wr++;
 			else
@@ -600,10 +606,10 @@ post_server_reads(struct spectrum_reader_context_ *context,
 static int
 on_server_established(struct spectrum_reader_context_ *context,
                       struct server_connection_context *conn_ctx,
-                      uint32_t rkey, unsigned initiator_depth,
+                      uint32_t *rkeys, unsigned initiator_depth,
                       struct vys_error_record **error_record)
 {
-	conn_ctx->rkey = rkey;
+	conn_ctx->rkeys = rkeys;
 	set_max_posted_wr(context, conn_ctx,
 	                  MIN(conn_ctx->max_posted_wr, initiator_depth));
 	conn_ctx->wcs = g_new(struct ibv_wc, conn_ctx->max_posted_wr);
@@ -668,6 +674,9 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 {
 	if (conn_ctx->reqs != NULL)
 		g_queue_free(conn_ctx->reqs);
+
+	if (conn_ctx->rkeys != NULL)
+		g_free(conn_ctx->rkeys);
 
 	bool removed = g_hash_table_remove(
 		context->connections, &(conn_ctx->id->route.addr.dst_sin));
@@ -747,9 +756,14 @@ on_cm_event(struct spectrum_reader_context_ *context,
 	/* Optimistically read some values from the event, even if they might only
 	 * be valid for some event types. */
 	enum rdma_cm_event_type ev_type = event->event;
-	void *private_data = g_alloca(event->param.conn.private_data_len);
-	memcpy(private_data, event->param.conn.private_data,
-	       event->param.conn.private_data_len);
+	void *private_data;
+	if (event->param.conn.private_data > 0) {
+		private_data = g_malloc(event->param.conn.private_data_len);
+		memcpy(private_data, event->param.conn.private_data,
+		       event->param.conn.private_data_len);
+	} else {
+		private_data = NULL;
+	}
 	unsigned initiator_depth = event->param.conn.initiator_depth;
 
 	/* ack event */
@@ -770,12 +784,11 @@ on_cm_event(struct spectrum_reader_context_ *context,
 		rc = on_server_route_resolved(context, conn_ctx, error_record);
 		break;
 
-	case RDMA_CM_EVENT_ESTABLISHED: {
-		uint32_t rkey = *(uint32_t *)private_data;
-		rc = on_server_established(context, conn_ctx, rkey, initiator_depth,
-		                           error_record);
+	case RDMA_CM_EVENT_ESTABLISHED:
+		rc = on_server_established(context, conn_ctx, private_data,
+		                           initiator_depth, error_record);
 		break;
-	}
+
 	case RDMA_CM_EVENT_DISCONNECTED:
 		rc = begin_server_disconnect(context, conn_ctx, error_record);
 		if (rc == 0 && conn_ctx->num_posted_wr == 0)
