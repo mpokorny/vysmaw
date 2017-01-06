@@ -60,7 +60,6 @@ struct spectrum_reader_context_ {
 struct server_connection_context {
 	struct rdma_cm_id *id;
 	struct ibv_wc *wcs;
-
 	GHashTable *mrs;
 	uint32_t *rkeys;
 	bool established;
