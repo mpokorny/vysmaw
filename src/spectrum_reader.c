@@ -60,8 +60,9 @@ struct spectrum_reader_context_ {
 struct server_connection_context {
 	struct rdma_cm_id *id;
 	struct ibv_wc *wcs;
-	uint32_t *rkeys;
+
 	GHashTable *mrs;
+	uint32_t *rkeys;
 	bool established;
 	unsigned max_posted_wr;
 	unsigned num_posted_wr;
@@ -787,6 +788,7 @@ on_cm_event(struct spectrum_reader_context_ *context,
 	case RDMA_CM_EVENT_ESTABLISHED:
 		rc = on_server_established(context, conn_ctx, private_data,
 		                           initiator_depth, error_record);
+		private_data = NULL;
 		break;
 
 	case RDMA_CM_EVENT_DISCONNECTED:
@@ -810,6 +812,9 @@ on_cm_event(struct spectrum_reader_context_ *context,
 	default:
 		break;
 	}
+
+	if (G_UNLIKELY(private_data != NULL))
+		g_free(private_data);
 
 	return rc;
 }
