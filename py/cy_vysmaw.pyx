@@ -24,6 +24,7 @@ from cpython.version cimport PY_MAJOR_VERSION
 from cython cimport view
 import logging
 import inspect
+import traceback
 
 def __getLogger():
     logging.basicConfig()
@@ -36,9 +37,13 @@ cdef void evaluate_spectrum_filter(
     const vys_spectrum_info *infos, uint8_t num_infos,
     void *user_context, bool *pass_filter) with gil:
     func = <object>user_context
-    func(<uint8_t [:2]>stations, spectral_window_index, stokes_index,
-         <vys_spectrum_info [:num_infos]>infos,
-         <bool [:num_infos]>pass_filter)
+    try:
+        func(<uint8_t[:2]>stations, spectral_window_index, stokes_index,
+             <vys_spectrum_info[:num_infos]>infos,
+             <bool[:num_infos]>pass_filter)
+    except:
+        traceback.print_exc()
+    return
 
 cdef unicode _ustring(s):
     if type(s) is unicode:
