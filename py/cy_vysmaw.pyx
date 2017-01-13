@@ -348,14 +348,19 @@ cdef class Consumer:
 
     cpdef pop(self):
         assert self._c_consumer is not NULL
-        result = Message.wrap(vysmaw_message_queue_pop(self._c_consumer[0].queue))
+        cdef vysmaw_message *msg
+        with nogil:
+            msg = vysmaw_message_queue_pop(self._c_consumer[0].queue)
+        result = Message.wrap(msg)
         self.test_end(result)
         return result
 
     cpdef timeout_pop(self, uint64_t timeout):
         assert self._c_consumer is not NULL
-        cdef vysmaw_message *msg = vysmaw_message_queue_timeout_pop(
-            self._c_consumer[0].queue, timeout)
+        cdef vysmaw_message *msg
+        with nogil:
+            msg = vysmaw_message_queue_timeout_pop(
+                self._c_consumer[0].queue, timeout)
         if msg is not NULL:
             result = Message.wrap(msg)
         else:
