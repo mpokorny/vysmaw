@@ -20,12 +20,23 @@ from vysmaw cimport *
 from libc.stdint cimport *
 import cy_vysmaw
 import sys
+from cython.parallel import parallel
+
+######
+#
+# NOTE: this application is broken. There appears to be something wrong in how
+# the callback function is being called by
+# cy_vysmaw.evaluate_spectrum_filter(). The result is that an exception,
+# "ValueError: Expected 1 dimension(s), got 1" is thrown whenever the callback
+# is invoked.
+#
+#####
 
 # A predicate that selects no spectra. The "pass_filter" array elements _must_
 # be assigned values, as they are always uninitialized at function entry.
 def cb(uint8_t[:] stns, uint8_t spw, uint8_t sto, 
        vys_spectrum_info[:] infos, bool[:] pass_filter):
-    for i in xrange(pass_filter.shape[0]):
+    for i in range(pass_filter.shape[0]):
         pass_filter[i] = False
     return
 
