@@ -326,10 +326,8 @@ cdef class Consumer:
         return
 
     def set_py_filter(self, spectrum_filter):
-        cdef vysmaw_spectrum_filter eval_filter = \
-            evaluate_spectrum_filter
         if spectrum_filter is not None:
-            self._c_consumer[0].filter = eval_filter
+            self._c_consumer[0].filter = evaluate_spectrum_filter
             self._c_consumer[0].filter_data = <void *>spectrum_filter
         return
 
