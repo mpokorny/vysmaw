@@ -134,10 +134,10 @@ cdef extern from "vysmaw.h":
 
     void vysmaw_message_unref(vysmaw_message *message)
 
-    vysmaw_message *vysmaw_message_queue_pop(vysmaw_message_queue queue)
+    vysmaw_message *vysmaw_message_queue_pop(vysmaw_message_queue queue) nogil
 
     vysmaw_message *vysmaw_message_queue_timeout_pop(
         vysmaw_message_queue queue,
-        uint64_t timeout)
+        uint64_t timeout) nogil
 
     vysmaw_message *vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
