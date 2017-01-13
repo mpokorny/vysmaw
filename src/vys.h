@@ -47,8 +47,8 @@ struct vys_signal_msg_payload {
 	uint8_t stations[2];
 	uint8_t spectral_window_index;
 	uint8_t stokes_index;
-	uint8_t num_spectra;
 	uint8_t mr_id;
+	uint8_t num_spectra;
 	struct vys_spectrum_info infos[];
 };
 
