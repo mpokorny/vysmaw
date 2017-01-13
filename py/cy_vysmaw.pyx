@@ -493,7 +493,7 @@ cdef class ValidBufferMessage(Message):
 
     @property
     def buffer(self):
-        return <float[:self.buffer_size()]>self._c_message[0].content.\
+        return <float[:self.buffer_size]>self._c_message[0].content.\
             valid_buffer.buffer
 
 cdef class DigestFailureMessage(Message):
