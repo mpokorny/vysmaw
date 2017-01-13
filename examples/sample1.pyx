@@ -19,6 +19,7 @@
 from vysmaw cimport *
 from libc.stdint cimport *
 import cy_vysmaw
+import sys
 
 # A predicate that selects no spectra. The "pass_filter" array elements _must_
 # be assigned values, as they are always uninitialized at function entry.
@@ -28,8 +29,12 @@ def cb(uint8_t[:] stns, uint8_t spw, uint8_t sto,
         pass_filter[i] = False
     return
 
-# Use default configuration
-config = cy_vysmaw.Configuration()
+# Use configuration file if provided on command line, otherwise use defaults.
+if len(sys.argv) > 1:
+    config = cy_vysmaw.Configuration(sys.argv[1])
+else:
+    config = cy_vysmaw.Configuration()
+    # Use default configuration
 
 # Allocate client resources
 handle, consumers = config.start_py([cb])

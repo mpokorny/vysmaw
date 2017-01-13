@@ -23,6 +23,7 @@ from cy_vysmaw cimport *
 from cpython cimport PyErr_CheckSignals
 import cy_vysmaw
 import signal
+import sys
 
 cdef unsigned long num_cbs = 0
 DEF on_period = 1000000uLL
@@ -40,8 +41,12 @@ cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto,
     ncb[0] += 1
     return
 
-# Use default configuration
-cdef Configuration config = cy_vysmaw.Configuration()
+# Use configuration file if provided on command line, otherwise use defaults.
+cdef Configuration config
+if len(sys.argv) > 1:
+    config = cy_vysmaw.Configuration(sys.argv[1])
+else:
+    config = cy_vysmaw.Configuration()
 
 # keep track of number of spectra received
 num_spectra = 0

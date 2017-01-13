@@ -21,6 +21,7 @@ from libc.stdint cimport *
 from libc.stdlib cimport *
 from cy_vysmaw cimport *
 import cy_vysmaw
+import sys
 
 # A predicate that selects no spectra. The "pass_filter" array elements _must_
 # be assigned values, as they are always uninitialized at function entry.
@@ -31,8 +32,12 @@ cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto,
         pass_filter[i] = False
     return
 
-# Use default configuration
-cdef Configuration config = cy_vysmaw.Configuration()
+# Use configuration file if provided on command line, otherwise use defaults.
+cdef Configuration config
+if len(sys.argv) > 1:
+    config = cy_vysmaw.Configuration(sys.argv[1])
+else:
+    config = cy_vysmaw.Configuration()
 
 # Allocate client resources
 cdef vysmaw_spectrum_filter *f = \
