@@ -404,7 +404,7 @@ cdef class DataInfo:
 
     @property
     def stations(self):
-        return self._c_info[0].stations
+        return <uint8_t[:2]>self._c_info[0].stations
 
     @property
     def spectral_window_index(self):
