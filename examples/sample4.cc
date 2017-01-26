@@ -19,7 +19,7 @@
 #include <array>
 #include <memory>
 #include <csignal>
-#include <map>
+#include <unordered_map>
 #include <algorithm>
 #include <vysmaw.h>
 
@@ -74,18 +74,19 @@ pop(vysmaw_message_queue q)
 void
 show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
-	map<enum vysmaw_message_type,string> names;
-	names[VYSMAW_MESSAGE_VALID_BUFFER] = "valid-buffer";
-	names[VYSMAW_MESSAGE_DIGEST_FAILURE] = "digest-failure";
-	names[VYSMAW_MESSAGE_QUEUE_OVERFLOW] = "queue-overflow";
-	names[VYSMAW_MESSAGE_DATA_BUFFER_STARVATION] = "data-buffer-starvation";
-	names[VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION] = "signal-buffer-starvation";
-	names[VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE] = "signal-receive-failure";
-	names[VYSMAW_MESSAGE_RDMA_READ_FAILURE] = "rdma-read-failure";
-	names[VYSMAW_MESSAGE_END] = "end";
+	const unordered_map<enum vysmaw_message_type,string> names = {
+		{VYSMAW_MESSAGE_VALID_BUFFER, "valid-buffer"},
+		{VYSMAW_MESSAGE_DIGEST_FAILURE, "digest-failure"},
+		{VYSMAW_MESSAGE_QUEUE_OVERFLOW, "queue-overflow"},
+		{VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
+		{VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
+		{VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
+		{VYSMAW_MESSAGE_RDMA_READ_FAILURE, "rdma-read-failure"},
+		{VYSMAW_MESSAGE_END, "end"},
+	};
 
 	size_t max_name_len = 0;
-	for (auto n : names)
+	for (auto&& n : names)
 		max_name_len = max(n.second.length(), max_name_len);
 
 	const enum vysmaw_message_type msg_types[] = {
@@ -99,7 +100,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 		VYSMAW_MESSAGE_END
 	};
 
-	for (auto m : msg_types) {
+	for (auto&& m : msg_types) {
 		cout.width(max_name_len);
 		cout << right << names.at(m);
 		cout << ": " << counters[m] << endl;
