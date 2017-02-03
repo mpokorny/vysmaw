@@ -114,13 +114,9 @@ main(int argc, char *argv[])
 
 	// initialize vysmaw configuration
 	if (argc == 2)
-		config = move(
-			unique_ptr<struct vysmaw_configuration>(
-				vysmaw_configuration_new(argv[1])));
+		config.reset(vysmaw_configuration_new(argv[1]));
 	else
-		config = move(
-			unique_ptr<struct vysmaw_configuration>(
-				vysmaw_configuration_new(nullptr)));
+		config.reset(vysmaw_configuration_new(nullptr));
 
 	// one consumer, using filter()
 	struct vysmaw_consumer consumer = {
