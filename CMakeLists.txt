@@ -9,6 +9,7 @@ set(
   ${CMAKE_MODULE_PATH}
   ${CMAKE_CURRENT_LIST_DIR}/cmake/Modules)
 
+# set standard compiler flags
 set(CMAKE_C_FLAGS
   "${CMAKE_C_FLAGS} -fno-short-enums")
 set(CMAKE_C_FLAGS_RELEASE
