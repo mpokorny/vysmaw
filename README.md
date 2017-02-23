@@ -128,8 +128,9 @@ that `DESTDIR` only sets a prefix to the value of `CMAKE_INSTALL_PREFIX` (which
 defaults to `/usr/local`.)
 
 As an example that illustrates the effect of the two variables used to define
-the top-level the installation directory, the following will install files under
-`/tmp/foo/vys/include`, `/tmp/foo/vys/lib`, and `/tmp/foo/vys/etc`.
+the top-level installation directory, the following commands will result in
+files installed under `/tmp/foo/vys/include`, `/tmp/foo/vys/lib`, and
+`/tmp/foo/vys/etc`.
 
 ```shell
 cmake -DCMAKE_INSTALL_PREFIX=/vys # ... truncated
