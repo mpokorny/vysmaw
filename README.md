@@ -118,7 +118,7 @@ optional. As an alternative to, or in addition to, installing these files on a
 system, they may be used as templates by application developers for
 application-specific configurations.
 
-## Installing
+## Installation
 
 To install the project libraries, include files and configuration files, a make
 install target is provided. Note that the install directory may be set in the
