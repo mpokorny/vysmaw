@@ -8,6 +8,24 @@ pkg_check_modules(GTHREAD2 REQUIRED gthread-2.0)
 set(CMAKE_C_FLAGS
   "${CMAKE_C_FLAGS} -Wall -Werror")
 
+# use, i.e. don't skip the full RPATH for the build tree
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+
+# when building, don't use the install RPATH already (but later on when
+# installing)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+
+# add the automatically determined parts of the RPATH which point to directories
+# outside the build tree to the install RPATH
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+# the RPATH to be used when installing, but only if it's not a system directory
+list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES
+  "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
+if("${isSystemDir}" STREQUAL "-1")
+  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+endif("${isSystemDir}" STREQUAL "-1")
+
 # vys library
 add_library(vys SHARED
   vys_private.c
@@ -47,13 +65,18 @@ target_link_libraries(vysmaw
   ${VERBS_LIBRARY}
   ${RDMACM_LIBRARY})
 
-# install rule
+# install rules
+
 install(TARGETS vys vysmaw
   LIBRARY DESTINATION lib
   CONFIGURATIONS Release
   PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE
-              GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+  GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 install(FILES vys.h vysmaw.h
   DESTINATION include
   CONFIGURATIONS Release
   PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)
+install(FILES vys.conf vysmaw.conf
+  DESTINATION etc
+  CONFIGURATIONS Release
+  PERMISSIONS OWNER_WRITE OWNER_READ GROUP_WRITE GROUP_READ WORLD_READ)
