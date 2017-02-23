@@ -87,9 +87,9 @@ cmake .. # replace with your cmake command
 
 ## Build artifacts
 
-Note that there is no "install" makefile target yet. If you intend to build and
-run sample code, you may have to set PYTHONPATH to point to the `py`
-sub-directory of the build directory.
+Note that if you intend to build and run sample code from your own source tree,
+you may have to set PYTHONPATH to point to the `py` sub-directory of the build
+directory.
 
 ### vysmaw
 
@@ -117,6 +117,27 @@ the source tree. These may be installed by the user, but are operationally
 optional. As an alternative to, or in addition to, installing these files on a
 system, they may be used as templates by application developers for
 application-specific configurations.
+
+## Installing
+
+To install the project libraries, include files and configuration files, a make
+install target is provided. Note that the install directory may be set in the
+call to cmake, using the `CMAKE_INSTALL_PREFIX` variable. An additional option
+is to use the `DESTDIR` variable in the `make install` command, but keep in mind
+that `DESTDIR` only sets a prefix to the value of `CMAKE_INSTALL_PREFIX` (which
+defaults to `/usr/local`.)
+
+As an example that illustrates the effect of the two variables used to define
+the top-level the installation directory, the following will install files under
+`/tmp/foo/vys/include`, `/tmp/foo/vys/lib`, and `/tmp/foo/vys/etc`.
+
+```shell
+cmake -DCMAKE_INSTALL_PREFIX=/vys # ... truncated
+make DESTDIR=/tmp/foo install
+```
+
+Finally, note that for a debug build, nothing will be installed when running
+`make install`.
 
 ## Interfaces
 
