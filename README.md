@@ -9,8 +9,8 @@
   * a library for receiving a fast stream of visbility data
 
 The vysmaw client library is intended to facilitate the development of code for
-processes to tap into the fast visibility stream on the National Radio
-Astronomy's Very Large Array correlator back-end InfiniBand network. Please be
+processes to tap into the fast visibility stream on the National Radio Astronomy
+Observatory's Very Large Array correlator back-end InfiniBand network. Please be
 aware that this library, as well as the implementation of the fast visibility
 stream at the VLA, is experimental in nature.
 
