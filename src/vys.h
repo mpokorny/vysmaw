@@ -66,8 +66,10 @@ struct vys_signal_msg {
 	 ((n) * sizeof(struct vys_spectrum_info)))
 
 #define MAX_VYS_SIGNAL_MSG_LENGTH(sz)			\
-	(((sz) - sizeof(struct vys_signal_msg)) /	\
-	 sizeof(struct vys_spectrum_info))
+	(((sz) > sizeof(struct vys_signal_msg))		\
+	 ? (((sz) - sizeof(struct vys_signal_msg))	\
+	    / sizeof(struct vys_spectrum_info))		\
+	 : 0)
 
 struct vys_error_record {
 	int errnum;
