@@ -57,13 +57,17 @@ struct vys_signal_msg {
 	struct vys_signal_msg_payload payload;
 };
 
-#define SIZEOF_VYS_SIGNAL_MSG_PAYLOAD(n)                                \
-	(sizeof(struct vys_signal_msg_payload) + \
+#define SIZEOF_VYS_SIGNAL_MSG_PAYLOAD(n)		\
+	(sizeof(struct vys_signal_msg_payload) +	\
 	 ((n) * sizeof(struct vys_spectrum_info)))
 
-#define SIZEOF_VYS_SIGNAL_MSG(n)                                        \
-	(sizeof(struct vys_signal_msg) + \
+#define SIZEOF_VYS_SIGNAL_MSG(n)				\
+	(sizeof(struct vys_signal_msg) +			\
 	 ((n) * sizeof(struct vys_spectrum_info)))
+
+#define MAX_VYS_SIGNAL_MSG_LENGTH(sz)			\
+	(((sz) - sizeof(struct vys_signal_msg)) /	\
+	 sizeof(struct vys_spectrum_info))
 
 struct vys_error_record {
 	int errnum;
