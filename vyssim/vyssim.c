@@ -31,7 +31,7 @@
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <sys/timerfd.h>
-#include <buffer_pool.h>
+#include <vys_buffer_pool.h>
 
 #if GLIB_CHECK_VERSION(2,32,0)
 # define THREAD_INIT while (false)
@@ -133,7 +133,7 @@ struct mcast_context {
 	uint32_t remote_qpn;
 	uint32_t remote_qkey;
 	struct ibv_mr *mr;
-	struct buffer_pool *signal_msg_pool;
+	struct vys_buffer_pool *signal_msg_pool;
 	unsigned signal_msg_num_spectra;
 	unsigned num_wr;
 	unsigned max_wr;
@@ -345,7 +345,7 @@ set_nonblocking(int fd)
 static void
 free_signal_msg(struct mcast_context *ctx, struct vys_signal_msg *msg)
 {
-	buffer_pool_push(ctx->signal_msg_pool, msg);
+	vys_buffer_pool_push(ctx->signal_msg_pool, msg);
 }
 
 static void
@@ -384,7 +384,7 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
 	struct server_context *server_ctx = &(vyssim->server_ctx);
 
 	struct vys_signal_msg *result =
-		buffer_pool_pop(mcast_ctx->signal_msg_pool);
+		vys_buffer_pool_pop(mcast_ctx->signal_msg_pool);
 	struct vys_signal_msg_payload *payload = &(result->payload);
 	payload->sockaddr = vyssim->sockaddr;
 	payload->mr_id = 0;
@@ -594,7 +594,7 @@ create_mcast_resources(struct mcast_context *ctx,
 
 	/* reserve and register memory for signal_msg instances */
 	ctx->signal_msg_pool =
-		buffer_pool_new(
+		vys_buffer_pool_new(
 			SIGNAL_MSG_BLOCK_LENGTH,
 			SIZEOF_VYS_SIGNAL_MSG(ctx->signal_msg_num_spectra));
 	ctx->mr = rdma_reg_msgs(
@@ -1293,7 +1293,7 @@ destroy_mcast_resources(struct mcast_context *ctx,
 		ibv_destroy_comp_channel(ctx->comp_channel);
 
 	if (ctx->signal_msg_pool != NULL)
-		buffer_pool_free(ctx->signal_msg_pool);
+		vys_buffer_pool_free(ctx->signal_msg_pool);
 	if (ctx->id != NULL) {
 		rc = rdma_destroy_id(ctx->id);
 		if (G_UNLIKELY(rc != 0)) {

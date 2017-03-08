@@ -121,7 +121,8 @@ spectrum_selector(struct spectrum_selector_context *context)
 			if (selected) {
 				async_queue_push(context->read_request_queue, msg);
 			} else {
-				buffer_pool_push(context->signal_msg_buffers, msg->signal_msg);
+				vys_buffer_pool_push(context->signal_msg_buffers,
+				                     msg->signal_msg);
 				data_path_message_free(msg);
 			}
 			break;

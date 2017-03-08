@@ -431,7 +431,8 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 		if (G_LIKELY(context->state == STATE_RUN))
 			rc = on_signal_message(
 				context, msg->signal_msg, msg->consumers, error_record);
-		buffer_pool_push(context->shared->signal_msg_buffers, msg->signal_msg);
+		vys_buffer_pool_push(context->shared->signal_msg_buffers,
+		                     msg->signal_msg);
 		data_path_message_free(msg);
 		break;
 
@@ -1261,7 +1262,7 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	data_path_message_free(context.end_msg);
 
 	if (context.shared->signal_msg_buffers != NULL)
-		buffer_pool_free(context.shared->signal_msg_buffers);
+		vys_buffer_pool_free(context.shared->signal_msg_buffers);
 
 	g_checksum_free(context.checksum);
 	g_array_free(context.pollfds, TRUE);

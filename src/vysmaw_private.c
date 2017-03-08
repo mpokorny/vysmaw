@@ -420,7 +420,7 @@ spectrum_buffer_pool_new(size_t buffer_size, size_t num_buffers)
 	struct spectrum_buffer_pool *result =
 		g_new(struct spectrum_buffer_pool, 1);
 	result->refcount = 1;
-	result->pool = buffer_pool_new(num_buffers, buffer_size);
+	result->pool = vys_buffer_pool_new(num_buffers, buffer_size);
 	return result;
 }
 
@@ -435,7 +435,7 @@ void
 spectrum_buffer_pool_unref(struct spectrum_buffer_pool *buffer_pool)
 {
 	if (g_atomic_int_dec_and_test(&buffer_pool->refcount)) {
-		buffer_pool_free(buffer_pool->pool);
+		vys_buffer_pool_free(buffer_pool->pool);
 		g_free(buffer_pool);
 	}
 }
@@ -444,7 +444,7 @@ void *
 spectrum_buffer_pool_pop(struct spectrum_buffer_pool *buffer_pool)
 {
 	spectrum_buffer_pool_ref(buffer_pool);
-	void *result = buffer_pool_pop(buffer_pool->pool);
+	void *result = vys_buffer_pool_pop(buffer_pool->pool);
 	if (result == NULL) spectrum_buffer_pool_unref(buffer_pool);
 	return result;
 }
@@ -453,7 +453,7 @@ void
 spectrum_buffer_pool_push(struct spectrum_buffer_pool *buffer_pool,
                           void *buffer)
 {
-	buffer_pool_push(buffer_pool->pool, buffer);
+	vys_buffer_pool_push(buffer_pool->pool, buffer);
 	spectrum_buffer_pool_unref(buffer_pool);
 }
 
@@ -496,7 +496,7 @@ GSequenceIter *
 spectrum_buffer_pool_collection_lookup_iter(
 	spectrum_buffer_pool_collection collection, size_t buffer_size)
 {
-	struct buffer_pool b = {
+	struct vys_buffer_pool b = {
 		.buffer_size = buffer_size
 	};
 	struct spectrum_buffer_pool s = {
@@ -678,7 +678,7 @@ init_consumer(vysmaw_spectrum_filter filter, void *user_data,
 
 void
 init_signal_receiver(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-                     struct buffer_pool **signal_msg_buffers,
+                     struct vys_buffer_pool **signal_msg_buffers,
                      unsigned *signal_msg_num_spectra, int loop_fd)
 {
 	struct signal_receiver_context *context =
@@ -697,7 +697,7 @@ init_signal_receiver(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 void
 init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
                        struct async_queue *read_request_queue,
-                       struct buffer_pool *signal_msg_buffers,
+                       struct vys_buffer_pool *signal_msg_buffers,
                        unsigned signal_msg_num_spectra)
 {
 	struct spectrum_selector_context *context =
@@ -715,7 +715,7 @@ init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 void
 init_spectrum_reader(vysmaw_handle handle,
                      struct async_queue *read_request_queue,
-                     struct buffer_pool *signal_msg_buffers,
+                     struct vys_buffer_pool *signal_msg_buffers,
                      unsigned signal_msg_num_spectra, int loop_fd)
 {
 	struct spectrum_reader_context *context =
@@ -753,7 +753,7 @@ init_service_threads(vysmaw_handle handle)
 		return rc;
 	}
 
-	struct buffer_pool *signal_msg_buffers;
+	struct vys_buffer_pool *signal_msg_buffers;
 	unsigned signal_msg_num_spectra;
 	GAsyncQueue *signal_msg_queue = g_async_queue_new();
 	init_signal_receiver(handle, signal_msg_queue, &signal_msg_buffers,

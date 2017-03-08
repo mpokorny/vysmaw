@@ -109,7 +109,7 @@ vysmaw_start(const struct vysmaw_configuration *config,
 	if (result->config.error_record == NULL) {
 		*(unsigned *)&result->config.max_spectrum_buffer_size =
 			MAX(result->config.max_spectrum_buffer_size,
-			    BUFFER_POOL_MIN_BUFFER_SIZE);
+			    VYS_BUFFER_POOL_MIN_BUFFER_SIZE);
 		if (result->config.single_spectrum_buffer_pool) {
 			size_t num_buffers =
 				result->config.spectrum_buffer_pool_size

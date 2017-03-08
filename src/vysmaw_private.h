@@ -21,7 +21,7 @@
 #include <vysmaw.h>
 #include <vys.h>
 #include <vys_private.h>
-#include <buffer_pool.h>
+#include <vys_buffer_pool.h>
 #include <async_queue.h>
 #include <glib.h>
 #include <infiniband/verbs.h>
@@ -102,7 +102,7 @@ struct _vysmaw_message_queue {
 
 struct spectrum_buffer_pool {
 	int refcount;
-	struct buffer_pool *pool;
+	struct vys_buffer_pool *pool;
 };
 
 typedef GSequence *spectrum_buffer_pool_collection;
@@ -267,18 +267,18 @@ extern void init_consumer(
 	__attribute__((nonnull));
 extern void init_signal_receiver(
 	vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-	struct buffer_pool **signal_msg_buffers,
+	struct vys_buffer_pool **signal_msg_buffers,
 	unsigned *signal_msg_num_spectra, int loop_fd)
 	__attribute__((nonnull));
 extern void init_spectrum_selector(
 	vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 	struct async_queue *read_request_queue,
-	struct buffer_pool *signal_msg_buffers,
+	struct vys_buffer_pool *signal_msg_buffers,
 	unsigned signal_msg_num_spectra)
 	__attribute__((nonnull));
 extern void init_spectrum_reader(
 	vysmaw_handle handle, struct async_queue *read_request_queue,
-	struct buffer_pool *signal_msg_buffers, unsigned signal_msg_num_spectra,
+	struct vys_buffer_pool *signal_msg_buffers, unsigned signal_msg_num_spectra,
 	int loop_fd)
 	__attribute__((nonnull));
 extern int init_service_threads(vysmaw_handle handle)

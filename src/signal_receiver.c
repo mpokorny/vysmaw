@@ -332,7 +332,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 
 	/* create signal message buffer pool */
 	context->shared->signal_msg_buffers =
-		buffer_pool_new(
+		vys_buffer_pool_new(
 			(context->shared->handle->config.signal_message_pool_size
 			 / sizeof_signal_msg),
 			sizeof_signal_msg);
@@ -517,7 +517,7 @@ new_wr(struct signal_receiver_context_ *context, struct recv_wr **wrs)
 {
 	bool result;
 	struct vys_signal_msg *buff =
-		buffer_pool_pop(context->shared->signal_msg_buffers);
+		vys_buffer_pool_pop(context->shared->signal_msg_buffers);
 	if (buff != NULL) {
 		*wrs = recv_wr_prepend_new(
 			*wrs,
@@ -569,8 +569,10 @@ poll_completions(struct signal_receiver_context_ *context,
 					dp_msg->typ = DATA_PATH_SIGNAL_MSG;
 					dp_msg->signal_msg = s_msg;
 				} else {
-					/* failed receive, put signal message buffer back into pool */
-					buffer_pool_push(context->shared->signal_msg_buffers, s_msg);
+					/* failed receive, put signal message buffer back into
+					 * pool */
+					vys_buffer_pool_push(context->shared->signal_msg_buffers,
+					                     s_msg);
 					/* notify downstream of receive failure */
 					dp_msg->typ = DATA_PATH_RECEIVE_FAIL;
 					dp_msg->wc_status = context->wcs[i].status;
@@ -582,7 +584,8 @@ poll_completions(struct signal_receiver_context_ *context,
 			for (int i = 0; i < nc; ++i) {
 				struct vys_signal_msg *s_msg =
 					(struct vys_signal_msg *)context->wcs[i].wr_id;
-				buffer_pool_push(context->shared->signal_msg_buffers, s_msg);
+				vys_buffer_pool_push(context->shared->signal_msg_buffers,
+				                     s_msg);
 			}
 		}
 	}

@@ -20,12 +20,13 @@
 
 #include <vysmaw_private.h>
 #include <async_queue.h>
+#include <vys_buffer_pool.h>
 
 struct spectrum_reader_context {
 	vysmaw_handle handle;
 
 	unsigned signal_msg_num_spectra;
-	struct buffer_pool *signal_msg_buffers;
+	struct vys_buffer_pool *signal_msg_buffers;
 
 	struct async_queue *read_request_queue;
 

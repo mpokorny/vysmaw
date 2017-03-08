@@ -29,6 +29,7 @@ endif("${isSystemDir}" STREQUAL "-1")
 # vys library
 add_library(vys SHARED
   vys_private.c
+  vys_buffer_pool.c
   vys.c)
 target_include_directories(vys PRIVATE
   ${GLIB2_INCLUDE_DIRS}
@@ -45,7 +46,6 @@ target_link_libraries(vys
 # vysmaw library
 add_library(vysmaw SHARED
   vysmaw_private.c
-  buffer_pool.c
   signal_receiver.c
   spectrum_selector.c
   spectrum_reader.c
