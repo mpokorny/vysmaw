@@ -35,9 +35,6 @@ vys_buffer_pool_new(size_t num_buffers, size_t buffer_size)
 		next_buff = (void *)buff + buffer_size;
 	}
 	buff->next = NULL;
-#if VYS_BUFFER_POOL_LOCK
-	g_mutex_init(&result->lock);
-#endif
 	return result;
 }
 
@@ -45,8 +42,5 @@ void
 vys_buffer_pool_free(struct vys_buffer_pool *buffer_pool)
 {
 	g_free(buffer_pool->pool);
-#if VYS_BUFFER_POOL_LOCK
-	g_mutex_clear(&buffer_pool->lock);
-#endif
 	g_free(buffer_pool);
 }

@@ -31,22 +31,11 @@ struct vys_buffer_stack {
 	struct vys_buffer_stack *next;
 };
 
-/* DO NOT CHANGE THE FOLLOWING MACRO VALUE -- it exists only for historical or
- * possibly limited, isolated testing purposes. Now that this module is exported
- * in a library, it really should not exist.
- *
- * define VYS_BUFFER_POOL_LOCK for an implementation using a mutex lock, instead
- * of the default lockless implementation */
-#undef VYS_BUFFER_POOL_LOCK
-
 struct vys_buffer_pool {
 	size_t buffer_size;
 	size_t pool_size;
 	void *pool;
 	struct vys_buffer_stack *root;
-#if VYS_BUFFER_POOL_LOCK
-	GMutex lock;
-#endif
 };
 
 #define VYS_BUFFER_POOL_MIN_BUFFER_SIZE (sizeof(struct vys_buffer_stack))
@@ -62,31 +51,18 @@ static inline void
 vys_buffer_pool_push(struct vys_buffer_pool *buffer_pool, void *data_p)
 {
 	struct vys_buffer_stack *new_root = data_p;
-#if VYS_BUFFER_POOL_LOCK
-	g_mutex_lock(&buffer_pool->lock);
-	new_root->next = buffer_pool->root;
-	buffer_pool->root = new_root;
-	g_mutex_unlock(&buffer_pool->lock);
-#else
 	struct vys_buffer_stack *root;
 	do {
 		root = g_atomic_pointer_get(&buffer_pool->root);
 		new_root->next = root;
 	} while (!g_atomic_pointer_compare_and_exchange(
 		         (void **)&buffer_pool->root, root, new_root));
-#endif
 }
 
 static inline void *
 vys_buffer_pool_pop(struct vys_buffer_pool *buffer_pool)
 {
 	struct vys_buffer_stack *root;
-#if VYS_BUFFER_POOL_LOCK
-	g_mutex_lock(&buffer_pool->lock);
-	root = buffer_pool->root;
-	buffer_pool->root = (root ? root->next : root);
-	g_mutex_unlock(&buffer_pool->lock);
-#else
 	struct vys_buffer_stack *new_root;
 	do {
 		root = g_atomic_pointer_get(&buffer_pool->root);
@@ -94,7 +70,6 @@ vys_buffer_pool_pop(struct vys_buffer_pool *buffer_pool)
 	} while (root != NULL &&
 	         !g_atomic_pointer_compare_and_exchange(
 		         (void **)&buffer_pool->root, root, new_root));
-#endif
 	if (root) root->next = NULL;
 	return root;
 }
