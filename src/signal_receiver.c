@@ -323,10 +323,10 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		VERB_ERR(error_record, rc, "ibv_query_port");
 		return -1;
 	}
-	int mtu = 1 << (port_attr.active_mtu + 7);
+	unsigned mtu = 1u << (port_attr.active_mtu + 7);
 	/* set size of signal buffers to be maximum possible given mtu */
 	context->shared->signal_msg_num_spectra =
-		(mtu - sizeof(struct vys_signal_msg)) / sizeof(struct vys_spectrum_info);
+		MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
 	size_t sizeof_signal_msg =
 		SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
 
