@@ -32,10 +32,11 @@ struct vys_buffer_stack {
 };
 
 struct vys_buffer_pool {
-  size_t buffer_size;
-  size_t pool_size;
-  void *pool;
-  struct vys_buffer_stack *root;
+	size_t buffer_size;
+	size_t pool_size;
+	void *pool;
+	struct vys_buffer_stack *root;
+	GMutex lock;
 };
 
 #define VYS_BUFFER_POOL_MIN_BUFFER_SIZE (sizeof(struct vys_buffer_stack))
@@ -50,28 +51,23 @@ void vys_buffer_pool_free(struct vys_buffer_pool *buffer_pool)
 static inline void
 vys_buffer_pool_push(struct vys_buffer_pool *buffer_pool, void *data_p)
 {
-  struct vys_buffer_stack *new_root = data_p;
-  struct vys_buffer_stack *root;
-  do {
-    root = g_atomic_pointer_get(&buffer_pool->root);
-    new_root->next = root;
-  } while (!g_atomic_pointer_compare_and_exchange(
-             (void **)&buffer_pool->root, root, new_root));
+	struct vys_buffer_stack *new_root = data_p;
+	g_mutex_lock(&buffer_pool->lock);
+	new_root->next = buffer_pool->root;
+	buffer_pool->root = new_root;
+	g_mutex_unlock(&buffer_pool->lock);
 }
 
 static inline void *
 vys_buffer_pool_pop(struct vys_buffer_pool *buffer_pool)
 {
-  struct vys_buffer_stack *root;
-  struct vys_buffer_stack *new_root;
-  do {
-    root = g_atomic_pointer_get(&buffer_pool->root);
-    new_root = (root ? root->next : root);
-  } while (root != NULL &&
-           !g_atomic_pointer_compare_and_exchange(
-             (void **)&buffer_pool->root, root, new_root));
-  if (root) root->next = NULL;
-  return root;
+	struct vys_buffer_stack *root;
+	g_mutex_lock(&buffer_pool->lock);
+	root = buffer_pool->root;
+	buffer_pool->root = (root ? root->next : root);
+	g_mutex_unlock(&buffer_pool->lock);
+	if (root) root->next = NULL;
+	return root;
 }
 
 static inline void *

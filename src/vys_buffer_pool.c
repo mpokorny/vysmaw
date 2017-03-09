@@ -21,26 +21,28 @@
 struct vys_buffer_pool *
 vys_buffer_pool_new(size_t num_buffers, size_t buffer_size)
 {
-  g_assert(buffer_size >= sizeof(struct vys_buffer_stack));
-  struct vys_buffer_pool *result = g_new(struct vys_buffer_pool, 1);
-  result->buffer_size = buffer_size;
-  result->pool = g_malloc_n(num_buffers, buffer_size);
-  result->pool_size = num_buffers * buffer_size;
-  result->root = (struct vys_buffer_stack *)result->pool;
-  struct vys_buffer_stack *buff = result->root;
-  struct vys_buffer_stack *next_buff = (void *)buff + buffer_size;
-  for (size_t i = num_buffers; i > 1; --i) {
-    buff->next = next_buff;
-    buff = next_buff;
-    next_buff = (void *)buff + buffer_size;
-  }
-  buff->next = NULL;
-  return result;
+	g_assert(buffer_size >= sizeof(struct vys_buffer_stack));
+	struct vys_buffer_pool *result = g_new(struct vys_buffer_pool, 1);
+	result->buffer_size = buffer_size;
+	result->pool = g_malloc_n(num_buffers, buffer_size);
+	result->pool_size = num_buffers * buffer_size;
+	result->root = (struct vys_buffer_stack *)result->pool;
+	struct vys_buffer_stack *buff = result->root;
+	struct vys_buffer_stack *next_buff = (void *)buff + buffer_size;
+	for (size_t i = num_buffers; i > 1; --i) {
+		buff->next = next_buff;
+		buff = next_buff;
+		next_buff = (void *)buff + buffer_size;
+	}
+	buff->next = NULL;
+	g_mutex_init(&result->lock);
+	return result;
 }
 
 void
 vys_buffer_pool_free(struct vys_buffer_pool *buffer_pool)
 {
-  g_free(buffer_pool->pool);
-  g_free(buffer_pool);
+	g_free(buffer_pool->pool);
+	g_mutex_clear(&buffer_pool->lock);
+	g_free(buffer_pool);
 }
