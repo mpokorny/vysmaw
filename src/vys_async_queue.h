@@ -15,32 +15,33 @@
 // You should have received a copy of the GNU General Public License along with
 // vysmaw.  If not, see <http://www.gnu.org/licenses/>.
 //
-#ifndef ASYNC_QUEUE_H_
-#define ASYNC_QUEUE_H_
+#ifndef VYS_ASYNC_QUEUE_H_
+#define VYS_ASYNC_QUEUE_H_
 
 #include <glib.h>
 
-struct async_queue {
+struct vys_async_queue {
 	int refcount;
 	int fds[2];
 	GAsyncQueue *q;
 };
 
-extern struct async_queue *async_queue_new()
+extern struct vys_async_queue *vys_async_queue_new()
 	__attribute__((malloc));
-extern struct async_queue *async_queue_new_full(GDestroyNotify destroy)
+extern struct vys_async_queue *vys_async_queue_new_full(GDestroyNotify destroy)
 	__attribute__((nonnull,malloc));
-extern struct async_queue *async_queue_ref(struct async_queue *queue)
+extern struct vys_async_queue *vys_async_queue_ref(
+	struct vys_async_queue *queue)
 	__attribute__((nonnull,returns_nonnull));
-extern void async_queue_unref(struct async_queue *queue)
+extern void vys_async_queue_unref(struct vys_async_queue *queue)
 	__attribute__((nonnull));
-extern void async_queue_push(struct async_queue *queue, void *item)
+extern void vys_async_queue_push(struct vys_async_queue *queue, void *item)
 	__attribute__((nonnull));
-extern void *async_queue_pop(struct async_queue *queue)
+extern void *vys_async_queue_pop(struct vys_async_queue *queue)
 	__attribute__((nonnull,returns_nonnull));
-extern int async_queue_pop_fd(struct async_queue *queue)
+extern int vys_async_queue_pop_fd(struct vys_async_queue *queue)
 	__attribute__((nonnull));
-extern int async_queue_push_fd(struct async_queue *queue)
+extern int vys_async_queue_push_fd(struct vys_async_queue *queue)
 	__attribute__((nonnull));
 
-#endif /* ASYNC_QUEUE_H_ */
+#endif /* VYS_ASYNC_QUEUE_H_ */

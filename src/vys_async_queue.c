@@ -21,15 +21,15 @@
 # include <fcntl.h>
 #endif
 #include <string.h>
-#include <async_queue.h>
+#include <vys_async_queue.h>
 
 #define POP_FD(q) ((q)->fds[0])
 #define PUSH_FD(q) ((q)->fds[1])
 
-struct async_queue *
+struct vys_async_queue *
 new_no_queue()
 {
-	struct async_queue *result = g_try_new(struct async_queue, 1);
+	struct vys_async_queue *result = g_try_new(struct vys_async_queue, 1);
 	if (G_LIKELY(result != NULL)) {
 		result->refcount = 1;
 		int rc;
@@ -52,33 +52,33 @@ new_no_queue()
 	return result;
 }
 
-struct async_queue *
-async_queue_new()
+struct vys_async_queue *
+vys_async_queue_new()
 {
-	struct async_queue *result = new_no_queue();
+	struct vys_async_queue *result = new_no_queue();
 	if (G_LIKELY(result != NULL))
 		result->q = g_async_queue_new();
 	return result;
 }
 
-struct async_queue *
-async_queue_new_full(GDestroyNotify destroy)
+struct vys_async_queue *
+vys_async_queue_new_full(GDestroyNotify destroy)
 {
-	struct async_queue *result = new_no_queue();
+	struct vys_async_queue *result = new_no_queue();
 	if (G_LIKELY(result != NULL))
 		result->q = g_async_queue_new_full(destroy);
 	return result;
 }
 
-struct async_queue *
-async_queue_ref(struct async_queue *queue)
+struct vys_async_queue *
+vys_async_queue_ref(struct vys_async_queue *queue)
 {
 	g_atomic_int_inc(&queue->refcount);
 	return queue;
 }
 
 void
-async_queue_unref(struct async_queue *queue)
+vys_async_queue_unref(struct vys_async_queue *queue)
 {
 	if (g_atomic_int_dec_and_test(&queue->refcount)) {
 		g_async_queue_unref(queue->q);
@@ -92,7 +92,7 @@ async_queue_unref(struct async_queue *queue)
 }
 
 void
-async_queue_push(struct async_queue *queue, void *item)
+vys_async_queue_push(struct vys_async_queue *queue, void *item)
 {
 	g_async_queue_push(queue->q, item);
 	unsigned u;
@@ -104,11 +104,11 @@ async_queue_push(struct async_queue *queue, void *item)
 		if (G_LIKELY(n >= 0)) w += n;
 	} while (errno == EINTR || w != sizeof(u));
 	if (G_UNLIKELY(errno != 0))
-		g_error("async_queue_push write failed: %s", strerror(errno));
+		g_error("vys_async_queue_push write failed: %s", strerror(errno));
 }
 
 void *
-async_queue_pop(struct async_queue *queue)
+vys_async_queue_pop(struct vys_async_queue *queue)
 {
 	unsigned u;
 	size_t r = 0;
@@ -119,18 +119,18 @@ async_queue_pop(struct async_queue *queue)
 		if (G_LIKELY(n >= 0)) r += n;
 	} while (errno == EINTR || r != sizeof(u));
 	if (G_UNLIKELY(errno != 0))
-		g_error("async_queue_pop read failed: %s", strerror(errno));
+		g_error("vys_async_queue_pop read failed: %s", strerror(errno));
 	return g_async_queue_pop(queue->q);
 }
 
 int
-async_queue_pop_fd(struct async_queue *queue)
+vys_async_queue_pop_fd(struct vys_async_queue *queue)
 {
 	return POP_FD(queue);
 }
 
 int
-async_queue_push_fd(struct async_queue *queue)
+vys_async_queue_push_fd(struct vys_async_queue *queue)
 {
 	return PUSH_FD(queue);
 }

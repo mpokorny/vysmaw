@@ -19,8 +19,8 @@
 #define SPECTRUM_READER_H_
 
 #include <vysmaw_private.h>
-#include <async_queue.h>
 #include <vys_buffer_pool.h>
+#include <vys_async_queue.h>
 
 struct spectrum_reader_context {
 	vysmaw_handle handle;
@@ -28,7 +28,7 @@ struct spectrum_reader_context {
 	unsigned signal_msg_num_spectra;
 	struct vys_buffer_pool *signal_msg_buffers;
 
-	struct async_queue *read_request_queue;
+	struct vys_async_queue *read_request_queue;
 
 	int loop_fd;
 };

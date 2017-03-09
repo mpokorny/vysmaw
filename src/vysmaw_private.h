@@ -22,7 +22,7 @@
 #include <vys.h>
 #include <vys_private.h>
 #include <vys_buffer_pool.h>
-#include <async_queue.h>
+#include <vys_async_queue.h>
 #include <glib.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_verbs.h>
@@ -272,12 +272,12 @@ extern void init_signal_receiver(
 	__attribute__((nonnull));
 extern void init_spectrum_selector(
 	vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-	struct async_queue *read_request_queue,
+	struct vys_async_queue *read_request_queue,
 	struct vys_buffer_pool *signal_msg_buffers,
 	unsigned signal_msg_num_spectra)
 	__attribute__((nonnull));
 extern void init_spectrum_reader(
-	vysmaw_handle handle, struct async_queue *read_request_queue,
+	vysmaw_handle handle, struct vys_async_queue *read_request_queue,
 	struct vys_buffer_pool *signal_msg_buffers, unsigned signal_msg_num_spectra,
 	int loop_fd)
 	__attribute__((nonnull));

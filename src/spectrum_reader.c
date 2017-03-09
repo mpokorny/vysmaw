@@ -116,8 +116,8 @@ static void set_max_posted_wr(
 	struct server_connection_context *conn_ctx, unsigned max_posted_wr)
 	__attribute__((nonnull));
 static struct server_connection_context *initiate_server_connection(
-	struct spectrum_reader_context_ *context, const struct sockaddr_in *sockaddr,
-	struct vys_error_record **error_record)
+	struct spectrum_reader_context_ *context,
+	const struct sockaddr_in *sockaddr, struct vys_error_record **error_record)
 	__attribute__((nonnull,returns_nonnull,malloc));
 static int find_connection(
 	struct spectrum_reader_context_ *context, struct sockaddr_in *sockaddr,
@@ -239,7 +239,8 @@ verify_digest(GChecksum *checksum, const float *buff, size_t buffer_size,
 }
 
 static struct rdma_req *
-new_rdma_req(GSList *consumers, const struct server_connection_context *conn_ctx,
+new_rdma_req(GSList *consumers,
+             const struct server_connection_context *conn_ctx,
              const struct vys_signal_msg_payload *payload,
              const struct vys_spectrum_info *spectrum_info)
 {
@@ -820,8 +821,9 @@ on_cm_event(struct spectrum_reader_context_ *context,
 }
 
 static int
-poll_completions(GChecksum *checksum, struct server_connection_context *conn_ctx,
-                 GSList **reqs, struct vys_error_record **error_record)
+poll_completions(GChecksum *checksum,
+                 struct server_connection_context *conn_ctx, GSList **reqs,
+                 struct vys_error_record **error_record)
 {
 	*reqs = NULL;
 	int nc = ibv_poll_cq(conn_ctx->id->send_cq, conn_ctx->max_posted_wr,
@@ -997,7 +999,7 @@ on_poll_events(struct spectrum_reader_context_ *context,
 	                                          READ_REQUEST_QUEUE_FD_INDEX);
 	if (rr_pollfd->revents & POLLIN) {
 		struct data_path_message *msg =
-			async_queue_pop(context->shared->read_request_queue);
+			vys_async_queue_pop(context->shared->read_request_queue);
 		if (msg != NULL)
 			rc3 = on_data_path_message(context, msg, error_record);
 	}
@@ -1143,7 +1145,7 @@ start_read_request_poll(struct spectrum_reader_context_ *context,
 {
 	struct pollfd *qpfd = &g_array_index(context->pollfds, struct pollfd,
 	                                     READ_REQUEST_QUEUE_FD_INDEX);
-	qpfd->fd = async_queue_pop_fd(context->shared->read_request_queue);
+	qpfd->fd = vys_async_queue_pop_fd(context->shared->read_request_queue);
 	qpfd->events = POLLIN;
 	return 0;
 }
@@ -1267,7 +1269,7 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	g_checksum_free(context.checksum);
 	g_array_free(context.pollfds, TRUE);
 	g_array_free(context.new_pollfds, TRUE);
-	async_queue_unref(shared->read_request_queue);
+	vys_async_queue_unref(shared->read_request_queue);
 	g_free(shared);
 	return NULL;
 }

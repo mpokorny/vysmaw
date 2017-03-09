@@ -18,6 +18,7 @@
 #ifndef SIGNAL_RECEIVER_H_
 #define SIGNAL_RECEIVER_H_
 
+#include <vys_buffer_pool.h>
 #include <vysmaw_private.h>
 
 struct signal_receiver_context {
@@ -26,7 +27,7 @@ struct signal_receiver_context {
 	GAsyncQueue *signal_msg_queue;
 
 	unsigned signal_msg_num_spectra;
-	struct buffer_pool *signal_msg_buffers;
+	struct vys_buffer_pool *signal_msg_buffers;
 
 	int loop_fd;
 };

@@ -19,14 +19,14 @@
 #define SPECTRUM_SELECTOR_H_
 
 #include <vysmaw_private.h>
-#include <async_queue.h>
 #include <vys_buffer_pool.h>
+#include <vys_async_queue.h>
 
 struct spectrum_selector_context {
 	vysmaw_handle handle;
 
 	GAsyncQueue *signal_msg_queue;
-	struct async_queue *read_request_queue;
+	struct vys_async_queue *read_request_queue;
 	struct vys_buffer_pool *signal_msg_buffers;
 	unsigned signal_msg_num_spectra;
 };
