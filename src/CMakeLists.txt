@@ -30,6 +30,7 @@ endif("${isSystemDir}" STREQUAL "-1")
 add_library(vys SHARED
   vys_private.c
   vys_buffer_pool.c
+  vys_async_queue.c
   vys.c)
 target_include_directories(vys PRIVATE
   ${GLIB2_INCLUDE_DIRS}
@@ -49,7 +50,6 @@ add_library(vysmaw SHARED
   signal_receiver.c
   spectrum_selector.c
   spectrum_reader.c
-  async_queue.c
   vysmaw.c)
 target_include_directories(vysmaw PRIVATE
   ${GTHREAD2_INCLUDE_DIRS}
@@ -72,7 +72,7 @@ install(TARGETS vys vysmaw
   CONFIGURATIONS Release
   PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE
   GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-install(FILES vys.h vysmaw.h
+install(FILES vys.h vysmaw.h vys_buffer_pool.h vys_async_queue.h
   DESTINATION include
   CONFIGURATIONS Release
   PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)

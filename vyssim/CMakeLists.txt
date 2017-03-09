@@ -11,7 +11,6 @@ set(CMAKE_C_FLAGS
   "${CMAKE_C_FLAGS} -Wall -Werror")
 
 add_executable(vyssim
-  ../src/buffer_pool.c
   vyssim.c)
 target_include_directories(vyssim PRIVATE
   ${MPI_C_INCLUDE_PATH}
