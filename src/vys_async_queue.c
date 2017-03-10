@@ -123,6 +123,29 @@ vys_async_queue_pop(struct vys_async_queue *queue)
 	return g_async_queue_pop(queue->q);
 }
 
+void *
+vys_async_queue_try_pop(struct vys_async_queue *queue)
+{
+	void *result = g_async_queue_try_pop(queue->q);
+	if (result != NULL) {
+		unsigned u;
+		size_t r = 0;
+		ssize_t n;
+		/* The following read could block for a short period of time if the
+		 * element was popped from the queue before the writer has written the
+		 * notification element to the pipe, but normally no blocking should
+		 * occur. */
+		do {
+			errno = 0;
+			n = read(POP_FD(queue), (void *)&u + r, sizeof(u) - r);
+			if (G_LIKELY(n >= 0)) r += n;
+		} while (errno == EINTR || r != sizeof(u));
+		if (G_UNLIKELY(errno != 0))
+			g_error("vys_async_queue_pop read failed: %s", strerror(errno));
+	}
+	return result;
+}
+
 int
 vys_async_queue_pop_fd(struct vys_async_queue *queue)
 {
