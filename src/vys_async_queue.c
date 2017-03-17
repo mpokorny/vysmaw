@@ -147,6 +147,14 @@ vys_async_queue_try_pop(struct vys_async_queue *queue)
 }
 
 int
+vys_async_queue_empty(struct vys_async_queue *queue)
+{
+	/* note that the result of this function is unreliable if there is more than
+	 * one reader */
+	return g_async_queue_length(queue->q) > 0;
+}
+
+int
 vys_async_queue_pop_fd(struct vys_async_queue *queue)
 {
 	return POP_FD(queue);

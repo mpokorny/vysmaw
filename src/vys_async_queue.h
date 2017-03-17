@@ -41,6 +41,8 @@ extern void *vys_async_queue_pop(struct vys_async_queue *queue)
 	__attribute__((nonnull,returns_nonnull));
 extern void *vys_async_queue_try_pop(struct vys_async_queue *queue)
 	__attribute__((nonnull));
+extern int vys_async_queue_empty(struct vys_async_queue *queue)
+	__attribute__((nonnull));
 extern int vys_async_queue_pop_fd(struct vys_async_queue *queue)
 	__attribute__((nonnull));
 extern int vys_async_queue_push_fd(struct vys_async_queue *queue)
