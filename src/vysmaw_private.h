@@ -344,7 +344,8 @@ extern void mark_signal_receive_failure(
 
 static inline size_t spectrum_size(const struct vysmaw_data_info *info)
 {
-	return 2 * info->num_channels * sizeof(float);
+	return 2 * ((info->num_bins - 1) * info->bin_stride + info->num_channels)
+		* sizeof(float);
 }
 
 extern GHashTable *register_spectrum_buffer_pools(

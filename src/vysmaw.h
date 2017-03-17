@@ -144,6 +144,8 @@ struct vysmaw_configuration {
 struct vysmaw_data_info {
 	uint64_t timestamp;
 	uint16_t num_channels;
+	uint16_t num_bins;
+	uint16_t bin_stride; /* in number of channels */
 	uint8_t stations[2];
 	uint8_t spectral_window_index;
 	uint8_t stokes_index;

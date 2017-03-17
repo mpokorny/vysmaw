@@ -389,6 +389,8 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
 	payload->sockaddr = vyssim->sockaddr;
 	payload->mr_id = 0;
 	payload->num_channels = vyssim->params.num_channels;
+	payload->bin_stride = payload->num_channels;
+	payload->num_bins = 1;
 	payload->stations[0] = ant0;
 	payload->stations[1] = ant1;
 	payload->spectral_window_index = spectral_window_index;

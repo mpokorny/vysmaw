@@ -44,6 +44,8 @@ struct vys_spectrum_info {
 struct vys_signal_msg_payload {
 	struct sockaddr_in sockaddr;
 	uint16_t num_channels;
+	uint16_t num_bins;
+	uint16_t bin_stride; /* in number of channels */
 	uint8_t stations[2];
 	uint8_t spectral_window_index;
 	uint8_t stokes_index;

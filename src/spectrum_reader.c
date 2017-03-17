@@ -249,6 +249,8 @@ new_rdma_req(GSList *consumers,
 	       sizeof(result->spectrum_info));
 	result->mr_id = payload->mr_id;
 	result->data_info.num_channels = payload->num_channels;
+	result->data_info.num_bins = payload->num_bins;
+	result->data_info.bin_stride = payload->bin_stride;
 	result->data_info.stations[0] = payload->stations[0];
 	result->data_info.stations[1] = payload->stations[1];
 	result->data_info.spectral_window_index = payload->spectral_window_index;
