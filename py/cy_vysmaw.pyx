@@ -406,6 +406,14 @@ cdef class DataInfo:
         return self._c_info[0].num_channels
 
     @property
+    def num_bins(self):
+        return self._c_info[0].num_bins
+
+    @property
+    def bin_stride(self):
+        return self._c_info[0].bin_stride
+
+    @property
     def stations(self):
         return <uint8_t[:2]>self._c_info[0].stations
 
