@@ -1274,7 +1274,7 @@ destroy_mcast_resources(struct mcast_context *ctx,
 			result = EXIT_FAILURE;
 		}
 	}
-	if (ctx->id->qp != NULL)
+	if (ctx->id != NULL && ctx->id->qp != NULL)
 		rdma_destroy_qp(ctx->id);
 	if (ctx->cq != NULL) {
 		ack_and_drain_cq(ctx->num_not_ack, ctx->num_wr, ctx->cq);
