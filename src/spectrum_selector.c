@@ -44,7 +44,7 @@ select_spectra(struct data_path_message *msg, struct consumer *consumers,
 		consumer->spectrum_filter_fn(
 			payload->stations,
 			payload->spectral_window_index,
-			payload->stokes_index,
+			payload->polarization_product,
 			payload->infos,
 			payload->num_spectra,
 			consumer->user_data,

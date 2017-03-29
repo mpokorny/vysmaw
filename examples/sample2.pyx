@@ -1,4 +1,4 @@
-# coding: utf-8
+# coding: iso-8859-1
 #
 # Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 #
@@ -25,7 +25,7 @@ import sys
 
 # A predicate that selects no spectra. The "pass_filter" array elements _must_
 # be assigned values, as they are always uninitialized at function entry.
-cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto, 
+cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t pol,
              const vys_spectrum_info *infos, uint8_t num_infos,
              void *user_data, bool *pass_filter) nogil:
     for i in range(num_infos):

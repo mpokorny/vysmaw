@@ -33,12 +33,12 @@ def __getLogger():
 __logger = __getLogger()
 
 cdef void evaluate_spectrum_filter(
-    const uint8_t *stations, uint8_t spectral_window_index, uint8_t stokes_index,
-    const vys_spectrum_info *infos, uint8_t num_infos,
+    const uint8_t *stations, uint8_t spectral_window_index,
+    uint8_t polarization_product, const vys_spectrum_info *infos, uint8_t num_infos,
     void *user_context, bool *pass_filter) with gil:
     func = <object>user_context
     try:
-        func(<uint8_t[:2]>stations, spectral_window_index, stokes_index,
+        func(<uint8_t[:2]>stations, spectral_window_index, polarization_product,
              <vys_spectrum_info[:num_infos]>infos,
              <bool[:num_infos]>pass_filter)
     except:
@@ -422,8 +422,8 @@ cdef class DataInfo:
         return self._c_info[0].spectral_window_index
 
     @property
-    def stokes_index(self):
-        return self._c_info[0].stokes_index
+    def polarization_product(self):
+        return self._c_info[0].polarization_product
 
 cdef class Result:
 

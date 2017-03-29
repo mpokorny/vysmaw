@@ -152,7 +152,7 @@ struct vysmaw_data_info {
 	uint16_t bin_stride; /* in number of channels */
 	uint8_t stations[2];
 	uint8_t spectral_window_index;
-	uint8_t stokes_index;
+	uint8_t polarization_product;
 };
 
 /* vysmaw result codes
@@ -266,17 +266,17 @@ struct vysmaw_message {
  * The argument list of a vysmaw_spectrum_filter function comprises a sequence
  * of spectrum metadata, one element of user-supplied data, and a boolean-valued
  * output array that must be filled by this function. The metadata are provided
- * as a pair of station ids, a spectral window index, a stokes parameter index,
- * an array of timestamps. Note that, for efficiency, the timestamps are
- * provided through 'struct vys_spectrum_info' values. 'num_infos' provides the
- * length of the 'infos' array, as well as the 'pass_filter' (output) array.
+ * as a pair of station ids, a spectral window index, a polarization product
+ * descriptor, an array of timestamps. Note that, for efficiency, the timestamps
+ * are provided through 'struct vys_spectrum_info' values. 'num_infos' provides
+ * the length of the 'infos' array, as well as the 'pass_filter' (output) array.
  * All elements in the 'pass_filter' array should be written by the function.
  * The element 'pass_filter[i]' should be set to 'true' if and only if the
  * client wishes to receive the data corresponding to 'infos[i]'.
  */
 typedef void (*vysmaw_spectrum_filter)(
 	const uint8_t stations[2], uint8_t spectral_window_index,
-	uint8_t stokes_index, const struct vys_spectrum_info *infos,
+	uint8_t polarization_product, const struct vys_spectrum_info *infos,
 	uint8_t num_infos, void *user_data, bool *pass_filter);
 
 /* Message queue (FIFO) used to pass spectral data back to client.

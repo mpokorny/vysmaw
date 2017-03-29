@@ -1,4 +1,4 @@
-# coding: utf-8
+# coding: iso-8859-1
 #
 # Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 #
@@ -32,7 +32,7 @@ DEF full_period = 4 * on_period
 # A predicate that selects spectra depending only on their timestamps. The
 # user_data argument is used to count the number of times the callback is
 # called.
-cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t sto, 
+cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t pol,
              const vys_spectrum_info *infos, uint8_t num_infos,
              void *user_data, bool *pass_filter) nogil:
     cdef unsigned long *ncb = <unsigned long *>user_data

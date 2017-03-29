@@ -32,16 +32,26 @@ extern "C" {
 #include <linux/if_packet.h>
 #include <linux/if_arp.h>
 
+#define VYS_VERSION 1
+
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
-
-#define VYS_VERSION 1
 
 struct vys_spectrum_info {
 	uint64_t data_addr;
 	uint64_t timestamp;
 	uint8_t digest[VYS_DATA_DIGEST_SIZE];
 };
+
+/* polarization product definitions
+ *
+ * Labels "A" and "B" are correspond to either L/R or X/Y polarization pairs,
+ * depending on the observing band. "A" is "R" or "Y"; "B" is "L" or "X".
+ */
+#define VYS_POLARIZATION_PRODUCT_AA 0
+#define VYS_POLARIZATION_PRODUCT_AB 1
+#define VYS_POLARIZATION_PRODUCT_BA 2
+#define VYS_POLARIZATION_PRODUCT_BB 3
 
 struct vys_signal_msg_payload {
 	uint16_t vys_version; /* present as first field in all versions */
@@ -51,7 +61,7 @@ struct vys_signal_msg_payload {
 	uint16_t bin_stride; /* in number of channels */
 	uint8_t stations[2];
 	uint8_t spectral_window_index;
-	uint8_t stokes_index;
+	uint8_t polarization_product;
 	uint8_t mr_id;
 	uint8_t num_spectra;
 	struct vys_spectrum_info infos[];

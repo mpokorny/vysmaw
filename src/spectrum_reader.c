@@ -254,7 +254,7 @@ new_rdma_req(GSList *consumers,
 	result->data_info.stations[0] = payload->stations[0];
 	result->data_info.stations[1] = payload->stations[1];
 	result->data_info.spectral_window_index = payload->spectral_window_index;
-	result->data_info.stokes_index = payload->stokes_index;
+	result->data_info.polarization_product = payload->polarization_product;
 	result->data_info.timestamp = spectrum_info->timestamp;
 	result->consumers = consumers;
 	return result;
