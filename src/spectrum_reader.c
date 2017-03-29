@@ -428,6 +428,7 @@ on_data_path_message(struct spectrum_reader_context_ *context,
                      struct data_path_message *msg,
                      struct vys_error_record **error_record)
 {
+	vysmaw_handle handle = context->shared->handle;
 	int rc = 0;
 	switch (msg->typ) {
 	case DATA_PATH_SIGNAL_MSG:
@@ -440,17 +441,17 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 		break;
 
 	case DATA_PATH_RECEIVE_FAIL:
-		mark_signal_receive_failure(context->shared->handle, msg->wc_status);
+		mark_signal_receive_failure(handle, msg->wc_status);
 		data_path_message_free(msg);
 		break;
 
 	case DATA_PATH_BUFFER_STARVATION:
-		mark_signal_buffer_starvation(context->shared->handle);
+		mark_signal_buffer_starvation(handle);
 		data_path_message_free(msg);
 		break;
 
 	case DATA_PATH_VERSION_MISMATCH:
-		mark_version_mismatch(context->shared->handle);
+		mark_version_mismatch(handle);
 		data_path_message_free(msg);
 		break;
 
@@ -459,6 +460,10 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 			rc = to_quit_state(context, msg, error_record);
 		} else {
 			if (context->quit_msg == msg) {
+				if (handle->num_data_buffers_unavailable > 0)
+					post_data_buffer_starvation(handle);
+				if (handle->num_buffers_mismatched_version > 0)
+					post_version_mismatch(handle);
 				context->end_msg = data_path_message_new(
 					context->shared->signal_msg_num_spectra);
 				context->end_msg->typ = DATA_PATH_END;
