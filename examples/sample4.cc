@@ -82,6 +82,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 		{VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
 		{VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
 		{VYSMAW_MESSAGE_RDMA_READ_FAILURE, "rdma-read-failure"},
+		{VYSMAW_MESSAGE_VERSION_MISMATCH, "vys-version-mismatch"},
 		{VYSMAW_MESSAGE_END, "end"},
 	};
 
@@ -97,6 +98,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 		VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
 		VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
 		VYSMAW_MESSAGE_RDMA_READ_FAILURE,
+		VYSMAW_MESSAGE_VERSION_MISMATCH,
 		VYSMAW_MESSAGE_END
 	};
 

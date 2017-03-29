@@ -386,6 +386,7 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
 	struct vys_signal_msg *result =
 		vys_buffer_pool_pop(mcast_ctx->signal_msg_pool);
 	struct vys_signal_msg_payload *payload = &(result->payload);
+	payload->vys_version = VYS_VERSION;
 	payload->sockaddr = vyssim->sockaddr;
 	payload->mr_id = 0;
 	payload->num_channels = vyssim->params.num_channels;

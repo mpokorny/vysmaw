@@ -85,6 +85,7 @@
 #define MAX_DEPTH_MESSAGE_QUEUE_KEY "max_depth_message_queue"
 #define QUEUE_RESUME_OVERHEAD_KEY "queue_resume_overhead"
 #define MAX_STARVATION_LATENCY_KEY "max_starvation_latency"
+#define MAX_VERSION_MISMATCH_LATENCY_KEY "max_version_mismatch_latency"
 #define RESOLVE_ROUTE_TIMEOUT_MS_KEY "resolve_route_timeout_ms"
 #define RESOLVE_ADDR_TIMEOUT_MS_KEY "resolve_addr_timeout_ms"
 #define INACTIVE_SERVER_TIMEOUT_SEC_KEY "inactive_server_timeout_sec"
@@ -152,6 +153,7 @@ struct _vysmaw_handle {
 	};
 	unsigned num_data_buffers_unavailable;
 	unsigned num_signal_buffers_unavailable;
+	unsigned num_buffers_mismatched_version;
 
 	/* message consumers */
 	unsigned num_consumers;
@@ -169,6 +171,7 @@ struct data_path_message {
 		DATA_PATH_SIGNAL_MSG,
 		DATA_PATH_RECEIVE_FAIL,
 		DATA_PATH_BUFFER_STARVATION,
+		DATA_PATH_VERSION_MISMATCH,
 		DATA_PATH_QUIT,
 		DATA_PATH_END
 	} typ;
@@ -304,6 +307,9 @@ extern struct vysmaw_message *queue_overflow_message_new(
 extern struct vysmaw_message *signal_receive_failure_message_new(
 	vysmaw_handle handle, enum ibv_wc_status status)
 	__attribute__((nonnull,returns_nonnull,malloc));
+extern struct vysmaw_message *version_mismatch_message_new(
+	vysmaw_handle handle, unsigned num_buffers)
+	__attribute__((nonnull,returns_nonnull,malloc));
 extern void post_msg(vysmaw_handle handle, struct vysmaw_message *message)
 	__attribute__((nonnull));
 extern void post_data_buffer_starvation(vysmaw_handle handle)
@@ -312,6 +318,8 @@ extern void post_signal_buffer_starvation(vysmaw_handle handle)
 	__attribute__((nonnull));
 extern void post_signal_receive_failure(
 	vysmaw_handle handle, enum ibv_wc_status status)
+	__attribute__((nonnull));
+extern void post_version_mismatch(vysmaw_handle handle)
 	__attribute__((nonnull));
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
 	__attribute__((nonnull));
@@ -340,6 +348,8 @@ extern void mark_signal_buffer_starvation(vysmaw_handle handle)
 	__attribute__((nonnull));
 extern void mark_signal_receive_failure(
 	vysmaw_handle handle, enum ibv_wc_status status)
+	__attribute__((nonnull));
+extern void mark_version_mismatch(vysmaw_handle handle)
 	__attribute__((nonnull));
 
 static inline size_t spectrum_size(const struct vysmaw_data_info *info)

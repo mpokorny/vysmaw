@@ -104,6 +104,10 @@ struct vysmaw_configuration {
 	 * TODO: distinguish latency for data and signal buffers? */
 	unsigned max_starvation_latency;
 
+	/* Maximum number of vys_version mismatch events to wait before sending a
+	 * VYSMAW_MESSAGE_VERSION_MISMATCH message. */
+	unsigned max_version_mismatch_latency;
+
 	/*
 	 * The following are probably best left at their default values, but expert
 	 * users may find them useful.
@@ -201,6 +205,7 @@ enum vysmaw_message_type {
 	VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
 										   // message
 	VYSMAW_MESSAGE_RDMA_READ_FAILURE, // failure of rdma read of spectral data
+	VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
 	VYSMAW_MESSAGE_END // vysmaw_handle exited
 };
 
@@ -229,6 +234,9 @@ struct vysmaw_message {
 
 		/* VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION */
 		unsigned num_signal_buffers_unavailable;
+
+		/* VYSMAW_MESSAGE_VERSION_MISMATCH */
+		unsigned num_buffers_mismatched_version;
 
 		/* VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE */
 		char signal_receive_status[RECEIVE_STATUS_LENGTH];

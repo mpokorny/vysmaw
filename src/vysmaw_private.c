@@ -35,6 +35,7 @@
 #define DEFAULT_MAX_DEPTH_MESSAGE_QUEUE 1000
 #define DEFAULT_QUEUE_RESUME_OVERHEAD 100
 #define DEFAULT_MAX_STARVATION_LATENCY 100
+#define DEFAULT_MAX_VERSION_MISMATCH_LATENCY 1000
 #define DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS 1000
 #define DEFAULT_RESOLVE_ADDR_TIMEOUT_MS 1000
 #define DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC (60 * 60 * 12)
@@ -95,6 +96,9 @@ default_config_vysmaw()
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      MAX_STARVATION_LATENCY_KEY,
 	                      DEFAULT_MAX_STARVATION_LATENCY);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      MAX_VERSION_MISMATCH_LATENCY_KEY,
+	                      DEFAULT_MAX_VERSION_MISMATCH_LATENCY);
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      RESOLVE_ROUTE_TIMEOUT_MS_KEY,
 	                      DEFAULT_RESOLVE_ROUTE_TIMEOUT_MS);
@@ -220,6 +224,8 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		parse_uint64(kf, QUEUE_RESUME_OVERHEAD_KEY, config);
 	config->max_starvation_latency =
 		parse_uint64(kf, MAX_STARVATION_LATENCY_KEY, config);
+	config->max_version_mismatch_latency =
+		parse_uint64(kf, MAX_VERSION_MISMATCH_LATENCY_KEY, config);
 	config->resolve_route_timeout_ms =
 		parse_uint64(kf, RESOLVE_ROUTE_TIMEOUT_MS_KEY, config);
 	config->resolve_addr_timeout_ms =
@@ -365,6 +371,15 @@ signal_receive_failure_message_new(vysmaw_handle handle,
 	return result;
 }
 
+struct vysmaw_message *
+version_mismatch_message_new(vysmaw_handle handle, unsigned num_buffers)
+{
+	struct vysmaw_message *result =
+		message_new(handle, VYSMAW_MESSAGE_VERSION_MISMATCH);
+	result->content.num_buffers_mismatched_version = num_buffers;
+	return result;
+}
+
 void
 post_msg(vysmaw_handle handle, struct vysmaw_message *msg)
 {
@@ -399,6 +414,16 @@ post_signal_receive_failure(vysmaw_handle handle, enum ibv_wc_status status)
 	struct vysmaw_message *msg =
 		signal_receive_failure_message_new(handle, status);
 	post_msg(handle, msg);
+}
+
+void
+post_version_mismatch(vysmaw_handle handle)
+{
+	struct vysmaw_message *msg =
+		version_mismatch_message_new(
+			handle, handle->num_buffers_mismatched_version);
+	post_msg(handle, msg);
+	handle->num_buffers_mismatched_version = 0;
 }
 
 vysmaw_message_queue
@@ -820,6 +845,8 @@ valid_buffer_message_new(vysmaw_handle handle,
 	if (buffer != NULL) {
 		if (handle->num_data_buffers_unavailable > 0)
 			post_data_buffer_starvation(handle);
+		if (handle->num_buffers_mismatched_version > 0)
+			post_version_mismatch(handle);
 		result = message_new(handle, VYSMAW_MESSAGE_VALID_BUFFER);
 		result->content.valid_buffer.info = *info;
 		result->content.valid_buffer.buffer_size = buffer_size;
@@ -867,6 +894,15 @@ void
 mark_signal_receive_failure(vysmaw_handle handle, enum ibv_wc_status status)
 {
 	post_signal_receive_failure(handle, status);
+}
+
+void
+mark_version_mismatch(vysmaw_handle handle)
+{
+	handle->num_buffers_mismatched_version++;
+	if (handle->num_buffers_mismatched_version
+		>= handle->config.max_version_mismatch_latency)
+		post_version_mismatch(handle);
 }
 
 static void

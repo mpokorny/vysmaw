@@ -35,6 +35,8 @@ extern "C" {
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
 
+#define VYS_VERSION 1
+
 struct vys_spectrum_info {
 	uint64_t data_addr;
 	uint64_t timestamp;
@@ -42,6 +44,7 @@ struct vys_spectrum_info {
 };
 
 struct vys_signal_msg_payload {
+	uint16_t vys_version; /* present as first field in all versions */
 	struct sockaddr_in sockaddr;
 	uint16_t num_channels;
 	uint16_t num_bins;

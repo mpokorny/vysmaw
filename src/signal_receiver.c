@@ -566,17 +566,26 @@ poll_completions(struct signal_receiver_context_ *context,
 					context->shared->signal_msg_num_spectra);
 				if (G_LIKELY(context->wcs[i].status == IBV_WC_SUCCESS)) {
 					/* got a signal message */
-					dp_msg->typ = DATA_PATH_SIGNAL_MSG;
-					dp_msg->signal_msg = s_msg;
+					if (G_LIKELY(s_msg->payload.vys_version == VYS_VERSION)) {
+						dp_msg->typ = DATA_PATH_SIGNAL_MSG;
+						dp_msg->signal_msg = s_msg;
+					} else {
+						/* protocol version mismatch, put signal message buffer
+						 * back into pool */
+						vys_buffer_pool_push(
+							context->shared->signal_msg_buffers, s_msg);
+						/* notify downstream of version mismatch */
+						dp_msg->typ = DATA_PATH_VERSION_MISMATCH;
+					}
 				} else {
 					/* failed receive, put signal message buffer back into
 					 * pool */
-					vys_buffer_pool_push(context->shared->signal_msg_buffers,
-					                     s_msg);
+					vys_buffer_pool_push(
+						context->shared->signal_msg_buffers, s_msg);
 					/* notify downstream of receive failure */
 					dp_msg->typ = DATA_PATH_RECEIVE_FAIL;
 					dp_msg->wc_status = context->wcs[i].status;
-					}
+				}
 				/* send data_path_message downstream */
 				g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 			}
