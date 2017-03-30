@@ -52,6 +52,7 @@ struct vys_spectrum_info {
 #define VYS_POLARIZATION_PRODUCT_AB 1
 #define VYS_POLARIZATION_PRODUCT_BA 2
 #define VYS_POLARIZATION_PRODUCT_BB 3
+#define VYS_POLARIZATION_PRODUCT_UNKNOWN 4
 
 /* baseband definitions
  */
@@ -61,6 +62,7 @@ struct vys_spectrum_info {
 #define VYS_BASEBAND_B1D1_3BIT 3
 #define VYS_BASEBAND_B2D2_3BIT 4
 #define VYS_BASEBAND_BD_8BIT 5
+#define VYS_BASEBAND_UNKNOWN 6
 
 struct vys_signal_msg_payload {
 	uint16_t vys_version; /* present as first field in all versions */
@@ -69,8 +71,9 @@ struct vys_signal_msg_payload {
 	uint16_t num_bins;
 	uint16_t bin_stride; /* in number of channels */
 	uint8_t stations[2];
-	uint8_t spectral_window_index;
+	uint8_t baseband_index;
 	uint8_t baseband_id;
+	uint8_t spectral_window_index;
 	uint8_t polarization_product_id;
 	uint8_t mr_id;
 	uint8_t num_spectra;

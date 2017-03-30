@@ -32,7 +32,8 @@ DEF full_period = 4 * on_period
 # A predicate that selects spectra depending only on their timestamps. The
 # user_data argument is used to count the number of times the callback is
 # called.
-cdef void cb(const uint8_t *stns, uint8_t spw, uint8_t bb, uint8_t pol,
+cdef void cb(const uint8_t *stns, uint8_t bb_idx, uint8_t bb_id, uint8_t spw,
+             uint8_t pol,
              const vys_spectrum_info *infos, uint8_t num_infos,
              void *user_data, bool *pass_filter) nogil:
     cdef unsigned long *ncb = <unsigned long *>user_data

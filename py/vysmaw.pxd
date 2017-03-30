@@ -26,6 +26,20 @@ cdef extern from "vysmaw.h":
 
     DEF VYS_MULTICAST_ADDRESS_SIZE = 32
 
+    DEF VYS_POLARIZATION_PRODUCT_AA = 0
+    DEF VYS_POLARIZATION_PRODUCT_AB = 1
+    DEF VYS_POLARIZATION_PRODUCT_BA = 2
+    DEF VYS_POLARIZATION_PRODUCT_BB = 3
+    DEF VYS_POLARIZATION_PRODUCT_UNKNOWN = 4
+
+    DEF VYS_BASEBAND_A1C1_3BIT = 0
+    DEF VYS_BASEBAND_A2C2_3BIT = 1
+    DEF VYS_BASEBAND_AC_8BIT = 2
+    DEF VYS_BASEBAND_B1D1_3BIT = 3
+    DEF VYS_BASEBAND_B2D2_3BIT = 4
+    DEF VYS_BASEBAND_BD_8BIT = 5
+    DEF VYS_BASEBAND_UNKNOWN = 6
+
     DEF VYSMAW_RECEIVE_STATUS_LENGTH = 64
 
     struct vysmaw_configuration:
@@ -55,8 +69,9 @@ cdef extern from "vysmaw.h":
         uint16_t num_bins
         uint16_t bin_stride
         uint8_t stations[2]
-        uint8_t spectral_window_index
+        uint8_t baseband_index
         uint8_t baseband_id
+        uint8_t spectral_window_index
         uint8_t polarization_product_id
 
     struct vys_spectrum_info:
@@ -116,8 +131,9 @@ cdef extern from "vysmaw.h":
     ctypedef _vysmaw_message_queue *vysmaw_message_queue
 
     ctypedef void (*vysmaw_spectrum_filter)(
-        const uint8_t *stations, uint8_t spectral_window_index,
-        uint8_t baseband_id, uint8_t polarization_product_id,
+        const uint8_t *stations, uint8_t baseband_index,
+        uint8_t baseband_id, uint8_t spectral_window_index,
+        uint8_t polarization_product_id,
         const vys_spectrum_info *infos, uint8_t num_infos,
         void *user_data, bool *pass_filter) nogil
 

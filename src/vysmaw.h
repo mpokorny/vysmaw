@@ -151,8 +151,9 @@ struct vysmaw_data_info {
 	uint16_t num_bins;
 	uint16_t bin_stride; /* in number of channels */
 	uint8_t stations[2];
-	uint8_t spectral_window_index;
+	uint8_t baseband_index;
 	uint8_t baseband_id;
+	uint8_t spectral_window_index;
 	uint8_t polarization_product_id;
 };
 
@@ -276,8 +277,9 @@ struct vysmaw_message {
  * client wishes to receive the data corresponding to 'infos[i]'.
  */
 typedef void (*vysmaw_spectrum_filter)(
-	const uint8_t stations[2], uint8_t spectral_window_index,
-	uint8_t baseband_id, uint8_t polarization_product_id,
+	const uint8_t stations[2], uint8_t baseband_index, 
+	uint8_t baseband_id, uint8_t spectral_window_index,
+	uint8_t polarization_product_id,
 	const struct vys_spectrum_info *infos, uint8_t num_infos,
 	void *user_data, bool *pass_filter);
 

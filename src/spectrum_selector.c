@@ -43,8 +43,9 @@ select_spectra(struct data_path_message *msg, struct consumer *consumers,
 		bool *pass_filter = (bool *)consumer->pass_filter_array->data;
 		consumer->spectrum_filter_fn(
 			payload->stations,
-			payload->spectral_window_index,
+			payload->baseband_index,
 			payload->baseband_id,
+			payload->spectral_window_index,
 			payload->polarization_product_id,
 			payload->infos,
 			payload->num_spectra,
