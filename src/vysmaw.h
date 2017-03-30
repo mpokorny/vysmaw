@@ -152,7 +152,8 @@ struct vysmaw_data_info {
 	uint16_t bin_stride; /* in number of channels */
 	uint8_t stations[2];
 	uint8_t spectral_window_index;
-	uint8_t polarization_product;
+	uint8_t baseband_id;
+	uint8_t polarization_product_id;
 };
 
 /* vysmaw result codes
@@ -276,8 +277,9 @@ struct vysmaw_message {
  */
 typedef void (*vysmaw_spectrum_filter)(
 	const uint8_t stations[2], uint8_t spectral_window_index,
-	uint8_t polarization_product, const struct vys_spectrum_info *infos,
-	uint8_t num_infos, void *user_data, bool *pass_filter);
+	uint8_t baseband_id, uint8_t polarization_product_id,
+	const struct vys_spectrum_info *infos, uint8_t num_infos,
+	void *user_data, bool *pass_filter);
 
 /* Message queue (FIFO) used to pass spectral data back to client.
  *

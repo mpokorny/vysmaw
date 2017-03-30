@@ -56,7 +56,8 @@ cdef extern from "vysmaw.h":
         uint16_t bin_stride
         uint8_t stations[2]
         uint8_t spectral_window_index
-        uint8_t polarization_product
+        uint8_t baseband_id
+        uint8_t polarization_product_id
 
     struct vys_spectrum_info:
         uint64_t data_addr
@@ -116,8 +117,9 @@ cdef extern from "vysmaw.h":
 
     ctypedef void (*vysmaw_spectrum_filter)(
         const uint8_t *stations, uint8_t spectral_window_index,
-        uint8_t polarization_product, const vys_spectrum_info *infos,
-        uint8_t num_infos, void *user_data, bool *pass_filter) nogil
+        uint8_t baseband_id, uint8_t polarization_product_id,
+        const vys_spectrum_info *infos, uint8_t num_infos,
+        void *user_data, bool *pass_filter) nogil
 
     struct vysmaw_consumer:
         vysmaw_spectrum_filter filter

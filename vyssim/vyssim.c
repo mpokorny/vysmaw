@@ -395,7 +395,8 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
 	payload->stations[0] = ant0;
 	payload->stations[1] = ant1;
 	payload->spectral_window_index = spectral_window_index;
-	payload->stokes_index = stokes_index;
+	payload->baseband_id = 0;
+	payload->polarization_product_id = stokes_index;
 	payload->num_spectra = mcast_ctx->signal_msg_num_spectra;
 	for (unsigned n = 0; n < mcast_ctx->signal_msg_num_spectra; ++n) {
 		struct vys_spectrum_info *info = &(payload->infos[n]);
