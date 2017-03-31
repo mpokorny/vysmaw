@@ -41,6 +41,9 @@ target_compile_options(vys PRIVATE
 target_compile_definitions(vys PRIVATE
   VYS_CONFIG_PATH="${CMAKE_INSTALL_PREFIX}/etc/vys.conf"
   VYS_SIGNAL_MULTICAST_ADDRESS="224.0.0.100")
+set_target_properties(vys PROPERTIES
+  VERSION ${VYSMAW_VERSION}
+  SOVERSION ${VYSMAW_VERSION_MAJOR})
 target_link_libraries(vys
   ${GLIB2_LIBRARIES})
 
@@ -59,6 +62,9 @@ target_compile_options(vysmaw PRIVATE
   ${GTHREAD2_CFLAGS_OTHER})
 target_compile_definitions(vysmaw PRIVATE
   VYSMAW_CONFIG_PATH="${CMAKE_INSTALL_PREFIX}/etc/vysmaw.conf")
+set_target_properties(vysmaw PROPERTIES
+  VERSION ${VYSMAW_VERSION}
+  SOVERSION ${VYSMAW_VERSION_MAJOR})
 target_link_libraries(vysmaw
   vys
   ${GTHREAD2_LIBRARIES}
