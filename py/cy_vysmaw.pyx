@@ -484,6 +484,8 @@ cdef class Message:
             result = DataBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
             result = SignalBufferStarvationMessage()
+        elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
+            result = SignalReceiveFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_RDMA_READ_FAILURE:
             result = RDMAReceiveFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_VERSION_MISMATCH:
