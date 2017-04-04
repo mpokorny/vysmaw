@@ -133,6 +133,16 @@ vys_error_record_to_string(struct vys_error_record **record)
 	return g_string_free(str, FALSE);
 }
 
+void
+vys_signal_msg_payload_init(struct vys_signal_msg_payload *payload,
+                            const char *config_id)
+{
+	payload->vys_version = VYS_VERSION;
+	if (strlen(config_id) >= sizeof(payload->config_id))
+		config_id += strlen(config_id) + 1 - sizeof(payload->config_id);
+	g_strlcpy(payload->config_id, config_id, sizeof(payload->config_id));
+}
+
 char *
 vys_get_ipoib_addr(void)
 {

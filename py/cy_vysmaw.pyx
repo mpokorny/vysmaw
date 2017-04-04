@@ -33,13 +33,14 @@ def __getLogger():
 __logger = __getLogger()
 
 cdef void evaluate_spectrum_filter(
+    const char *config_id,
     const uint8_t *stations, uint8_t baseband_index, uint8_t baseband_id,
     uint8_t spectral_window_index, uint8_t polarization_product_id,
     const vys_spectrum_info *infos, uint8_t num_infos,
     void *user_context, bool *pass_filter) with gil:
     func = <object>user_context
     try:
-        func(<uint8_t[:2]>stations, baseband_index, baseband_id,
+        func(config_id, <uint8_t[:2]>stations, baseband_index, baseband_id,
              spectral_window_index, polarization_product_id,
              <vys_spectrum_info[:num_infos]>infos,
              <bool[:num_infos]>pass_filter)

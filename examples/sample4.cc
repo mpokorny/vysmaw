@@ -46,7 +46,8 @@ namespace std {
 
 // a filter that accepts everything
 void
-filter(const uint8_t stations[2], uint8_t baseband_index, uint8_t baseband_id,
+filter(const char *config_id, const uint8_t stations[2],
+       uint8_t baseband_index, uint8_t baseband_id,
        uint8_t spectral_window_index, uint8_t polarization_product_id,
        const struct vys_spectrum_info *infos, uint8_t num_infos,
        void *user_data, bool *pass_filter)

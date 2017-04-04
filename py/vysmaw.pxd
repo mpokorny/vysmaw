@@ -26,6 +26,8 @@ cdef extern from "vysmaw.h":
 
     DEF VYS_MULTICAST_ADDRESS_SIZE = 32
 
+    DEF VYS_CONFIG_ID_SIZE = 32
+
     DEF VYS_POLARIZATION_PRODUCT_AA = 0
     DEF VYS_POLARIZATION_PRODUCT_AB = 1
     DEF VYS_POLARIZATION_PRODUCT_BA = 2
@@ -64,6 +66,7 @@ cdef extern from "vysmaw.h":
         unsigned rdma_read_min_ack_part
 
     struct vysmaw_data_info:
+        char config_id[VYS_CONFIG_ID_SIZE]
         uint64_t timestamp
         uint16_t num_channels
         uint16_t num_bins
@@ -131,6 +134,7 @@ cdef extern from "vysmaw.h":
     ctypedef _vysmaw_message_queue *vysmaw_message_queue
 
     ctypedef void (*vysmaw_spectrum_filter)(
+        const char *config_id,
         const uint8_t *stations, uint8_t baseband_index,
         uint8_t baseband_id, uint8_t spectral_window_index,
         uint8_t polarization_product_id,

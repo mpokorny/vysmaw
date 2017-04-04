@@ -258,6 +258,8 @@ new_rdma_req(GSList *consumers,
 	result->data_info.spectral_window_index = payload->spectral_window_index;
 	result->data_info.polarization_product_id = payload->polarization_product_id;
 	result->data_info.timestamp = spectrum_info->timestamp;
+	memcpy(result->data_info.config_id, payload->config_id,
+	       sizeof(result->data_info.config_id));
 	result->consumers = consumers;
 	return result;
 }

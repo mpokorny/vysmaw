@@ -34,8 +34,8 @@ from cython.parallel import parallel
 
 # A predicate that selects no spectra. The "pass_filter" array elements _must_
 # be assigned values, as they are always uninitialized at function entry.
-def cb(uint8_t[:] stns, uint8_t bb_idx, uint8_t bb_id, uint8_t spw, uint8_t pol,
-       vys_spectrum_info[:] infos, bool[:] pass_filter):
+def cb(char [:] config, uint8_t[:] stns, uint8_t bb_idx, uint8_t bb_id,
+       uint8_t spw, uint8_t pol, vys_spectrum_info[:] infos, bool[:] pass_filter):
     for i in range(pass_filter.shape[0]):
         pass_filter[i] = False
     return

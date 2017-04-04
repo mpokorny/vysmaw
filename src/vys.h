@@ -36,6 +36,7 @@ extern "C" {
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
+#define VYS_CONFIG_ID_SIZE 32
 
 struct vys_spectrum_info {
 	uint64_t data_addr;
@@ -67,6 +68,7 @@ struct vys_spectrum_info {
 struct vys_signal_msg_payload {
 	uint16_t vys_version; /* present as first field in all versions */
 	struct sockaddr_in sockaddr;
+	char config_id[VYS_CONFIG_ID_SIZE];
 	uint16_t num_channels;
 	uint16_t num_bins;
 	uint16_t bin_stride; /* in number of channels */
@@ -136,6 +138,10 @@ extern struct vys_error_record *vys_error_record_concat(
 extern char *vys_error_record_to_string(
 	struct vys_error_record **record)
 	__attribute__((malloc,returns_nonnull,nonnull));
+
+extern void vys_signal_msg_payload_init(
+	struct vys_signal_msg_payload *payload, const char *config_id)
+	__attribute__((nonnull));
 
 extern char *vys_get_ipoib_addr(void)
 	__attribute__((malloc,nonnull));

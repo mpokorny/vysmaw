@@ -22,6 +22,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <fcntl.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -380,13 +381,16 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
                    guint64 timestamp_us, unsigned ant0, unsigned ant1,
                    unsigned spectral_window_index, unsigned stokes_index)
 {
+	static gchar *config_id = NULL;
+	if (G_UNLIKELY(config_id == NULL))
+		config_id = g_strdup_printf("%s-%i", g_get_prgname(), getpid());
 	struct mcast_context *mcast_ctx = &(vyssim->mcast_ctx);
 	struct server_context *server_ctx = &(vyssim->server_ctx);
 
 	struct vys_signal_msg *result =
 		vys_buffer_pool_pop(mcast_ctx->signal_msg_pool);
 	struct vys_signal_msg_payload *payload = &(result->payload);
-	payload->vys_version = VYS_VERSION;
+	vys_signal_msg_payload_init(payload, config_id);
 	payload->sockaddr = vyssim->sockaddr;
 	payload->mr_id = 0;
 	payload->num_channels = vyssim->params.num_channels;

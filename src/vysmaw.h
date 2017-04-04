@@ -146,6 +146,7 @@ struct vysmaw_configuration {
 };
 
 struct vysmaw_data_info {
+	char config_id[VYS_CONFIG_ID_SIZE];
 	uint64_t timestamp;
 	uint16_t num_channels;
 	uint16_t num_bins;
@@ -277,6 +278,7 @@ struct vysmaw_message {
  * client wishes to receive the data corresponding to 'infos[i]'.
  */
 typedef void (*vysmaw_spectrum_filter)(
+	const char *config_id,
 	const uint8_t stations[2], uint8_t baseband_index, 
 	uint8_t baseband_id, uint8_t spectral_window_index,
 	uint8_t polarization_product_id,

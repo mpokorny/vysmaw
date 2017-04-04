@@ -42,6 +42,7 @@ select_spectra(struct data_path_message *msg, struct consumer *consumers,
 		g_array_set_size(consumer->pass_filter_array, payload->num_spectra);
 		bool *pass_filter = (bool *)consumer->pass_filter_array->data;
 		consumer->spectrum_filter_fn(
+			payload->config_id,
 			payload->stations,
 			payload->baseband_index,
 			payload->baseband_id,
