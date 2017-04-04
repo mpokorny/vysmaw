@@ -21,6 +21,7 @@
 #include <csignal>
 #include <unordered_map>
 #include <algorithm>
+#include <cassert>
 #include <vysmaw.h>
 
 // max time to wait for message on queue
@@ -147,8 +148,10 @@ main(int argc, char *argv[])
 			interrupted = true;
 		}
 		// record message type
+		assert(message->typ <= VYSMAW_MESSAGE_END);
 		if (message)
 			++counters[message->typ];
+
 		// get next message
 		message = move(pop(consumer.queue));
 	}
