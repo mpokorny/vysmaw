@@ -401,6 +401,10 @@ cdef class DataInfo:
         return result
 
     @property
+    def config_id(self):
+        return self._c_info[0].config_id
+
+    @property
     def timestamp(self):
         return self._c_info[0].timestamp
 
