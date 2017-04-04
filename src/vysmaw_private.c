@@ -372,11 +372,13 @@ signal_receive_failure_message_new(vysmaw_handle handle,
 }
 
 struct vysmaw_message *
-version_mismatch_message_new(vysmaw_handle handle, unsigned num_buffers)
+version_mismatch_message_new(vysmaw_handle handle, unsigned num_buffers,
+                             unsigned mismatched_version)
 {
 	struct vysmaw_message *result =
 		message_new(handle, VYSMAW_MESSAGE_VERSION_MISMATCH);
 	result->content.num_buffers_mismatched_version = num_buffers;
+	result->content.received_message_version = mismatched_version;
 	return result;
 }
 
@@ -421,7 +423,8 @@ post_version_mismatch(vysmaw_handle handle)
 {
 	struct vysmaw_message *msg =
 		version_mismatch_message_new(
-			handle, handle->num_buffers_mismatched_version);
+			handle, handle->num_buffers_mismatched_version,
+			handle->mismatched_version);
 	post_msg(handle, msg);
 	handle->num_buffers_mismatched_version = 0;
 }
@@ -897,8 +900,11 @@ mark_signal_receive_failure(vysmaw_handle handle, enum ibv_wc_status status)
 }
 
 void
-mark_version_mismatch(vysmaw_handle handle)
+mark_version_mismatch(vysmaw_handle handle, unsigned received_message_version)
 {
+	if (received_message_version != handle->mismatched_version
+		&& handle->num_buffers_mismatched_version > 0)
+		post_version_mismatch(handle);
 	handle->num_buffers_mismatched_version++;
 	if (handle->num_buffers_mismatched_version
 		>= handle->config.max_version_mismatch_latency)

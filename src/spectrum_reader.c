@@ -455,7 +455,7 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 		break;
 
 	case DATA_PATH_VERSION_MISMATCH:
-		mark_version_mismatch(handle);
+		mark_version_mismatch(handle, msg->received_message_version);
 		data_path_message_free(msg);
 		break;
 

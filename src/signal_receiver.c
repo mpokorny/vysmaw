@@ -570,12 +570,13 @@ poll_completions(struct signal_receiver_context_ *context,
 						dp_msg->typ = DATA_PATH_SIGNAL_MSG;
 						dp_msg->signal_msg = s_msg;
 					} else {
-						/* protocol version mismatch, put signal message buffer
-						 * back into pool */
+						/* protocol version mismatch */
+						dp_msg->typ = DATA_PATH_VERSION_MISMATCH;
+						dp_msg->received_message_version =
+							s_msg->payload.vys_version;
+						/* put signal message buffer back into pool */
 						vys_buffer_pool_push(
 							context->shared->signal_msg_buffers, s_msg);
-						/* notify downstream of version mismatch */
-						dp_msg->typ = DATA_PATH_VERSION_MISMATCH;
 					}
 				} else {
 					/* failed receive, put signal message buffer back into

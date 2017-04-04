@@ -486,6 +486,8 @@ cdef class Message:
             result = SignalBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_RDMA_READ_FAILURE:
             result = RDMAReceiveFailureMessage()
+        elif msgtype == VYSMAW_MESSAGE_VERSION_MISMATCH:
+            result = VersionMismatchMessage()
         else: # msgtype == VYSMAW_MESSAGE_END
             result = EndMessage()
         result._c_message = msg
@@ -572,6 +574,15 @@ cdef class RDMAReceiveFailureMessage(Message):
     @property
     def rdma_read_status(self):
         return (<bytes>self._c_message[0].content.rdma_read_status)
+
+cdef class VersionMismatchMessage(Message):
+
+    def __str__(self):
+        return show_properties(self, RDMAReceiveFailureMessage)
+
+    @property
+    def received_message_version(self):
+        return self._c_message[0].content.received_message_version
 
 cdef class EndMessage(Message):
 

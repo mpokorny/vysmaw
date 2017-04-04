@@ -105,6 +105,7 @@ cdef extern from "vysmaw.h":
         VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
         VYSMAW_MESSAGE_RDMA_READ_FAILURE,
+        VYSMAW_MESSAGE_VERSION_MISMATCH,
         VYSMAW_MESSAGE_END
 
     struct message_valid_buffer:
@@ -120,6 +121,7 @@ cdef extern from "vysmaw.h":
         unsigned num_signal_buffers_unavailable
         char signal_receive_status[VYSMAW_RECEIVE_STATUS_LENGTH]
         char rdma_read_status[VYSMAW_RECEIVE_STATUS_LENGTH]
+        unsigned received_message_version
         vysmaw_result result
 
     struct vysmaw_message:

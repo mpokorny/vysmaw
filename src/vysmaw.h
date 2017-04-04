@@ -247,6 +247,9 @@ struct vysmaw_message {
 		/* VYSMAW_MESSAGE_RDMA_READ_FAILURE */
 		char rdma_read_status[RECEIVE_STATUS_LENGTH];
 
+		/* VYSMAW_MESSAGE_VERSION_MISMATCH */
+		unsigned received_message_version;
+
 		/* VYSMAW_MESSAGE_END */
 		struct vysmaw_result result;
 	} content;

@@ -154,6 +154,7 @@ struct _vysmaw_handle {
 	unsigned num_data_buffers_unavailable;
 	unsigned num_signal_buffers_unavailable;
 	unsigned num_buffers_mismatched_version;
+	unsigned mismatched_version;
 
 	/* message consumers */
 	unsigned num_consumers;
@@ -179,6 +180,7 @@ struct data_path_message {
 	union {
 		enum ibv_wc_status wc_status;
 		struct vys_error_record *error_record;
+		unsigned received_message_version;
 		struct {
 			struct vys_signal_msg *signal_msg;
 			GSList *consumers[];
@@ -308,7 +310,7 @@ extern struct vysmaw_message *signal_receive_failure_message_new(
 	vysmaw_handle handle, enum ibv_wc_status status)
 	__attribute__((nonnull,returns_nonnull,malloc));
 extern struct vysmaw_message *version_mismatch_message_new(
-	vysmaw_handle handle, unsigned num_buffers)
+	vysmaw_handle handle, unsigned num_buffers, unsigned mismatched_version)
 	__attribute__((nonnull,returns_nonnull,malloc));
 extern void post_msg(vysmaw_handle handle, struct vysmaw_message *message)
 	__attribute__((nonnull));
@@ -349,7 +351,8 @@ extern void mark_signal_buffer_starvation(vysmaw_handle handle)
 extern void mark_signal_receive_failure(
 	vysmaw_handle handle, enum ibv_wc_status status)
 	__attribute__((nonnull));
-extern void mark_version_mismatch(vysmaw_handle handle)
+extern void mark_version_mismatch(
+	vysmaw_handle handle, unsigned received_message_version)
 	__attribute__((nonnull));
 
 static inline size_t spectrum_size(const struct vysmaw_data_info *info)
