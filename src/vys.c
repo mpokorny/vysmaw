@@ -143,6 +143,12 @@ vys_signal_msg_payload_init(struct vys_signal_msg_payload *payload,
 	g_strlcpy(payload->config_id, config_id, sizeof(payload->config_id));
 }
 
+bool
+vys_spectrum_filled(const struct vys_spectrum_info *info)
+{
+	return info->data_addr != VYS_INVALID_ADDR;
+}
+
 char *
 vys_get_ipoib_addr(void)
 {
