@@ -53,8 +53,7 @@ select_spectra(struct data_path_message *msg, struct consumer *consumers,
 			consumer->user_data,
 			pass_filter);
 		for (unsigned j = 0; j < payload->num_spectra; ++j)
-			if (*pass_filter++ &&
-			    G_LIKELY(vys_spectrum_filled(&payload->infos[j]))) {
+			if (*pass_filter++) {
 				result = true;
 				msg->consumers[j] =
 					g_slist_prepend(msg->consumers[j], consumer);

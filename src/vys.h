@@ -32,12 +32,11 @@ extern "C" {
 #include <linux/if_packet.h>
 #include <linux/if_arp.h>
 
-#define VYS_VERSION 3
+#define VYS_VERSION 2
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_DATA_DIGEST_SIZE 16
 #define VYS_CONFIG_ID_SIZE 32
-#define VYS_INVALID_ADDR 0
 
 struct vys_spectrum_info {
 	uint64_t data_addr;
@@ -143,10 +142,6 @@ extern char *vys_error_record_to_string(
 extern void vys_signal_msg_payload_init(
 	struct vys_signal_msg_payload *payload, const char *config_id)
 	__attribute__((nonnull));
-
-extern inline bool vys_spectrum_filled(const struct vys_spectrum_info *info) {
-	return info->data_addr != VYS_INVALID_ADDR;
-}
 
 extern char *vys_get_ipoib_addr(void)
 	__attribute__((malloc,nonnull));
