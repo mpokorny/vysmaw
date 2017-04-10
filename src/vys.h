@@ -23,7 +23,6 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include <stdbool.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include <netinet/in.h>
@@ -145,7 +144,7 @@ extern void vys_signal_msg_payload_init(
 	struct vys_signal_msg_payload *payload, const char *config_id)
 	__attribute__((nonnull));
 
-static inline bool vys_spectrum_filled(const struct vys_spectrum_info *info) {
+extern inline bool vys_spectrum_filled(const struct vys_spectrum_info *info) {
 	return info->data_addr != VYS_INVALID_ADDR;
 }
 
