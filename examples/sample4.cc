@@ -148,7 +148,7 @@ main(int argc, char *argv[])
 			interrupted = true;
 		}
 		// record message type
-		assert(message->typ <= VYSMAW_MESSAGE_END);
+		assert(!message || message->typ < VYSMAW_MESSAGE_END);
 		if (message)
 			++counters[message->typ];
 
