@@ -35,8 +35,8 @@ target_compile_options(cy_vysmaw PRIVATE
 
 execute_process(
   COMMAND "${PYTHON_EXECUTABLE}" -c "if True:
-    from distutils import sysconfig as sc
-    print(sc.get_python_lib(prefix='', plat_specific=True))"
+    import sysconfig as sc
+    print(sc.get_path('platlib'))"
   OUTPUT_VARIABLE PYTHON_SITE
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
