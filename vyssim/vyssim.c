@@ -508,9 +508,6 @@ resolve_addr(struct vyssim_context *vyssim,
 		VERB_ERR(error_record, errno, "rdma_bind_addr");
 		return rc;
 	}
-	/* A PD is created when we bind. Copy it to the mcast_context so it can be
-	 * used later on */
-	ctx->pd = ctx->id->pd;
 
 	hints.ai_flags = 0;
 	rc = rdma_getaddrinfo(vyssim->vconfig->signal_multicast_address, NULL,
@@ -574,7 +571,7 @@ static int
 create_mcast_resources(struct mcast_context *ctx,
                        struct vys_error_record **error_record)
 {
-	g_assert(ctx->pd != NULL);
+	g_assert(ctx->id->pd != NULL);
 	ctx->cq = ibv_create_cq(ctx->id->verbs, ctx->max_wr, NULL,
 	                        ctx->comp_channel, 0);
 	if (G_UNLIKELY(ctx->cq == NULL)) {
@@ -592,7 +589,7 @@ create_mcast_resources(struct mcast_context *ctx,
 	attr.cap.max_recv_wr = 1;
 	attr.cap.max_send_sge = 1;
 	attr.cap.max_recv_sge = 1;
-	int rc = rdma_create_qp(ctx->id, ctx->pd, &attr);
+	int rc = rdma_create_qp(ctx->id, ctx->id->pd, &attr);
 	if (G_UNLIKELY(rc != 0)) {
 		VERB_ERR(error_record, errno, "rdma_create_qp");
 		return rc;
@@ -694,7 +691,7 @@ init_multicast(struct vyssim_context *vyssim,
 		ctx->remote_qpn = event->param.ud.qp_num;
 		ctx->remote_qkey = event->param.ud.qkey;
 		int rc1 = 0;
-		ctx->ah = ibv_create_ah(ctx->pd, &event->param.ud.ah_attr);
+		ctx->ah = ibv_create_ah(ctx->id->pd, &event->param.ud.ah_attr);
 		if (G_UNLIKELY(ctx->ah == NULL)) {
 			rc1 = -1;
 			VERB_ERR(error_record, errno, "ibv_create_ah");
