@@ -670,7 +670,7 @@ init_multicast(struct vyssim_context *vyssim,
 		VERB_ERR(error_record, rc, "ibv_query_device");
 		return rc;
 	}
-	ctx->max_wr = MIN(ctx->max_wr, dev_attr.max_cqe);
+	ctx->max_wr = MIN(ctx->max_wr, dev_attr.max_cq);
 
 	rc = create_mcast_resources(ctx, error_record);
 	if (G_UNLIKELY(rc != 0))
