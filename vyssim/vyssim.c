@@ -1366,7 +1366,7 @@ fin(struct vyssim_context *vyssim, struct vys_error_record **error_record)
 	if (ctx->comp_channel != NULL)
 		ibv_destroy_comp_channel(ctx->comp_channel);
 
-	int rc;
+	int rc = 0;
 
 	if (ctx->id != NULL) {
 		rc = rdma_destroy_id(ctx->id);
