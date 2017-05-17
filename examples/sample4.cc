@@ -82,7 +82,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
 	const unordered_map<enum vysmaw_message_type,string> names = {
 		{VYSMAW_MESSAGE_VALID_BUFFER, "valid-buffer"},
-		{VYSMAW_MESSAGE_DIGEST_FAILURE, "digest-failure"},
+		{VYSMAW_MESSAGE_ID_FAILURE, "id-failure"},
 		{VYSMAW_MESSAGE_QUEUE_OVERFLOW, "queue-overflow"},
 		{VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
 		{VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
@@ -99,7 +99,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 
 	const enum vysmaw_message_type msg_types[] = {
 		VYSMAW_MESSAGE_VALID_BUFFER,
-		VYSMAW_MESSAGE_DIGEST_FAILURE,
+		VYSMAW_MESSAGE_ID_FAILURE,
 		VYSMAW_MESSAGE_QUEUE_OVERFLOW,
 		VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
 		VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,

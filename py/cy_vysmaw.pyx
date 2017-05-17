@@ -417,6 +417,10 @@ cdef class DataInfo:
         return result
 
     @property
+    def id_num(self):
+        return self._c_info[0].id_num
+
+    @property
     def config_id(self):
         return self._c_info[0].config_id
 
@@ -496,8 +500,8 @@ cdef class Message:
         msgtype = msg[0].typ
         if msgtype == VYSMAW_MESSAGE_VALID_BUFFER:
             result = ValidBufferMessage()
-        elif msgtype == VYSMAW_MESSAGE_DIGEST_FAILURE:
-            result = DigestFailureMessage()
+        elif msgtype == VYSMAW_MESSAGE_ID_FAILURE:
+            result = IdFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_QUEUE_OVERFLOW:
             result = QueueOverflowMessage()
         elif msgtype == VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
@@ -536,22 +540,18 @@ cdef class ValidBufferMessage(Message):
         return DataInfo.wrap(&(self._c_message[0].content.valid_buffer.info))
 
     @property
-    def buffer_size(self):
-        return self._c_message[0].content.valid_buffer.buffer_size
+    def spectrum(self):
+        n = (self.buffer_size - VYS_SPECTRUM_OFFSET) / sizeof(float)
+        return <float[:n]>self._c_message[0].content.valid_buffer.spectrum
 
-    @property
-    def buffer(self):
-        n = self.buffer_size / sizeof(float)
-        return <float[:n]>self._c_message[0].content.valid_buffer.buffer
-
-cdef class DigestFailureMessage(Message):
+cdef class IdFailureMessage(Message):
 
     def __str__(self):
-        return show_properties(self, DigestFailureMessage)
+        return show_properties(self, IdFailureMessage)
 
     @property
     def info(self):
-        return DataInfo.wrap(&(self._c_message[0].content.digest_failure))
+        return DataInfo.wrap(&(self._c_message[0].content.id_failure))
 
 cdef class QueueOverflowMessage(Message):
 

@@ -22,25 +22,25 @@ from libcpp cimport bool
 
 cdef extern from "vysmaw.h":
 
-    DEF VYS_DATA_DIGEST_SIZE = 16
+    int VYS_SPECTRUM_OFFSET = 16
 
     DEF VYS_MULTICAST_ADDRESS_SIZE = 32
 
     DEF VYS_CONFIG_ID_SIZE = 32
 
-    DEF VYS_POLARIZATION_PRODUCT_AA = 0
-    DEF VYS_POLARIZATION_PRODUCT_AB = 1
-    DEF VYS_POLARIZATION_PRODUCT_BA = 2
-    DEF VYS_POLARIZATION_PRODUCT_BB = 3
-    DEF VYS_POLARIZATION_PRODUCT_UNKNOWN = 4
+    int VYS_POLARIZATION_PRODUCT_AA = 0
+    int VYS_POLARIZATION_PRODUCT_AB = 1
+    int VYS_POLARIZATION_PRODUCT_BA = 2
+    int VYS_POLARIZATION_PRODUCT_BB = 3
+    int VYS_POLARIZATION_PRODUCT_UNKNOWN = 4
 
-    DEF VYS_BASEBAND_A1C1_3BIT = 0
-    DEF VYS_BASEBAND_A2C2_3BIT = 1
-    DEF VYS_BASEBAND_AC_8BIT = 2
-    DEF VYS_BASEBAND_B1D1_3BIT = 3
-    DEF VYS_BASEBAND_B2D2_3BIT = 4
-    DEF VYS_BASEBAND_BD_8BIT = 5
-    DEF VYS_BASEBAND_UNKNOWN = 6
+    int VYS_BASEBAND_A1C1_3BIT = 0
+    int VYS_BASEBAND_A2C2_3BIT = 1
+    int VYS_BASEBAND_AC_8BIT = 2
+    int VYS_BASEBAND_B1D1_3BIT = 3
+    int VYS_BASEBAND_B2D2_3BIT = 4
+    int VYS_BASEBAND_BD_8BIT = 5
+    int VYS_BASEBAND_UNKNOWN = 6
 
     DEF VYSMAW_RECEIVE_STATUS_LENGTH = 64
 
@@ -83,7 +83,7 @@ cdef extern from "vysmaw.h":
     struct vys_spectrum_info:
         uint64_t data_addr
         uint64_t timestamp
-        uint8_t digest[VYS_DATA_DIGEST_SIZE]
+        uint32_t id_num
 
     enum result_code:
         VYSMAW_NO_ERROR,
@@ -102,7 +102,7 @@ cdef extern from "vysmaw.h":
 
     enum vysmaw_message_type:
         VYSMAW_MESSAGE_VALID_BUFFER,
-        VYSMAW_MESSAGE_DIGEST_FAILURE,
+        VYSMAW_MESSAGE_ID_FAILURE,
         VYSMAW_MESSAGE_QUEUE_OVERFLOW,
         VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
@@ -115,11 +115,13 @@ cdef extern from "vysmaw.h":
     struct message_valid_buffer:
         vysmaw_data_info info
         stddef.size_t buffer_size
-        float *buffer
+        void *buffer
+        uint32_t *id_num
+        float *spectrum
 
     union message_content:
         message_valid_buffer valid_buffer
-        vysmaw_data_info digest_failure
+        vysmaw_data_info id_failure
         unsigned num_overflow
         unsigned num_data_buffers_unavailable
         unsigned num_signal_buffers_unavailable

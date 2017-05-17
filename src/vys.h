@@ -32,16 +32,16 @@ extern "C" {
 #include <linux/if_packet.h>
 #include <linux/if_arp.h>
 
-#define VYS_VERSION 2
+#define VYS_VERSION 3
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
-#define VYS_DATA_DIGEST_SIZE 16
 #define VYS_CONFIG_ID_SIZE 32
+#define VYS_SPECTRUM_OFFSET 16
 
 struct vys_spectrum_info {
 	uint64_t data_addr;
 	uint64_t timestamp;
-	uint8_t digest[VYS_DATA_DIGEST_SIZE];
+	uint32_t id_num;
 };
 
 /* polarization product definitions

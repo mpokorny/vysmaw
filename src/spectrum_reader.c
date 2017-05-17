@@ -54,7 +54,6 @@ struct spectrum_reader_context_ {
 	struct rdma_event_channel *event_channel;
 	GHashTable *connections;
 	GSequence *fd_connections;
-	GChecksum *checksum;
 };
 
 struct server_connection_context {
@@ -75,7 +74,7 @@ struct server_connection_context {
 
 enum rdma_req_result {
 	RDMA_REQ_SUCCESS, RDMA_REQ_READ_FAILURE,
-	RDMA_REQ_DIGEST_VERIFICATION_FAILURE
+	RDMA_REQ_ID_VERIFICATION_FAILURE
 };
 
 struct rdma_req {
@@ -88,9 +87,6 @@ struct rdma_req {
 	struct vysmaw_message *message;
 };
 
-static bool verify_digest(
-	GChecksum *checksum, const float *buff, size_t buffer_size, uint8_t *digest)
-	__attribute__((nonnull));
 static struct rdma_req *new_rdma_req(
 	GSList *consumers, const struct server_connection_context *conn_ctx,
 	const struct vys_signal_msg_payload *payload,
@@ -174,8 +170,8 @@ static int on_cm_event(
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int poll_completions(
-	GChecksum *checksum, struct server_connection_context *conn_ctx,
-	GSList **reqs, struct vys_error_record **error_record)
+	struct server_connection_context *conn_ctx, GSList **reqs,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static void ack_completions(
 	struct server_connection_context *conn_ctx, unsigned min_ack)
@@ -225,18 +221,6 @@ static int loopback_msg(
 	struct spectrum_reader_context_ *context,
 	struct data_path_message *msg, struct vys_error_record **error_record)
 	__attribute__((nonnull));
-
-static bool
-verify_digest(GChecksum *checksum, const float *buff, size_t buffer_size,
-              uint8_t *digest)
-{
-	g_checksum_reset(checksum);
-	g_checksum_update(checksum, (guchar *)buff, buffer_size);
-	uint8_t buff_digest[VYS_DATA_DIGEST_SIZE];
-	gsize digest_len = VYS_DATA_DIGEST_SIZE;
-	g_checksum_get_digest(checksum, buff_digest, &digest_len);
-	return memcmp(buff_digest, digest, digest_len) == 0;
-}
 
 static struct rdma_req *
 new_rdma_req(GSList *consumers,
@@ -843,8 +827,7 @@ on_cm_event(struct spectrum_reader_context_ *context,
 }
 
 static int
-poll_completions(GChecksum *checksum,
-                 struct server_connection_context *conn_ctx, GSList **reqs,
+poll_completions(struct server_connection_context *conn_ctx, GSList **reqs,
                  struct vys_error_record **error_record)
 {
 	*reqs = NULL;
@@ -861,14 +844,11 @@ poll_completions(GChecksum *checksum,
 			struct rdma_req *req = (struct rdma_req *)conn_ctx->wcs[i].wr_id;
 			req->status = conn_ctx->wcs[i].status;
 			if (G_LIKELY(req->status == IBV_WC_SUCCESS)) {
-				if (verify_digest(
-					    checksum,
-					    req->message->content.valid_buffer.buffer,
-					    req->message->content.valid_buffer.buffer_size,
-					    req->spectrum_info.digest))
+				if (*req->message->content.valid_buffer.id_num
+				    == req->spectrum_info.id_num)
 					req->result = RDMA_REQ_SUCCESS;
 				else
-					req->result = RDMA_REQ_DIGEST_VERIFICATION_FAILURE;
+					req->result = RDMA_REQ_ID_VERIFICATION_FAILURE;
 			} else {
 				req->result = RDMA_REQ_READ_FAILURE;
 			}
@@ -920,7 +900,7 @@ get_completed_requests(struct spectrum_reader_context_ *context, int fd,
 		return rc;
 	}
 
-	return poll_completions(context->checksum, *conn_ctx, reqs, error_record);
+	return poll_completions(*conn_ctx, reqs, error_record);
 }
 
 static int
@@ -944,8 +924,8 @@ on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
 	while (reqs != NULL) {
 		struct rdma_req *req = reqs->data;
 		switch (req->result) {
-		case RDMA_REQ_DIGEST_VERIFICATION_FAILURE:
-			convert_valid_to_digest_failure(req->message);
+		case RDMA_REQ_ID_VERIFICATION_FAILURE:
+			convert_valid_to_id_failure(req->message);
 			break;
 		case RDMA_REQ_READ_FAILURE:
 			convert_valid_to_rdma_read_failure(req->message, req->status);
@@ -1215,7 +1195,6 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	context.state = STATE_INIT;
 	context.pollfds = g_array_new(false, false, sizeof(struct pollfd));
 	context.new_pollfds = g_array_new(false, false, sizeof(struct pollfd));
-	context.checksum = g_checksum_new(G_CHECKSUM_MD5);
 
 	g_array_set_size(context.pollfds, NUM_FIXED_FDS);
 	for (unsigned i = 0; i < NUM_FIXED_FDS; ++i) {
@@ -1288,7 +1267,6 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	if (context.shared->signal_msg_buffers != NULL)
 		vys_buffer_pool_free(context.shared->signal_msg_buffers);
 
-	g_checksum_free(context.checksum);
 	g_array_free(context.pollfds, TRUE);
 	g_array_free(context.new_pollfds, TRUE);
 	vys_async_queue_unref(shared->read_request_queue);

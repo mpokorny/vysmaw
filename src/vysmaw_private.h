@@ -306,7 +306,7 @@ extern struct vysmaw_message *signal_buffer_starvation_message_new(
 extern struct vysmaw_message *signal_receive_queue_underflow_message_new(
 	vysmaw_handle handle)
 	__attribute__((nonnull,returns_nonnull));
-extern struct vysmaw_message *digest_failure_message_new(
+extern struct vysmaw_message *id_failure_message_new(
 	vysmaw_handle handle, const struct vysmaw_data_info *info)
 	__attribute__((malloc,returns_nonnull,nonnull));
 extern struct vysmaw_message *end_message_new(
@@ -369,10 +369,10 @@ extern void mark_version_mismatch(
 extern void mark_signal_receive_queue_underflow(vysmaw_handle handle)
 	__attribute__((nonnull));
 
-static inline size_t spectrum_size(const struct vysmaw_data_info *info)
+static inline size_t buffer_size(const struct vysmaw_data_info *info)
 {
 	return 2 * ((info->num_bins - 1) * info->bin_stride + info->num_channels)
-		* sizeof(float);
+		* sizeof(float) + VYS_SPECTRUM_OFFSET;
 }
 
 extern int register_one_spectrum_buffer_pool(
@@ -397,7 +397,7 @@ extern void free_sockaddr_key(
 	struct sockaddr_in *sockaddr)
 	__attribute__((nonnull));
 
-extern void convert_valid_to_digest_failure(struct vysmaw_message *message)
+extern void convert_valid_to_id_failure(struct vysmaw_message *message)
 	__attribute__((nonnull));
 extern void convert_valid_to_rdma_read_failure(
 	struct vysmaw_message *message, enum ibv_wc_status status)

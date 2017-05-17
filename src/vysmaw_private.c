@@ -352,12 +352,12 @@ signal_buffer_starvation_message_new(vysmaw_handle handle,
 }
 
 struct vysmaw_message *
-digest_failure_message_new(vysmaw_handle handle,
-                           const struct vysmaw_data_info *info)
+id_failure_message_new(vysmaw_handle handle,
+                       const struct vysmaw_data_info *info)
 {
 	struct vysmaw_message *result =
-		message_new(handle, VYSMAW_MESSAGE_DIGEST_FAILURE);
-	result->content.digest_failure = *info;
+		message_new(handle, VYSMAW_MESSAGE_ID_FAILURE);
+	result->content.id_failure = *info;
 	return result;
 }
 
@@ -690,15 +690,15 @@ lookup_buffer_pool_from_collection(struct vysmaw_message *message)
 	g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
 	return spectrum_buffer_pool_collection_lookup(
 		message->handle->pool_collection,
-		spectrum_size(&message->content.valid_buffer.info));
+		buffer_size(&message->content.valid_buffer.info));
 }
 
 struct spectrum_buffer_pool *
 lookup_buffer_pool_from_pool(struct vysmaw_message *message)
 {
 	g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
-	size_t buffer_size = spectrum_size(&message->content.valid_buffer.info);
-	return ((buffer_size <= message->handle->pool->pool->buffer_size)
+	size_t buff_size = buffer_size(&message->content.valid_buffer.info);
+	return ((buff_size <= message->handle->pool->pool->buffer_size)
 	        ? message->handle->pool
 	        : NULL);
 }
@@ -873,9 +873,9 @@ valid_buffer_message_new(
 	GHashTable *mrs, const struct vysmaw_data_info *info,
 	pool_id_t *pool_id, struct vys_error_record **error_record)
 {
-	size_t buffer_size = spectrum_size(info);
+	size_t buff_size = buffer_size(info);
 	void *buffer = handle->new_valid_buffer_fn(
-		handle, id, mrs, buffer_size, pool_id, error_record);
+		handle, id, mrs, buff_size, pool_id, error_record);
 	struct vysmaw_message *result = NULL;
 	if (buffer != NULL) {
 		if (handle->num_data_buffers_unavailable > 0)
@@ -884,8 +884,10 @@ valid_buffer_message_new(
 			post_version_mismatch(handle);
 		result = message_new(handle, VYSMAW_MESSAGE_VALID_BUFFER);
 		result->content.valid_buffer.info = *info;
-		result->content.valid_buffer.buffer_size = buffer_size;
+		result->content.valid_buffer.buffer_size = buff_size;
 		result->content.valid_buffer.buffer = buffer;
+		result->content.valid_buffer.id_num = buffer;
+		result->content.valid_buffer.spectrum = buffer + VYS_SPECTRUM_OFFSET;
 	} else {
 		mark_data_buffer_starvation(handle);
 	}
@@ -1062,14 +1064,14 @@ free_sockaddr_key(struct sockaddr_in *sockaddr)
 }
 
 void
-convert_valid_to_digest_failure(struct vysmaw_message *message)
+convert_valid_to_id_failure(struct vysmaw_message *message)
 {
 	g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
 	vysmaw_message_release_buffer(message);
-	message->typ = VYSMAW_MESSAGE_DIGEST_FAILURE;
-	if (offsetof(struct vysmaw_message, content.digest_failure) !=
+	message->typ = VYSMAW_MESSAGE_ID_FAILURE;
+	if (offsetof(struct vysmaw_message, content.id_failure) !=
 	    offsetof(struct vysmaw_message, content.valid_buffer.info))
-		memmove(&message->content.digest_failure,
+		memmove(&message->content.id_failure,
 		        &message->content.valid_buffer.info,
 		        sizeof(message->content.valid_buffer.info));
 }

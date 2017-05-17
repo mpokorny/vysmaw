@@ -161,7 +161,7 @@ struct server_context {
 
 	unsigned num_data_buffers;
 	size_t data_buffer_block_size;
-	float *data_buffer_block;
+	gchar *data_buffer_block;
 	unsigned data_buffer_index;
 	unsigned data_buffer_len;
 
@@ -194,7 +194,7 @@ static void param_set_unsigned(
 	__attribute__((nonnull));
 static int set_nonblocking(int fd);
 static struct vys_signal_msg *gen_one_signal_msg(
-	struct vyssim_context *vyssim, GChecksum *checksum,
+	struct vyssim_context *vyssim, guint32 *id_num,
 	guint64 timestamp_us, unsigned ant0, unsigned ant1,
 	unsigned spectral_window_index, unsigned stokes_index)
 	__attribute__((nonnull,returns_nonnull));
@@ -377,7 +377,7 @@ pop_msg_from_queue(struct vyssim_context *vyssim)
 }
 
 static struct vys_signal_msg *
-gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
+gen_one_signal_msg(struct vyssim_context *vyssim, guint32 *id_num,
                    guint64 timestamp_us, unsigned ant0, unsigned ant1,
                    unsigned spectral_window_index, unsigned stokes_index)
 {
@@ -404,31 +404,24 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
 	payload->num_spectra = mcast_ctx->signal_msg_num_spectra;
 	for (unsigned n = 0; n < mcast_ctx->signal_msg_num_spectra; ++n) {
 		struct vys_spectrum_info *info = &(payload->infos[n]);
-		float *buff =
+		gchar *buff =
 			&(server_ctx->data_buffer_block[server_ctx->data_buffer_index *
 			                                server_ctx->data_buffer_len]);
 		info->data_addr = (uint64_t)buff;
 		info->timestamp =
 			1000 * (timestamp_us + n * vyssim->params.integration_time_microsec);
+		info->id_num = *id_num;
+		__sync_lock_test_and_set((guint32 *)buff, *id_num);
+		*id_num += 1;
+		buff += VYS_SPECTRUM_OFFSET;
 		/* partially fill buffer */
-		*((double *)buff) = (double)info->timestamp;
-		buff += (sizeof(double) + sizeof(float) - 1) / sizeof(float);
-		*buff++ = (float)vyssim->params.num_channels;
-		*buff++ = (float)ant0;
-		*buff++ = (float)ant1;
-		*buff++ = (float)spectral_window_index;
-		*buff++ = (float)stokes_index;
-		memset(
-			buff,
-			0,
-			(server_ctx->data_buffer_len - (buff - (float *)info->data_addr)) *
-			sizeof(float));
-		g_checksum_reset(checksum);
-		g_checksum_update(checksum, (guchar *)info->data_addr,
-		                  server_ctx->data_buffer_len * sizeof(float));
-		gsize digest_len = VYS_DATA_DIGEST_SIZE;
-		g_checksum_get_digest(checksum, info->digest, &digest_len);
-		g_assert(digest_len == VYS_DATA_DIGEST_SIZE);
+		gfloat *fbuff = (gfloat *)buff;
+		*fbuff++ = (float)info->timestamp;
+		*fbuff++ = (float)vyssim->params.num_channels;
+		*fbuff++ = (float)ant0;
+		*fbuff++ = (float)ant1;
+		*fbuff++ = (float)spectral_window_index;
+		*fbuff++ = (float)stokes_index;
 		server_ctx->data_buffer_index =
 			(server_ctx->data_buffer_index + 1) % server_ctx->num_data_buffers;
 	}
@@ -438,8 +431,8 @@ gen_one_signal_msg(struct vyssim_context *vyssim, GChecksum *checksum,
 static void *
 data_generator(struct vyssim_context *vyssim)
 {
+	guint32 id_num = 0;
 	struct server_context *ctx = &(vyssim->server_ctx);
-	GChecksum *checksum = g_checksum_new(G_CHECKSUM_MD5);
 	guint64 epoch_microsec = 1000 * vyssim->epoch_ms;
 	bool quit = false;
 	for (unsigned intg = 0; !quit;
@@ -468,7 +461,7 @@ data_generator(struct vyssim_context *vyssim)
 							push_msg_to_queue(
 								vyssim,
 								gen_one_signal_msg(
-									vyssim, checksum, t_us, a0, a1,
+									vyssim, &id_num, t_us, a0, a1,
 									spw_desc->index, sto));
 						}
 						MUTEX_UNLOCK(ctx->queue_mutex);
@@ -478,7 +471,6 @@ data_generator(struct vyssim_context *vyssim)
 			}
 		}
 	}
-	g_checksum_free(checksum);
 	return NULL;
 }
 
@@ -754,11 +746,13 @@ init(struct vyssim_context *vyssim, struct vys_error_record **error_record)
 
 	/* allocate the memory for data buffers */
 	ctx->data_buffer_block_size =
-		2 * ctx->num_data_buffers * vyssim->params.num_channels
-		* sizeof(float);
+		ctx->num_data_buffers
+		* (2 * vyssim->params.num_channels * sizeof(float)
+		   + VYS_SPECTRUM_OFFSET);
 	ctx->data_buffer_block = g_malloc(ctx->data_buffer_block_size);
 	ctx->data_buffer_index = 0;
-	ctx->data_buffer_len = 2 * vyssim->params.num_channels;
+	ctx->data_buffer_len =
+		2 * vyssim->params.num_channels + VYS_SPECTRUM_OFFSET;
 
 	ctx->total_size_per_signal =
 		ctx->data_buffer_len * vyssim->mcast_ctx.signal_msg_num_spectra *
