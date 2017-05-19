@@ -93,8 +93,7 @@ static int stop_signal_receive(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
-static bool new_wr(
-	struct signal_receiver_context_ *context, struct recv_wr **wrs)
+static bool new_wr(struct signal_receiver_context_ *context)
 	__attribute__((nonnull));
 static void ack_completions(
 	struct signal_receiver_context_ *context, unsigned min_ack)
@@ -103,7 +102,7 @@ static int poll_completions(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
-static unsigned create_new_wrs(struct signal_receiver_context_ *context)
+static void create_new_wrs(struct signal_receiver_context_ *context)
 	__attribute__((nonnull));
 static int post_wrs(
 	struct signal_receiver_context_ *context,
@@ -519,17 +518,18 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 }
 
 static bool
-new_wr(struct signal_receiver_context_ *context, struct recv_wr **wrs)
+new_wr(struct signal_receiver_context_ *context)
 {
 	bool result;
 	struct vys_signal_msg *buff =
 		vys_buffer_pool_pop(context->shared->signal_msg_buffers);
 	if (G_LIKELY(buff != NULL)) {
-		*wrs = recv_wr_prepend_new(
-			*wrs,
+		context->rem_wrs = recv_wr_prepend_new(
+			context->rem_wrs,
 			(uint64_t)buff,
 			SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra),
 			context->mr->lkey);
+		context->len_rem_wrs++;
 		result = true;
 	} else {
 		result = false;
@@ -604,29 +604,25 @@ poll_completions(struct signal_receiver_context_ *context,
 	return 0;
 }
 
-static unsigned
+static void
 create_new_wrs(struct signal_receiver_context_ *context)
 {
-	unsigned result = 0;
 	if (G_LIKELY(context->state == STATE_RUN)) {
+		unsigned total_wrs = context->num_posted_wr + context->len_rem_wrs;
 		/* try to create more work requests if we're below the max, and the
 		 * last attempt to obtain a buffer from the pool succeeded */
 		bool buffers_exhausted = false;
-		while (!buffers_exhausted
-		       && (context->num_posted_wr + result < context->max_posted_wr)) {
-			buffers_exhausted = !new_wr(context, &context->rem_wrs);
-			if (!buffers_exhausted) ++result;
+		while (!buffers_exhausted && total_wrs < context->max_posted_wr) {
+			buffers_exhausted = !new_wr(context);
+			if (!buffers_exhausted) ++total_wrs;
 		}
-		if (buffers_exhausted
-		    && context->num_posted_wr + result < context->min_posted_wr) {
+		if (total_wrs < context->min_posted_wr) {
 			struct data_path_message *dp_msg =
 				data_path_message_new(context->shared->signal_msg_num_spectra);
 			dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
 			g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 		}
-		result = false;
 	}
-	return result;
 }
 
 static int
@@ -649,6 +645,7 @@ post_wrs(struct signal_receiver_context_ *context,
 				struct recv_wr *next_wr = wrs;
 				while (next_wr != context->rem_wrs) {
 					context->num_posted_wr++;
+					context->len_rem_wrs--;
 					last_wr = next_wr;
 					next_wr = recv_wr_next(last_wr);
 				}
