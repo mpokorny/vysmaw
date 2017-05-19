@@ -638,25 +638,26 @@ post_wrs(struct signal_receiver_context_ *context,
 		if (G_LIKELY(context->rem_wrs != NULL)) {
 			struct recv_wr *wrs = context->rem_wrs;
 			/* post wrs */
-			if (G_LIKELY(wrs != NULL)) {
-				context->rem_wrs = NULL;
-				rc = ibv_post_recv(
-					context->id->qp,
-					&wrs->ibv_recv_wr,
-					(struct ibv_recv_wr **)&context->rem_wrs);
-				if (G_LIKELY(rc == 0 || rc == ENOMEM)) {
-					rc = 0;
-					struct recv_wr *next_wr = wrs;
-					while (next_wr != context->rem_wrs) {
-						context->num_posted_wr++;
-						struct recv_wr *last_wr = next_wr;
-						next_wr = recv_wr_next(last_wr);
-						last_wr->ibv_recv_wr.next = NULL;
-						recv_wr_free(last_wr);
-					}
-				} else {
-					VERB_ERR(error_record, rc, "ibv_post_recv");
+			context->rem_wrs = NULL;
+			rc = ibv_post_recv(
+				context->id->qp,
+				&wrs->ibv_recv_wr,
+				(struct ibv_recv_wr **)&context->rem_wrs);
+			if (G_LIKELY(rc == 0 || rc == ENOMEM)) {
+				rc = 0;
+				struct recv_wr *last_wr = NULL;
+				struct recv_wr *next_wr = wrs;
+				while (next_wr != context->rem_wrs) {
+					context->num_posted_wr++;
+					last_wr = next_wr;
+					next_wr = recv_wr_next(last_wr);
 				}
+				if (G_LIKELY(last_wr != NULL)) {
+					last_wr->ibv_recv_wr.next = NULL;
+					recv_wr_free(wrs);
+				}
+			} else {
+				VERB_ERR(error_record, rc, "ibv_post_recv");
 			}
 		}
 		/* update underflow flag */
