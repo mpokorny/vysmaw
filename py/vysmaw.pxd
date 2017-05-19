@@ -49,7 +49,9 @@ cdef extern from "vysmaw.h":
         stddef.size_t spectrum_buffer_pool_size
         bool single_spectrum_buffer_pool
         unsigned max_spectrum_buffer_size
-        stddef.size_t signal_message_pool_size
+        unsigned signal_message_receive_min_posted
+        unsigned signal_message_receive_max_posted
+        double signal_message_pool_overhead_factor
         bool eager_connect
         double eager_connect_idle_sec
         bool preconnect_backlog

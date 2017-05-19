@@ -54,6 +54,7 @@ struct signal_receiver_context_ {
 	uint32_t remote_qkey;
 	unsigned num_posted_wr;
 	unsigned max_posted_wr;
+	unsigned min_posted_wr;
 	unsigned min_ack;
 	unsigned num_not_ack;
 	struct recv_wr *rem_wrs;
@@ -82,9 +83,6 @@ static int get_cm_event(
 static int resolve_addr(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
-	__attribute__((nonnull));
-static void set_max_posted_wr(
-	struct signal_receiver_context_ *context, unsigned max_posted_wr)
 	__attribute__((nonnull));
 static int start_signal_receive(
 	struct signal_receiver_context_ *context,
@@ -276,26 +274,10 @@ resolve_addr_cleanup_and_return:
 	return rc;
 }
 
-static void
-set_max_posted_wr(struct signal_receiver_context_ *context,
-                  unsigned max_posted_wr)
-{
-	context->max_posted_wr = max_posted_wr;
-	context->min_ack =
-		max_posted_wr
-		/ context->shared->handle->config.signal_receive_min_ack_part;
-}
-
 static int
 start_signal_receive(struct signal_receiver_context_ *context,
                      struct vys_error_record **error_record)
 {
-	set_max_posted_wr(
-		context,
-		context->shared->handle->config.signal_receive_max_posted);
-	context->num_posted_wr = 0;
-	context->num_not_ack = 0;
-
 	/* event channel */
 	context->event_channel = rdma_create_event_channel();
 	if (G_UNLIKELY(context->event_channel == NULL)) {
@@ -316,26 +298,31 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	if (G_UNLIKELY(rc != 0))
 		return -1;
 
-	/* get MTU */
-	struct ibv_port_attr port_attr;
-	rc = ibv_query_port(context->id->verbs, context->id->port_num, &port_attr);
+	/* config pointer for convenience */
+	const struct vysmaw_configuration *config =
+		&context->shared->handle->config;
+
+	/* set posted wr limits */
+	struct ibv_device_attr dev_attr;
+	rc = ibv_query_device(context->id->verbs, &dev_attr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_record, rc, "ibv_query_port");
+		VERB_ERR(error_record, rc, "ibv_query_device");
 		return -1;
 	}
-	unsigned mtu = 1u << (port_attr.active_mtu + 7);
-	/* set size of signal buffers to be maximum possible given mtu */
-	context->shared->signal_msg_num_spectra =
-		MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
-	size_t sizeof_signal_msg =
-		SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
+	context->max_posted_wr =
+		MIN(dev_attr.max_qp_wr, config->signal_message_receive_max_posted);
+	context->min_posted_wr =
+		MIN(context->max_posted_wr, config->signal_message_receive_min_posted);
+	/* No sense setting max_posted_wr above total number of signal buffers
+	 * available. This limit is preliminary, and may be reduced further
+	 * below. */
+	gsize num_signal_msg_buffers =
+		context->min_posted_wr * config->signal_message_pool_overhead_factor;
+	context->max_posted_wr =
+		MIN(context->max_posted_wr, num_signal_msg_buffers);
 
-	/* create signal message buffer pool */
-	context->shared->signal_msg_buffers =
-		vys_buffer_pool_new(
-			(context->shared->handle->config.signal_message_pool_size
-			 / sizeof_signal_msg),
-			sizeof_signal_msg);
+	context->num_posted_wr = 0;
+	context->num_not_ack = 0;
 
 	/* completion channel */
 	context->comp_channel = ibv_create_comp_channel(context->id->verbs);
@@ -343,15 +330,6 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		VERB_ERR(error_record, errno, "ibv_create_comp_channel");
 		return -1;
 	}
-
-	/* lower max_posted_wr if ib device requires it */
-	struct ibv_device_attr dev_attr;
-	rc = ibv_query_device(context->id->verbs, &dev_attr);
-	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_record, rc, "ibv_query_device");
-		return -1;
-	}
-	set_max_posted_wr(context, MIN(context->max_posted_wr, dev_attr.max_cqe));
 
 	/* completion queue */
 	context->cq = ibv_create_cq(context->id->verbs, context->max_posted_wr,
@@ -378,9 +356,36 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		return rc;
 	}
 
-	/* reduce max_posted_wr further if qp requires it */
-	set_max_posted_wr(context,
-	                  MIN(context->max_posted_wr, attr.cap.max_recv_wr));
+	/* reduce posted wr limits further if qp requires it */
+	context->max_posted_wr = MIN(context->max_posted_wr, attr.cap.max_recv_wr);
+	context->min_posted_wr =
+		MIN(context->min_posted_wr, context->max_posted_wr);
+
+	/* posted wr limits will not be updated further, set min_ack */
+	context->min_ack =
+		context->min_posted_wr / config->signal_receive_min_ack_part;
+
+	/* get MTU */
+	struct ibv_port_attr port_attr;
+	rc = ibv_query_port(context->id->verbs, context->id->port_num, &port_attr);
+	if (G_UNLIKELY(rc != 0)) {
+		VERB_ERR(error_record, rc, "ibv_query_port");
+		return -1;
+	}
+	unsigned mtu = 1u << (port_attr.active_mtu + 7);
+
+	/* set size of signal buffers to be maximum possible given mtu */
+	context->shared->signal_msg_num_spectra =
+		MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
+	size_t sizeof_signal_msg =
+		SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
+
+	/* create signal message buffer pool...num_signal_msg_buffers must be
+	 * updated, as min_posted_wr may have been reduced. */
+	num_signal_msg_buffers =
+		context->min_posted_wr * config->signal_message_pool_overhead_factor;
+	context->shared->signal_msg_buffers =
+		vys_buffer_pool_new(num_signal_msg_buffers, sizeof_signal_msg);
 
 	context->wcs = g_new(struct ibv_wc, context->max_posted_wr);
 
@@ -518,7 +523,7 @@ new_wr(struct signal_receiver_context_ *context, struct recv_wr **wrs)
 	bool result;
 	struct vys_signal_msg *buff =
 		vys_buffer_pool_pop(context->shared->signal_msg_buffers);
-	if (buff != NULL) {
+	if (G_LIKELY(buff != NULL)) {
 		*wrs = recv_wr_prepend_new(
 			*wrs,
 			(uint64_t)buff,
@@ -526,10 +531,6 @@ new_wr(struct signal_receiver_context_ *context, struct recv_wr **wrs)
 			context->mr->lkey);
 		result = true;
 	} else {
-		struct data_path_message *dp_msg =
-			data_path_message_new(context->shared->signal_msg_num_spectra);
-		dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
-		g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 		result = false;
 	}
 	return result;
@@ -613,8 +614,16 @@ create_new_wrs(struct signal_receiver_context_ *context)
 		while (!buffers_exhausted
 		       && (context->num_posted_wr + result < context->max_posted_wr)) {
 			buffers_exhausted = !new_wr(context, &context->rem_wrs);
-			if (!buffers_exhausted) result++;
+			if (!buffers_exhausted) ++result;
 		}
+		if (buffers_exhausted
+		    && context->num_posted_wr + result < context->min_posted_wr) {
+			struct data_path_message *dp_msg =
+				data_path_message_new(context->shared->signal_msg_num_spectra);
+			dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
+			g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
+		}
+		result = false;
 	}
 	return result;
 }

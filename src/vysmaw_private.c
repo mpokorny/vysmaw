@@ -28,7 +28,9 @@
 #define DEFAULT_SPECTRUM_BUFFER_POOL_SIZE (10 * (1 << 20))
 #define DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL true
 #define DEFAULT_MAX_SPECTRUM_BUFFER_SIZE (8 * (1 << 10))
-#define DEFAULT_SIGNAL_MESSAGE_POOL_SIZE (10 * (1 << 20))
+#define DEFAULT_SIGNAL_MESSAGE_RECEIVE_MIN_POSTED 4000
+#define DEFAULT_SIGNAL_MESSAGE_RECEIVE_MAX_POSTED 8000
+#define DEFAULT_SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR 2
 #define DEFAULT_EAGER_CONNECT true
 #define DEFAULT_EAGER_CONNECT_IDLE_SEC 1
 #define DEFAULT_PRECONNECT_BACKLOG true
@@ -40,7 +42,6 @@
 #define DEFAULT_RESOLVE_ADDR_TIMEOUT_MS 1000
 #define DEFAULT_INACTIVE_SERVER_TIMEOUT_SEC (60 * 60 * 12)
 #define DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS 1000
-#define DEFAULT_SIGNAL_RECEIVE_MAX_POSTED 10000
 #define DEFAULT_SIGNAL_RECEIVE_MIN_ACK_PART 10
 #define DEFAULT_RDMA_READ_MAX_POSTED 1000
 #define DEFAULT_RDMA_READ_MIN_ACK_PART 10
@@ -76,8 +77,14 @@ default_config_vysmaw()
 	                      MAX_SPECTRUM_BUFFER_SIZE_KEY,
 	                      DEFAULT_MAX_SPECTRUM_BUFFER_SIZE);
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
-	                      SIGNAL_MESSAGE_POOL_SIZE_KEY,
-	                      DEFAULT_SIGNAL_MESSAGE_POOL_SIZE);
+	                      SIGNAL_MESSAGE_RECEIVE_MIN_POSTED_KEY,
+	                      DEFAULT_SIGNAL_MESSAGE_RECEIVE_MIN_POSTED);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SIGNAL_MESSAGE_RECEIVE_MAX_POSTED_KEY,
+	                      DEFAULT_SIGNAL_MESSAGE_RECEIVE_MAX_POSTED);
+	g_key_file_set_double(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR_KEY,
+	                      DEFAULT_SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR);
 	g_key_file_set_boolean(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                       EAGER_CONNECT_KEY,
 	                       DEFAULT_EAGER_CONNECT);
@@ -111,9 +118,6 @@ default_config_vysmaw()
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      SHUTDOWN_CHECK_INTERVAL_MS_KEY,
 	                      DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS);
-	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
-	                      SIGNAL_RECEIVE_MAX_POSTED_KEY,
-	                      DEFAULT_SIGNAL_RECEIVE_MAX_POSTED);
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      SIGNAL_RECEIVE_MIN_ACK_PART_KEY,
 	                      DEFAULT_SIGNAL_RECEIVE_MIN_ACK_PART);
@@ -210,8 +214,14 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		parse_boolean(kf, SINGLE_SPECTRUM_BUFFER_POOL_KEY, config);
 	config->max_spectrum_buffer_size =
 		parse_uint64(kf, MAX_SPECTRUM_BUFFER_SIZE_KEY, config);
-	config->signal_message_pool_size =
-		parse_uint64(kf, SIGNAL_MESSAGE_POOL_SIZE_KEY, config);
+	config->signal_message_receive_min_posted =
+		parse_uint64(kf, SIGNAL_MESSAGE_RECEIVE_MIN_POSTED_KEY, config);
+	config->signal_message_receive_max_posted =
+		parse_uint64(kf, SIGNAL_MESSAGE_RECEIVE_MAX_POSTED_KEY, config);
+	config->signal_message_pool_overhead_factor =
+		parse_double(kf, SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR_KEY, config);
+	config->signal_message_pool_overhead_factor =
+		MAX(config->signal_message_pool_overhead_factor, 1.0);
 	config->eager_connect =
 		parse_boolean(kf, EAGER_CONNECT_KEY, config);
 	config->eager_connect_idle_sec =
@@ -234,8 +244,6 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		parse_uint64(kf, INACTIVE_SERVER_TIMEOUT_SEC_KEY, config);
 	config->shutdown_check_interval_ms =
 		parse_uint64(kf, SHUTDOWN_CHECK_INTERVAL_MS_KEY, config);
-	config->signal_receive_max_posted =
-		parse_uint64(kf, SIGNAL_RECEIVE_MAX_POSTED_KEY, config);
 	config->signal_receive_min_ack_part =
 		parse_uint64(kf, SIGNAL_RECEIVE_MIN_ACK_PART_KEY, config);
 	config->rdma_read_max_posted =
