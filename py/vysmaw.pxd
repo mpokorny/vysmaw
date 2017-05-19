@@ -52,6 +52,7 @@ cdef extern from "vysmaw.h":
         unsigned signal_message_receive_min_posted
         unsigned signal_message_receive_max_posted
         double signal_message_pool_overhead_factor
+        unsigned signal_message_receive_queue_underflow_level
         bool eager_connect
         double eager_connect_idle_sec
         bool preconnect_backlog

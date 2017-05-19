@@ -85,6 +85,17 @@ struct vysmaw_configuration {
 	 * integer, but it's minimum value is 1. */
 	double signal_message_pool_overhead_factor;
 
+	/* Number of work requests on the signal message receive queue at which a
+	 * VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW message is created and sent
+	 * to consumer queues. Ideally, this level would be zero, but as there is no
+	 * signal available from a QP for that event, and can only be inferred by
+	 * comparing the number of receive requests vs the number of completion
+	 * queue entries, this level more accurately can be taken to mean that the
+	 * signal receive queue depth is "dangerously low". A vysmaw application is
+	 * in danger of missing signal messages when a receive queue underflow
+	 * occurs. */
+	unsigned signal_message_receive_queue_underflow_level;
+
 	/* vysmaw clients can either connect to a (CBE) sending process (to read
 	 * spectral data) immediately upon receipt of any signal message from that
 	 * process, or wait until a signal message is received from the process
@@ -223,6 +234,8 @@ enum vysmaw_message_type {
 										   // message
 	VYSMAW_MESSAGE_RDMA_READ_FAILURE, // failure of rdma read of spectral data
 	VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
+	VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, // underflow on signal
+												   // receive queue
 	VYSMAW_MESSAGE_END // vysmaw_handle exited
 };
 

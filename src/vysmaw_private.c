@@ -31,6 +31,7 @@
 #define DEFAULT_SIGNAL_MESSAGE_RECEIVE_MIN_POSTED 4000
 #define DEFAULT_SIGNAL_MESSAGE_RECEIVE_MAX_POSTED 8000
 #define DEFAULT_SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR 2
+#define DEFAULT_SIGNAL_MESSAGE_RECEIVE_QUEUE_UNDERFLOW_LEVEL 100
 #define DEFAULT_EAGER_CONNECT true
 #define DEFAULT_EAGER_CONNECT_IDLE_SEC 1
 #define DEFAULT_PRECONNECT_BACKLOG true
@@ -85,6 +86,9 @@ default_config_vysmaw()
 	g_key_file_set_double(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR_KEY,
 	                      DEFAULT_SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SIGNAL_MESSAGE_RECEIVE_QUEUE_UNDERFLOW_LEVEL_KEY,
+	                      DEFAULT_SIGNAL_MESSAGE_RECEIVE_QUEUE_UNDERFLOW_LEVEL);
 	g_key_file_set_boolean(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                       EAGER_CONNECT_KEY,
 	                       DEFAULT_EAGER_CONNECT);
@@ -222,6 +226,9 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		parse_double(kf, SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR_KEY, config);
 	config->signal_message_pool_overhead_factor =
 		MAX(config->signal_message_pool_overhead_factor, 1.0);
+	config->signal_message_receive_queue_underflow_level =
+		parse_uint64(kf, SIGNAL_MESSAGE_RECEIVE_QUEUE_UNDERFLOW_LEVEL_KEY,
+		             config);
 	config->eager_connect =
 		parse_boolean(kf, EAGER_CONNECT_KEY, config);
 	config->eager_connect_idle_sec =
@@ -326,6 +333,12 @@ data_buffer_starvation_message_new(vysmaw_handle handle,
 	result->content.num_data_buffers_unavailable =
 		handle->num_data_buffers_unavailable;
 	return result;
+}
+
+struct vysmaw_message *
+signal_receive_queue_underflow_message_new(vysmaw_handle handle)
+{
+	return message_new(handle, VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW);
 }
 
 struct vysmaw_message *
@@ -435,6 +448,14 @@ post_version_mismatch(vysmaw_handle handle)
 			handle->mismatched_version);
 	post_msg(handle, msg);
 	handle->num_buffers_mismatched_version = 0;
+}
+
+void
+post_signal_receive_queue_underflow(vysmaw_handle handle)
+{
+	struct vysmaw_message *msg =
+		signal_receive_queue_underflow_message_new(handle);
+	post_msg(handle, msg);
 }
 
 vysmaw_message_queue
@@ -917,6 +938,12 @@ mark_version_mismatch(vysmaw_handle handle, unsigned received_message_version)
 	if (handle->num_buffers_mismatched_version
 		>= handle->config.max_version_mismatch_latency)
 		post_version_mismatch(handle);
+}
+
+void
+mark_signal_receive_queue_underflow(vysmaw_handle handle)
+{
+	post_signal_receive_queue_underflow(handle);
 }
 
 static void

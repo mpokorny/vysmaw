@@ -158,6 +158,14 @@ cdef class Configuration:
         self._c_configuration.signal_message_pool_overhead_factor = value
 
     @property
+    def signal_message_receive_queue_underflow_level(self):
+        return self._c_configuration.signal_message_receive_queue_underflow_level
+
+    @signal_message_receive_queue_underflow_level.setter
+    def signal_message_receive_queue_underflow_level(self, unsigned value):
+        self._c_configuration.signal_message_receive_queue_underflow_level = value
+
+    @property
     def eager_connect(self):
         return self._c_configuration.eager_connect
 

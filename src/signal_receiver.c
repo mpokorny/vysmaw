@@ -50,6 +50,7 @@ struct signal_receiver_context_ {
 	struct ibv_wc *wcs;
 	struct ibv_mr *mr;
 	bool in_multicast;
+	bool in_underflow;
 	uint32_t remote_qpn;
 	uint32_t remote_qkey;
 	unsigned num_posted_wr;
@@ -633,9 +634,10 @@ post_wrs(struct signal_receiver_context_ *context,
          struct vys_error_record **error_record)
 {
 	int rc = 0;
-	if (G_LIKELY(context->rem_wrs != NULL)) {
-		if (G_LIKELY(context->state == STATE_RUN)) {
+	if (G_LIKELY(context->state == STATE_RUN)) {
+		if (G_LIKELY(context->rem_wrs != NULL)) {
 			struct recv_wr *wrs = context->rem_wrs;
+			/* post wrs */
 			if (G_LIKELY(wrs != NULL)) {
 				context->rem_wrs = NULL;
 				rc = ibv_post_recv(
@@ -656,10 +658,26 @@ post_wrs(struct signal_receiver_context_ *context,
 					VERB_ERR(error_record, rc, "ibv_post_recv");
 				}
 			}
-		} else {
-			recv_wr_free(context->rem_wrs);
-			context->rem_wrs = NULL;
 		}
+		/* update underflow flag */
+		bool in_underflow =
+			context->num_posted_wr <=
+			context->shared->handle->config.
+			signal_message_receive_queue_underflow_level;
+		if (context->in_underflow) {
+			context->in_underflow = in_underflow;
+		} else if (in_underflow) {
+			/* transitioned from not-underflow to underflow...send message */
+			context->in_underflow = true;
+			struct data_path_message *dp_msg =
+				data_path_message_new(
+					context->shared->signal_msg_num_spectra);
+			dp_msg->typ = DATA_PATH_RECEIVE_UNDERFLOW;
+			g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
+		}
+	} else if (context->rem_wrs != NULL) {
+		recv_wr_free(context->rem_wrs);
+		context->rem_wrs = NULL;
 	}
 	return rc;
 }
@@ -947,6 +965,7 @@ signal_receiver(struct signal_receiver_context *shared)
 	context.shared = shared;
 	context.state = STATE_INIT;
 	context.in_multicast = false;
+	context.in_underflow = true;
 
 	for (unsigned i = 0; i < NUM_FDS; ++i)
 		context.pollfds[i].fd = -1;
