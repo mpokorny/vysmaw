@@ -510,6 +510,8 @@ cdef class Message:
             result = RDMAReceiveFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_VERSION_MISMATCH:
             result = VersionMismatchMessage()
+        elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW:
+            result = SignalReceiveQueueUnderflow()
         else: # msgtype == VYSMAW_MESSAGE_END
             result = EndMessage()
         result._c_message = msg
@@ -605,6 +607,11 @@ cdef class VersionMismatchMessage(Message):
     @property
     def received_message_version(self):
         return self._c_message[0].content.received_message_version
+
+cdef class SignalReceiveQueueUnderflow(Message):
+
+    def __str__(self):
+        return show_properties(self, SignalReceiveQueueUnderflow)
 
 cdef class EndMessage(Message):
 
