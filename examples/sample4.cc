@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <vysmaw.h>
 
 // max time to wait for message on queue
@@ -142,6 +143,7 @@ main(int argc, char *argv[])
 	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
 
 	// take messages until a VYSMAW_MESSAGE_END appears
+	auto t0 = std::chrono::high_resolution_clock::now();
 	unique_ptr<struct vysmaw_message> message = move(pop(consumer.queue));
 	while (!message || message->typ != VYSMAW_MESSAGE_END) {
 		// start shutdown if requested by user
@@ -158,6 +160,7 @@ main(int argc, char *argv[])
 		message = move(pop(consumer.queue));
 	}
 	++counters[message->typ];
+	auto t1 = std::chrono::high_resolution_clock::now();
 
 	// display counts of received messages
 	if (interrupted) cout << endl;
@@ -181,6 +184,17 @@ main(int argc, char *argv[])
 	default:
 		break;
 	}
+
+	auto span =
+		std::chrono::duration_cast<std::chrono::duration<double> >(t1 - t0);
+	std::cout << std::to_string(counters[VYSMAW_MESSAGE_VALID_BUFFER])
+	          << " valid buffers in "
+	          << span.count()
+	          << " seconds ("
+	          << (counters[VYSMAW_MESSAGE_VALID_BUFFER] / span.count())
+	          << " valid buffers per sec)"
+	          << std::endl;
+
 	// release the last message and shut down the library if it hasn't already
 	// been done
 	message.reset();
