@@ -50,10 +50,12 @@ struct signal_receiver_context_ {
 	struct ibv_wc *wcs;
 	struct ibv_mr *mr;
 	bool in_multicast;
+	bool in_underflow;
 	uint32_t remote_qpn;
 	uint32_t remote_qkey;
 	unsigned num_posted_wr;
 	unsigned max_posted_wr;
+	unsigned min_posted_wr;
 	unsigned min_ack;
 	unsigned num_not_ack;
 	struct recv_wr *rem_wrs;
@@ -83,9 +85,6 @@ static int resolve_addr(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
-static void set_max_posted_wr(
-	struct signal_receiver_context_ *context, unsigned max_posted_wr)
-	__attribute__((nonnull));
 static int start_signal_receive(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
@@ -94,8 +93,7 @@ static int stop_signal_receive(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
-static bool new_wr(
-	struct signal_receiver_context_ *context, struct recv_wr **wrs)
+static bool new_wr(struct signal_receiver_context_ *context)
 	__attribute__((nonnull));
 static void ack_completions(
 	struct signal_receiver_context_ *context, unsigned min_ack)
@@ -104,7 +102,7 @@ static int poll_completions(
 	struct signal_receiver_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
-static unsigned create_new_wrs(struct signal_receiver_context_ *context)
+static void create_new_wrs(struct signal_receiver_context_ *context)
 	__attribute__((nonnull));
 static int post_wrs(
 	struct signal_receiver_context_ *context,
@@ -276,26 +274,10 @@ resolve_addr_cleanup_and_return:
 	return rc;
 }
 
-static void
-set_max_posted_wr(struct signal_receiver_context_ *context,
-                  unsigned max_posted_wr)
-{
-	context->max_posted_wr = max_posted_wr;
-	context->min_ack =
-		max_posted_wr
-		/ context->shared->handle->config.signal_receive_min_ack_part;
-}
-
 static int
 start_signal_receive(struct signal_receiver_context_ *context,
                      struct vys_error_record **error_record)
 {
-	set_max_posted_wr(
-		context,
-		context->shared->handle->config.signal_receive_max_posted);
-	context->num_posted_wr = 0;
-	context->num_not_ack = 0;
-
 	/* event channel */
 	context->event_channel = rdma_create_event_channel();
 	if (G_UNLIKELY(context->event_channel == NULL)) {
@@ -316,26 +298,31 @@ start_signal_receive(struct signal_receiver_context_ *context,
 	if (G_UNLIKELY(rc != 0))
 		return -1;
 
-	/* get MTU */
-	struct ibv_port_attr port_attr;
-	rc = ibv_query_port(context->id->verbs, context->id->port_num, &port_attr);
+	/* config pointer for convenience */
+	const struct vysmaw_configuration *config =
+		&context->shared->handle->config;
+
+	/* set posted wr limits */
+	struct ibv_device_attr dev_attr;
+	rc = ibv_query_device(context->id->verbs, &dev_attr);
 	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_record, rc, "ibv_query_port");
+		VERB_ERR(error_record, rc, "ibv_query_device");
 		return -1;
 	}
-	unsigned mtu = 1u << (port_attr.active_mtu + 7);
-	/* set size of signal buffers to be maximum possible given mtu */
-	context->shared->signal_msg_num_spectra =
-		MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
-	size_t sizeof_signal_msg =
-		SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
+	context->max_posted_wr =
+		MIN(dev_attr.max_qp_wr, config->signal_message_receive_max_posted);
+	context->min_posted_wr =
+		MIN(context->max_posted_wr, config->signal_message_receive_min_posted);
+	/* No sense setting max_posted_wr above total number of signal buffers
+	 * available. This limit is preliminary, and may be reduced further
+	 * below. */
+	gsize num_signal_msg_buffers =
+		context->min_posted_wr * config->signal_message_pool_overhead_factor;
+	context->max_posted_wr =
+		MIN(context->max_posted_wr, num_signal_msg_buffers);
 
-	/* create signal message buffer pool */
-	context->shared->signal_msg_buffers =
-		vys_buffer_pool_new(
-			(context->shared->handle->config.signal_message_pool_size
-			 / sizeof_signal_msg),
-			sizeof_signal_msg);
+	context->num_posted_wr = 0;
+	context->num_not_ack = 0;
 
 	/* completion channel */
 	context->comp_channel = ibv_create_comp_channel(context->id->verbs);
@@ -343,15 +330,6 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		VERB_ERR(error_record, errno, "ibv_create_comp_channel");
 		return -1;
 	}
-
-	/* lower max_posted_wr if ib device requires it */
-	struct ibv_device_attr dev_attr;
-	rc = ibv_query_device(context->id->verbs, &dev_attr);
-	if (G_UNLIKELY(rc != 0)) {
-		VERB_ERR(error_record, rc, "ibv_query_device");
-		return -1;
-	}
-	set_max_posted_wr(context, MIN(context->max_posted_wr, dev_attr.max_cqe));
 
 	/* completion queue */
 	context->cq = ibv_create_cq(context->id->verbs, context->max_posted_wr,
@@ -378,9 +356,36 @@ start_signal_receive(struct signal_receiver_context_ *context,
 		return rc;
 	}
 
-	/* reduce max_posted_wr further if qp requires it */
-	set_max_posted_wr(context,
-	                  MIN(context->max_posted_wr, attr.cap.max_recv_wr));
+	/* reduce posted wr limits further if qp requires it */
+	context->max_posted_wr = MIN(context->max_posted_wr, attr.cap.max_recv_wr);
+	context->min_posted_wr =
+		MIN(context->min_posted_wr, context->max_posted_wr);
+
+	/* posted wr limits will not be updated further, set min_ack */
+	context->min_ack =
+		context->min_posted_wr / config->signal_receive_min_ack_part;
+
+	/* get MTU */
+	struct ibv_port_attr port_attr;
+	rc = ibv_query_port(context->id->verbs, context->id->port_num, &port_attr);
+	if (G_UNLIKELY(rc != 0)) {
+		VERB_ERR(error_record, rc, "ibv_query_port");
+		return -1;
+	}
+	unsigned mtu = 1u << (port_attr.active_mtu + 7);
+
+	/* set size of signal buffers to be maximum possible given mtu */
+	context->shared->signal_msg_num_spectra =
+		MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
+	size_t sizeof_signal_msg =
+		SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
+
+	/* create signal message buffer pool...num_signal_msg_buffers must be
+	 * updated, as min_posted_wr may have been reduced. */
+	num_signal_msg_buffers =
+		context->min_posted_wr * config->signal_message_pool_overhead_factor;
+	context->shared->signal_msg_buffers =
+		vys_buffer_pool_new(num_signal_msg_buffers, sizeof_signal_msg);
 
 	context->wcs = g_new(struct ibv_wc, context->max_posted_wr);
 
@@ -513,23 +518,20 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 }
 
 static bool
-new_wr(struct signal_receiver_context_ *context, struct recv_wr **wrs)
+new_wr(struct signal_receiver_context_ *context)
 {
 	bool result;
 	struct vys_signal_msg *buff =
 		vys_buffer_pool_pop(context->shared->signal_msg_buffers);
-	if (buff != NULL) {
-		*wrs = recv_wr_prepend_new(
-			*wrs,
+	if (G_LIKELY(buff != NULL)) {
+		context->rem_wrs = recv_wr_prepend_new(
+			context->rem_wrs,
 			(uint64_t)buff,
 			SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra),
 			context->mr->lkey);
+		context->len_rem_wrs++;
 		result = true;
 	} else {
-		struct data_path_message *dp_msg =
-			data_path_message_new(context->shared->signal_msg_num_spectra);
-		dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
-		g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 		result = false;
 	}
 	return result;
@@ -602,21 +604,25 @@ poll_completions(struct signal_receiver_context_ *context,
 	return 0;
 }
 
-static unsigned
+static void
 create_new_wrs(struct signal_receiver_context_ *context)
 {
-	unsigned result = 0;
 	if (G_LIKELY(context->state == STATE_RUN)) {
+		unsigned total_wrs = context->num_posted_wr + context->len_rem_wrs;
 		/* try to create more work requests if we're below the max, and the
 		 * last attempt to obtain a buffer from the pool succeeded */
 		bool buffers_exhausted = false;
-		while (!buffers_exhausted
-		       && (context->num_posted_wr + result < context->max_posted_wr)) {
-			buffers_exhausted = !new_wr(context, &context->rem_wrs);
-			if (!buffers_exhausted) result++;
+		while (!buffers_exhausted && total_wrs < context->max_posted_wr) {
+			buffers_exhausted = !new_wr(context);
+			if (!buffers_exhausted) ++total_wrs;
+		}
+		if (total_wrs < context->min_posted_wr) {
+			struct data_path_message *dp_msg =
+				data_path_message_new(context->shared->signal_msg_num_spectra);
+			dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
+			g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
 		}
 	}
-	return result;
 }
 
 static int
@@ -624,33 +630,52 @@ post_wrs(struct signal_receiver_context_ *context,
          struct vys_error_record **error_record)
 {
 	int rc = 0;
-	if (G_LIKELY(context->rem_wrs != NULL)) {
-		if (G_LIKELY(context->state == STATE_RUN)) {
+	if (G_LIKELY(context->state == STATE_RUN)) {
+		if (G_LIKELY(context->rem_wrs != NULL)) {
 			struct recv_wr *wrs = context->rem_wrs;
-			if (G_LIKELY(wrs != NULL)) {
-				context->rem_wrs = NULL;
-				rc = ibv_post_recv(
-					context->id->qp,
-					&wrs->ibv_recv_wr,
-					(struct ibv_recv_wr **)&context->rem_wrs);
-				if (G_LIKELY(rc == 0 || rc == ENOMEM)) {
-					rc = 0;
-					struct recv_wr *next_wr = wrs;
-					while (next_wr != context->rem_wrs) {
-						context->num_posted_wr++;
-						struct recv_wr *last_wr = next_wr;
-						next_wr = recv_wr_next(last_wr);
-						last_wr->ibv_recv_wr.next = NULL;
-						recv_wr_free(last_wr);
-					}
-				} else {
-					VERB_ERR(error_record, rc, "ibv_post_recv");
-				}
-			}
-		} else {
-			recv_wr_free(context->rem_wrs);
+			/* post wrs */
 			context->rem_wrs = NULL;
+			rc = ibv_post_recv(
+				context->id->qp,
+				&wrs->ibv_recv_wr,
+				(struct ibv_recv_wr **)&context->rem_wrs);
+			if (G_LIKELY(rc == 0 || rc == ENOMEM)) {
+				rc = 0;
+				struct recv_wr *last_wr = NULL;
+				struct recv_wr *next_wr = wrs;
+				while (next_wr != context->rem_wrs) {
+					context->num_posted_wr++;
+					context->len_rem_wrs--;
+					last_wr = next_wr;
+					next_wr = recv_wr_next(last_wr);
+				}
+				if (G_LIKELY(last_wr != NULL)) {
+					last_wr->ibv_recv_wr.next = NULL;
+					recv_wr_free(wrs);
+				}
+			} else {
+				VERB_ERR(error_record, rc, "ibv_post_recv");
+			}
 		}
+		/* update underflow flag */
+		bool in_underflow =
+			context->num_posted_wr <=
+			context->shared->handle->config.
+			signal_message_receive_queue_underflow_level;
+		if (context->in_underflow) {
+			context->in_underflow = in_underflow;
+		} else if (in_underflow) {
+			/* transitioned from not-underflow to underflow...send message */
+			context->in_underflow = true;
+			struct data_path_message *dp_msg =
+				data_path_message_new(
+					context->shared->signal_msg_num_spectra);
+			dp_msg->typ = DATA_PATH_RECEIVE_UNDERFLOW;
+			g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
+		}
+	} else if (context->rem_wrs != NULL) {
+		recv_wr_free(context->rem_wrs);
+		context->rem_wrs = NULL;
 	}
 	return rc;
 }
@@ -938,6 +963,7 @@ signal_receiver(struct signal_receiver_context *shared)
 	context.shared = shared;
 	context.state = STATE_INIT;
 	context.in_multicast = false;
+	context.in_underflow = true;
 
 	for (unsigned i = 0; i < NUM_FDS; ++i)
 		context.pollfds[i].fd = -1;

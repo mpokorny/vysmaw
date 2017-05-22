@@ -78,7 +78,10 @@
 #define SPECTRUM_BUFFER_POOL_SIZE_KEY "spectrum_buffer_pool_size"
 #define SINGLE_SPECTRUM_BUFFER_POOL_KEY "single_spectrum_buffer_pool"
 #define MAX_SPECTRUM_BUFFER_SIZE_KEY "max_spectrum_buffer_size"
-#define SIGNAL_MESSAGE_POOL_SIZE_KEY "signal_message_pool_size"
+#define SIGNAL_MESSAGE_RECEIVE_MIN_POSTED_KEY "signal_message_receive_min_posted"
+#define SIGNAL_MESSAGE_RECEIVE_MAX_POSTED_KEY "signal_message_receive_max_posted"
+#define SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR_KEY "signal_message_pool_overhead_factor"
+#define SIGNAL_MESSAGE_RECEIVE_QUEUE_UNDERFLOW_LEVEL_KEY "signal_message_receive_queue_underflow_level"
 #define EAGER_CONNECT_KEY "eager_connect"
 #define EAGER_CONNECT_IDLE_SEC_KEY "eager_connect_idle_sec"
 #define PRECONNECT_BACKLOG_KEY "preconnect_backlog"
@@ -90,7 +93,6 @@
 #define RESOLVE_ADDR_TIMEOUT_MS_KEY "resolve_addr_timeout_ms"
 #define INACTIVE_SERVER_TIMEOUT_SEC_KEY "inactive_server_timeout_sec"
 #define SHUTDOWN_CHECK_INTERVAL_MS_KEY "shutdown_check_interval_ms"
-#define SIGNAL_RECEIVE_MAX_POSTED_KEY "signal_receive_max_posted"
 #define SIGNAL_RECEIVE_MIN_ACK_PART_KEY "signal_receive_min_ack_part"
 #define RDMA_READ_MAX_POSTED_KEY "rdma_read_max_posted"
 #define RDMA_READ_MIN_ACK_PART_KEY "rdma_read_min_ack_part"
@@ -173,6 +175,7 @@ struct data_path_message {
 		DATA_PATH_RECEIVE_FAIL,
 		DATA_PATH_BUFFER_STARVATION,
 		DATA_PATH_VERSION_MISMATCH,
+		DATA_PATH_RECEIVE_UNDERFLOW,
 		DATA_PATH_QUIT,
 		DATA_PATH_END
 	} typ;
@@ -297,6 +300,9 @@ extern struct vysmaw_message *data_buffer_starvation_message_new(
 extern struct vysmaw_message *signal_buffer_starvation_message_new(
 	vysmaw_handle handle, unsigned num_unavailable)
 	__attribute__((nonnull,returns_nonnull,malloc));
+extern struct vysmaw_message *signal_receive_queue_underflow_message_new(
+	vysmaw_handle handle)
+	__attribute__((nonnull,returns_nonnull));
 extern struct vysmaw_message *digest_failure_message_new(
 	vysmaw_handle handle, const struct vysmaw_data_info *info)
 	__attribute__((malloc,returns_nonnull,nonnull));
@@ -322,6 +328,8 @@ extern void post_signal_receive_failure(
 	vysmaw_handle handle, enum ibv_wc_status status)
 	__attribute__((nonnull));
 extern void post_version_mismatch(vysmaw_handle handle)
+	__attribute__((nonnull));
+extern void post_signal_receive_queue_underflow(vysmaw_handle handle)
 	__attribute__((nonnull));
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
 	__attribute__((nonnull));
@@ -353,6 +361,8 @@ extern void mark_signal_receive_failure(
 	__attribute__((nonnull));
 extern void mark_version_mismatch(
 	vysmaw_handle handle, unsigned received_message_version)
+	__attribute__((nonnull));
+extern void mark_signal_receive_queue_underflow(vysmaw_handle handle)
 	__attribute__((nonnull));
 
 static inline size_t spectrum_size(const struct vysmaw_data_info *info)

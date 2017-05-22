@@ -59,13 +59,42 @@ struct vysmaw_configuration {
 	 * true. */
 	unsigned max_spectrum_buffer_size;
 
-	/* Size of memory region for storing signal messages carrying spectrum
-	 * metadata sent from all active CBE nodes. The memory region is allocated
-	 * and registered for InfiniBand messaging by the library. Setting the value
-	 * too low will cause the receiver to miss signal messages. Keep in mind
-	 * that every client should be prepared to receive _all_ such signal
-	 * messages sent from every CBE node. */
-	size_t signal_message_pool_size;
+	/* Limits on number of work requests to maintain on the receive queue for
+	 * signal messages. The lower limit should be at least the number of signal
+	 * messages that are expected to arrive in the period that it takes the
+	 * vysmaw signal_receiver loop to service the receive queue. Unfortunately
+	 * the time required for the aforementioned loop to complete is not known a
+	 * priori, so some tuning of the lower limit parameter by vysmaw
+	 * applications is expected. The upper limit is available to control
+	 * resource usage in the InfiniBand HCA (see
+	 * "signal_message_pool_overhead_factor" parameter to control total memory
+	 * assigned to signal messages.) */
+	unsigned signal_message_receive_min_posted;
+	unsigned signal_message_receive_max_posted;
+
+	/* The number of signal messages in the registered memory region for signal
+	 * messages is determined by the product of the
+	 * "signal_message_receive_min_posted" parameter, the following
+	 * "signal_message_pool_overhead_factor" value, and the size of one signal
+	 * message (which will be close to the MTU size of the InfiniBand
+	 * network). The value of "signal_message_pool_overhead_factor" should be
+	 * based on the number of signal messages that are expected to be in use by
+	 * the vysmaw application through the consumer callbacks while the vysmaw
+	 * library maintains "signal_message_receive_min_posted" work requests for
+	 * receiving signal messages. The value of this parameter need not be an
+	 * integer, but it's minimum value is 1. */
+	double signal_message_pool_overhead_factor;
+
+	/* Number of work requests on the signal message receive queue at which a
+	 * VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW message is created and sent
+	 * to consumer queues. Ideally, this level would be zero, but as there is no
+	 * signal available from a QP for that event, and can only be inferred by
+	 * comparing the number of receive requests vs the number of completion
+	 * queue entries, this level more accurately can be taken to mean that the
+	 * signal receive queue depth is "dangerously low". A vysmaw application is
+	 * in danger of missing signal messages when a receive queue underflow
+	 * occurs. */
+	unsigned signal_message_receive_queue_underflow_level;
 
 	/* vysmaw clients can either connect to a (CBE) sending process (to read
 	 * spectral data) immediately upon receipt of any signal message from that
@@ -125,13 +154,9 @@ struct vysmaw_configuration {
 	/* interval to check for shutdown, in milliseconds */
 	unsigned shutdown_check_interval_ms;
 
-	/* maximum number of posted (uncompleted) signal receive requests (may be
-	 * automatically reduced by hardware and/or system limitations)*/
-	unsigned signal_receive_max_posted;
-
-	/* signal receive completions to acknowledge at a time, expressed as a part
-	 * of the maximum number of posted work requests: minimum number
-	 * acknowledged will be signal_receive_max_posted /
+	/* number of signal receive completions to acknowledge at one time,
+	 * expressed as a part of the minimum number of posted work requests:
+	 * minimum number acknowledged will be signal_message_receive_min_posted /
 	 * signal_receive_min_ack_part */
 	unsigned signal_receive_min_ack_part;
 
@@ -209,6 +234,8 @@ enum vysmaw_message_type {
 										   // message
 	VYSMAW_MESSAGE_RDMA_READ_FAILURE, // failure of rdma read of spectral data
 	VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
+	VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, // underflow on signal
+												   // receive queue
 	VYSMAW_MESSAGE_END // vysmaw_handle exited
 };
 

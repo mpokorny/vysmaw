@@ -49,7 +49,10 @@ cdef extern from "vysmaw.h":
         stddef.size_t spectrum_buffer_pool_size
         bool single_spectrum_buffer_pool
         unsigned max_spectrum_buffer_size
-        stddef.size_t signal_message_pool_size
+        unsigned signal_message_receive_min_posted
+        unsigned signal_message_receive_max_posted
+        double signal_message_pool_overhead_factor
+        unsigned signal_message_receive_queue_underflow_level
         bool eager_connect
         double eager_connect_idle_sec
         bool preconnect_backlog
@@ -96,7 +99,7 @@ cdef extern from "vysmaw.h":
         pass
 
     ctypedef _vysmaw_handle * vysmaw_handle
-    
+
     enum vysmaw_message_type:
         VYSMAW_MESSAGE_VALID_BUFFER,
         VYSMAW_MESSAGE_DIGEST_FAILURE,
@@ -106,6 +109,7 @@ cdef extern from "vysmaw.h":
         VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
         VYSMAW_MESSAGE_RDMA_READ_FAILURE,
         VYSMAW_MESSAGE_VERSION_MISMATCH,
+        VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
         VYSMAW_MESSAGE_END
 
     struct message_valid_buffer:

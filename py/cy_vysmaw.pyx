@@ -134,12 +134,36 @@ cdef class Configuration:
         self._c_configuration.max_spectrum_buffer_size = value
 
     @property
-    def signal_message_pool_size(self):
-        return self._c_configuration.signal_message_pool_size
+    def signal_message_receive_min_posted(self):
+        return self._c_configuration.signal_message_receive_min_posted
 
-    @signal_message_pool_size.setter
-    def signal_message_pool_size(self, unsigned value):
-        self._c_configuration.signal_message_pool_size = value
+    @signal_message_receive_min_posted.setter
+    def signal_message_receive_min_posted(self, unsigned value):
+        self._c_configuration.signal_message_receive_min_posted = value
+
+    @property
+    def signal_message_receive_max_posted(self):
+        return self._c_configuration.signal_message_receive_max_posted
+
+    @signal_message_receive_max_posted.setter
+    def signal_message_receive_max_posted(self, unsigned value):
+        self._c_configuration.signal_message_receive_max_posted = value
+
+    @property
+    def signal_message_pool_overhead_factor(self):
+        return self._c_configuration.signal_message_pool_overhead_factor
+
+    @signal_message_pool_overhead_factor.setter
+    def signal_message_pool_overhead_factor(self, double value):
+        self._c_configuration.signal_message_pool_overhead_factor = value
+
+    @property
+    def signal_message_receive_queue_underflow_level(self):
+        return self._c_configuration.signal_message_receive_queue_underflow_level
+
+    @signal_message_receive_queue_underflow_level.setter
+    def signal_message_receive_queue_underflow_level(self, unsigned value):
+        self._c_configuration.signal_message_receive_queue_underflow_level = value
 
     @property
     def eager_connect(self):
@@ -220,14 +244,6 @@ cdef class Configuration:
     @shutdown_check_interval_ms.setter
     def shutdown_check_interval_ms(self, unsigned value):
         self._c_configuration.shutdown_check_interval_ms = value
-
-    @property
-    def signal_receive_max_posted(self):
-        return self._c_configuration.signal_receive_max_posted
-
-    @signal_receive_max_posted.setter
-    def signal_receive_max_posted(self, unsigned value):
-        self._c_configuration.signal_receive_max_posted = value
 
     @property
     def signal_receive_min_ack_part(self):
@@ -494,6 +510,8 @@ cdef class Message:
             result = RDMAReceiveFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_VERSION_MISMATCH:
             result = VersionMismatchMessage()
+        elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW:
+            result = SignalReceiveQueueUnderflow()
         else: # msgtype == VYSMAW_MESSAGE_END
             result = EndMessage()
         result._c_message = msg
@@ -584,11 +602,16 @@ cdef class RDMAReceiveFailureMessage(Message):
 cdef class VersionMismatchMessage(Message):
 
     def __str__(self):
-        return show_properties(self, RDMAReceiveFailureMessage)
+        return show_properties(self, VersionMismatchMessage)
 
     @property
     def received_message_version(self):
         return self._c_message[0].content.received_message_version
+
+cdef class SignalReceiveQueueUnderflow(Message):
+
+    def __str__(self):
+        return show_properties(self, SignalReceiveQueueUnderflow)
 
 cdef class EndMessage(Message):
 

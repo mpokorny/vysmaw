@@ -459,6 +459,11 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 		data_path_message_free(msg);
 		break;
 
+	case DATA_PATH_RECEIVE_UNDERFLOW:
+		mark_signal_receive_queue_underflow(handle);
+		data_path_message_free(msg);
+		break;
+
 	case DATA_PATH_QUIT:
 		if (context->quit_msg == NULL) {
 			rc = to_quit_state(context, msg, error_record);
