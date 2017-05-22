@@ -602,7 +602,7 @@ cdef class RDMAReceiveFailureMessage(Message):
 cdef class VersionMismatchMessage(Message):
 
     def __str__(self):
-        return show_properties(self, RDMAReceiveFailureMessage)
+        return show_properties(self, VersionMismatchMessage)
 
     @property
     def received_message_version(self):
