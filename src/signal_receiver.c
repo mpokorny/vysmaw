@@ -469,7 +469,8 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 			if (poll_completions(context, error_record) != 0)
 				result = -1;
 		}
-		rdma_destroy_qp(context->id);
+		if (context->id->qp != NULL)
+			rdma_destroy_qp(context->id);
 	}
 
 	if (context->rem_wrs != NULL) {
