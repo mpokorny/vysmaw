@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <set>
+#include <sstream>
 #include <vysmaw.h>
 
 // max time to wait for message on queue
@@ -115,6 +117,16 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 	}
 }
 
+template <typename A>
+std::string
+elements(const std::set<A> &s)
+{
+	std::stringstream result;
+	for (auto &&a : s)
+		result << std::to_string(a) << " ";
+	return result.str();
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -142,6 +154,12 @@ main(int argc, char *argv[])
 	// start vysmaw client
 	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
 
+	std::set<uint8_t> stations;
+	std::set<uint8_t> bb_indexes;
+	std::set<uint8_t> bb_ids;
+	std::set<uint8_t> spw_indexes;
+	std::set<uint8_t> pp_ids;
+
 	// take messages until a VYSMAW_MESSAGE_END appears
 	auto t0 = std::chrono::high_resolution_clock::now();
 	unique_ptr<struct vysmaw_message> message = move(pop(consumer.queue));
@@ -153,8 +171,19 @@ main(int argc, char *argv[])
 		}
 		// record message type
 		assert(!message || message->typ < VYSMAW_MESSAGE_END);
-		if (message)
+		if (message) {
 			++counters[message->typ];
+			if (message->typ == VYSMAW_MESSAGE_VALID_BUFFER) {
+				struct vysmaw_data_info *info =
+					&message->content.valid_buffer.info;
+				stations.insert(info->stations[0]);
+				stations.insert(info->stations[1]);
+				bb_indexes.insert(info->baseband_index);
+				bb_ids.insert(info->baseband_id);
+				spw_indexes.insert(info->spectral_window_index);
+				pp_ids.insert(info->polarization_product_id);
+			}
+		}
 
 		// get next message
 		message = move(pop(consumer.queue));
@@ -194,6 +223,12 @@ main(int argc, char *argv[])
 	          << (counters[VYSMAW_MESSAGE_VALID_BUFFER] / span.count())
 	          << " valid buffers per sec)"
 	          << std::endl;
+
+	std::cout << "stations: " << elements(stations) << std::endl;
+	std::cout << "baseband indexes: " << elements(bb_indexes) << std::endl;
+	std::cout << "baseband ids: " << elements(bb_ids) << std::endl;;
+	std::cout << "spw indexes: " << elements(spw_indexes) << std::endl;
+	std::cout << "pol prod ids: " << elements(pp_ids) << std::endl;
 
 	// release the last message and shut down the library if it hasn't already
 	// been done
