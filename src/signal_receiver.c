@@ -463,10 +463,12 @@ stop_signal_receive(struct signal_receiver_context_ *context,
 	if (G_UNLIKELY(rc != 0))
 		result = -1;
 
-	ack_completions(context, 1);
 	if (context->id != NULL) {
-		if (G_UNLIKELY(poll_completions(context, error_record) != 0))
-			result = -1;
+		if (context->cq != NULL) {
+			ack_completions(context, 1);
+			if (poll_completions(context, error_record) != 0)
+				result = -1;
+		}
 		rdma_destroy_qp(context->id);
 	}
 
