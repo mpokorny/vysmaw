@@ -652,6 +652,7 @@ message_queue_push_one_unlocked(struct vysmaw_message *msg,
 		message_queue_force_push_one_unlocked(msg, &consumer->queue);
 	} else {
 		consumer->queue.num_overflow++;
+		vysmaw_message_unref(msg);
 	}
 }
 
