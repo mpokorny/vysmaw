@@ -900,8 +900,8 @@ message_queues_push(struct vysmaw_message *msg, GSList *consumers)
 		g_async_queue_unlock(c->queue.q);
 		consumers = g_slist_next(consumers);
 	}
-	vysmaw_message_unref(msg);
 	MUTEX_UNLOCK(msg->handle->mtx);
+	vysmaw_message_unref(msg);
 }
 
 void
