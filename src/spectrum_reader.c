@@ -605,7 +605,8 @@ post_server_reads(struct spectrum_reader_context_ *context,
 		struct rdma_req *req = g_queue_pop_head(conn_ctx->reqs);
 		pool_id_t buff_pool_id;
 		req->message = valid_buffer_message_new(
-			context->shared->handle, &req->data_info, &buff_pool_id);
+			context->shared->handle, conn_ctx->id, conn_ctx->mrs,
+			&req->data_info, &buff_pool_id, error_record);
 		if (req->message != NULL) {
 			if (G_UNLIKELY(mr == NULL || buff_pool_id != pool_id)) {
 				pool_id = buff_pool_id;

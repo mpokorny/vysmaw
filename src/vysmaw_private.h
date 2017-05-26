@@ -111,8 +111,10 @@ struct spectrum_buffer_pool {
 typedef GSequence *spectrum_buffer_pool_collection;
 typedef void *pool_id_t;
 
-typedef void *(*new_valid_buffer)(vysmaw_handle handle, size_t buffer_size,
-                                  pool_id_t *pool_id);
+typedef void *(*new_valid_buffer)(
+	vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
+	size_t buffer_size, pool_id_t *pool_id,
+	struct vys_error_record **error_record);
 typedef struct spectrum_buffer_pool *(*lookup_buffer_pool)(
 	struct vysmaw_message *message);
 typedef GSList *(*list_buffer_pools)(vysmaw_handle handle);
@@ -147,10 +149,7 @@ struct _vysmaw_handle {
 	lookup_buffer_pool lookup_buffer_pool_fn;
 	list_buffer_pools list_buffer_pools_fn;
 	union {
-		struct {
-			Mutex pool_collection_mtx;
-			spectrum_buffer_pool_collection pool_collection;
-		};
+		spectrum_buffer_pool_collection pool_collection;
 		struct spectrum_buffer_pool *pool;
 	};
 	unsigned num_data_buffers_unavailable;
@@ -240,10 +239,14 @@ extern void spectrum_buffer_pool_collection_remove(
 	spectrum_buffer_pool_collection collection, size_t buffer_size)
 	__attribute__((nonnull));
 extern void *new_valid_buffer_from_collection(
-	vysmaw_handle handle, size_t buffer_size, pool_id_t *pool_id)
+	vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
+	size_t buffer_size, pool_id_t *pool_id,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 extern void *new_valid_buffer_from_pool(
-	vysmaw_handle handle, size_t buffer_size, pool_id_t *pool_id)
+	vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
+	size_t buffer_size, pool_id_t *pool_id,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 extern void message_queue_force_push_one_unlocked(
 	struct vysmaw_message *msg, vysmaw_message_queue queue)
@@ -341,8 +344,9 @@ extern void data_path_message_free(struct data_path_message *msg)
 	__attribute__((nonnull));
 
 extern struct vysmaw_message *valid_buffer_message_new(
-	vysmaw_handle handle, const struct vysmaw_data_info *info,
-	pool_id_t *pool_id)
+	vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
+	const struct vysmaw_data_info *info, pool_id_t *pool_id,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull,malloc));
 
 extern void message_queues_push_unlocked(
@@ -371,6 +375,10 @@ static inline size_t spectrum_size(const struct vysmaw_data_info *info)
 		* sizeof(float);
 }
 
+extern int register_one_spectrum_buffer_pool(
+	struct spectrum_buffer_pool *sb_pool, struct rdma_cm_id *id,
+	GHashTable *mrs, struct vys_error_record **error_record)
+	__attribute__((nonnull));
 extern GHashTable *register_spectrum_buffer_pools(
 	vysmaw_handle handle, struct rdma_cm_id *id,
 	struct vys_error_record **error_record)

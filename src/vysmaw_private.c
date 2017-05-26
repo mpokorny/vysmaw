@@ -292,7 +292,6 @@ handle_unref(vysmaw_handle handle)
 			spectrum_buffer_pool_unref(handle->pool);
 		} else {
 			spectrum_buffer_pool_collection_free(handle->pool_collection);
-			MUTEX_CLEAR(handle->pool_collection_mtx);
 		}
 
 		MUTEX_CLEAR(handle->mtx);
@@ -584,10 +583,11 @@ spectrum_buffer_pool_collection_remove(
 }
 
 void *
-new_valid_buffer_from_collection(vysmaw_handle handle, size_t buffer_size,
-                                 pool_id_t *pool_id)
+new_valid_buffer_from_collection(
+	vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
+	size_t buffer_size, pool_id_t *pool_id,
+	struct vys_error_record **error_record)
 {
-	MUTEX_LOCK(handle->pool_collection_mtx);
 	struct spectrum_buffer_pool *pool =
 		spectrum_buffer_pool_collection_lookup(
 			handle->pool_collection, buffer_size);
@@ -596,16 +596,25 @@ new_valid_buffer_from_collection(vysmaw_handle handle, size_t buffer_size,
 			handle->config.spectrum_buffer_pool_size / buffer_size;
 		pool = spectrum_buffer_pool_collection_add(
 			handle->pool_collection, buffer_size, num_buffers);
+		int rc = register_one_spectrum_buffer_pool(
+			pool, id, mrs, error_record);
+		if (G_UNLIKELY(rc != 0)) pool = NULL;
 	}
-	void *result = spectrum_buffer_pool_pop(pool);
-	MUTEX_UNLOCK(handle->pool_collection_mtx);
-	*pool_id = pool;
+	void *result;
+	if (G_LIKELY(pool != NULL)) {
+		result = spectrum_buffer_pool_pop(pool);
+		*pool_id = pool;
+	} else {
+		result = NULL;
+	}
 	return result;
 }
 
 void *
-new_valid_buffer_from_pool(vysmaw_handle handle, size_t buffer_size,
-                           pool_id_t *pool_id)
+new_valid_buffer_from_pool(
+	vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
+	size_t buffer_size, pool_id_t *pool_id,
+	struct vys_error_record **error_record)
 {
 	void *buffer = NULL;
 	struct spectrum_buffer_pool *pool = handle->pool;
@@ -697,14 +706,12 @@ lookup_buffer_pool_from_pool(struct vysmaw_message *message)
 GSList *
 buffer_pool_list_from_collection(vysmaw_handle handle)
 {
-	MUTEX_LOCK(handle->pool_collection_mtx);
 	GSequenceIter *iter = g_sequence_get_begin_iter(handle->pool_collection);
 	GSList *result = NULL;
 	while (!g_sequence_iter_is_end(iter)) {
 		result = g_slist_prepend(result, g_sequence_get(iter));
 		iter = g_sequence_iter_next(iter);
 	}
-	MUTEX_UNLOCK(handle->pool_collection_mtx);
 	return result;
 }
 
@@ -861,12 +868,14 @@ data_path_message_free(struct data_path_message *msg)
 }
 
 struct vysmaw_message *
-valid_buffer_message_new(vysmaw_handle handle,
-                         const struct vysmaw_data_info *info,
-                         pool_id_t *pool_id)
+valid_buffer_message_new(
+	vysmaw_handle handle, struct rdma_cm_id *id,
+	GHashTable *mrs, const struct vysmaw_data_info *info,
+	pool_id_t *pool_id, struct vys_error_record **error_record)
 {
 	size_t buffer_size = spectrum_size(info);
-	void *buffer = handle->new_valid_buffer_fn(handle, buffer_size, pool_id);
+	void *buffer = handle->new_valid_buffer_fn(
+		handle, id, mrs, buffer_size, pool_id, error_record);
 	struct vysmaw_message *result = NULL;
 	if (buffer != NULL) {
 		if (handle->num_data_buffers_unavailable > 0)
@@ -975,6 +984,36 @@ vysmaw_message_free_resources(struct vysmaw_message *message)
 	handle_unref(message->handle);
 }
 
+int
+register_one_spectrum_buffer_pool(
+	struct spectrum_buffer_pool *sb_pool, struct rdma_cm_id *id,
+	GHashTable *mrs, struct vys_error_record **error_record)
+{
+	int result;
+	struct ibv_mr *mr = rdma_reg_msgs(
+		id, sb_pool->pool->pool, sb_pool->pool->pool_size);
+	if (G_LIKELY(mr != NULL)) {
+		g_hash_table_insert(mrs, sb_pool, mr);
+		result = 0;
+	} else {
+		VERB_ERR(error_record, errno, "rdma_reg_msgs");
+		GList *keys0 = g_hash_table_get_keys(mrs);
+		GList *keys = keys0;
+		while (keys != NULL) {
+			int rc1 =
+				rdma_dereg_mr(
+					(struct ibv_mr *)g_hash_table_lookup(
+						mrs, keys->data));
+			if (G_UNLIKELY(rc1 != 0))
+				VERB_ERR(error_record, errno, "rdma_dereg_mr");
+			keys = g_list_next(keys);
+		}
+		g_list_free(keys0);
+		result = -1;
+	}
+	return result;
+}
+
 GHashTable *
 register_spectrum_buffer_pools(vysmaw_handle handle, struct rdma_cm_id *id,
                                struct vys_error_record **error_record)
@@ -982,29 +1021,12 @@ register_spectrum_buffer_pools(vysmaw_handle handle, struct rdma_cm_id *id,
 	GHashTable *result =
 		g_hash_table_new(g_direct_hash, g_direct_equal);
 	GSList *sb_pool_node = handle->list_buffer_pools_fn(handle);
-	int rc = 0;
 	while (result != NULL && sb_pool_node != NULL) {
-		if (G_LIKELY(rc == 0)) {
-			struct spectrum_buffer_pool *sb_pool = sb_pool_node->data;
-			struct ibv_mr *mr = rdma_reg_msgs(
-				id, sb_pool->pool->pool, sb_pool->pool->pool_size);
-			if (G_LIKELY(mr != NULL)) {
-				g_hash_table_insert(result, sb_pool, mr);
-			} else {
-				VERB_ERR(error_record, errno, "rdma_reg_msgs");
-				rc = -1;
-				GList *keys = g_hash_table_get_keys(result);
-				while (keys != NULL) {
-					int rc1 =
-						rdma_dereg_mr(
-							(struct ibv_mr *)g_hash_table_lookup(
-								result, keys->data));
-					if (G_UNLIKELY(rc1 != 0))
-						VERB_ERR(error_record, errno, "rdma_dereg_mr");
-				}
-				g_hash_table_destroy(result);
-				result = NULL;
-			}
+		int rc = register_one_spectrum_buffer_pool(
+			sb_pool_node->data, id, result, error_record);
+		if (G_UNLIKELY(rc != 0)) {
+			g_hash_table_destroy(result);
+			result = NULL;
 		}
 		sb_pool_node = g_slist_delete_link(sb_pool_node, sb_pool_node);
 	}
