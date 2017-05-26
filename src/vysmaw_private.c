@@ -716,22 +716,15 @@ buffer_pool_list_from_pool(vysmaw_handle handle)
 
 void
 init_consumer(vysmaw_spectrum_filter filter, void *user_data,
-              vysmaw_message_queue *queue, GArray *consumers)
+              vysmaw_message_queue *queue, struct consumer *consumer)
 {
-	struct consumer consumer = {
-		.queue = {
-			.q = g_async_queue_new(),
-			.depth = 0,
-			.num_overflow = 0
-		},
-		.spectrum_filter_fn = filter,
-		.pass_filter_array = g_array_new(FALSE, FALSE, sizeof(bool)),
-		.user_data = user_data
-	};
-	g_array_append_val(consumers, consumer);
-	*queue =
-		&((&g_array_index(consumers, struct consumer, consumers->len - 1))
-		  ->queue);
+	consumer->queue.q = g_async_queue_new();
+	consumer->queue.depth = 0;
+	consumer->queue.num_overflow = 0;
+	consumer->spectrum_filter_fn = filter;
+	consumer->pass_filter_array = g_array_new(FALSE, FALSE, sizeof(bool));
+	consumer->user_data = user_data;
+	*queue = &consumer->queue;
 }
 
 void

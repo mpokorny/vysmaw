@@ -271,7 +271,7 @@ extern GSList *buffer_pool_list_from_pool(vysmaw_handle handle)
 	__attribute__((nonnull,returns_nonnull,malloc));
 extern void init_consumer(
 	vysmaw_spectrum_filter filter, void *user_data,
-	vysmaw_message_queue *queue, GArray *consumers)
+	vysmaw_message_queue *queue, struct consumer *consumer)
 	__attribute__((nonnull));
 extern void init_signal_receiver(
 	vysmaw_handle handle, GAsyncQueue *signal_msg_queue,

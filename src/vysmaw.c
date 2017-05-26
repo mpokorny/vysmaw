@@ -129,15 +129,12 @@ vysmaw_start(const struct vysmaw_configuration *config,
 	}
 
 	/* per consumer initialization */
-	GArray *priv_consumers =
-		g_array_new(FALSE, FALSE, sizeof(struct consumer));
-	for (unsigned i = num_consumers; i > 0; --i) {
-		init_consumer((*consumers)->filter, (*consumers)->filter_data,
-		              &(*consumers)->queue, priv_consumers);
-		++consumers;
-	}
+	result->consumers = g_new(struct consumer, num_consumers);
 	result->num_consumers = num_consumers;
-	result->consumers = (struct consumer *)g_array_free(priv_consumers, false);
+	for (unsigned i = 0; i < num_consumers; ++i)
+		init_consumer(consumers[i]->filter, consumers[i]->filter_data,
+		              &consumers[i]->queue, &result->consumers[i]);
+
 
 	if (result->config.error_record == NULL) {
 		/* service threads initialization */
