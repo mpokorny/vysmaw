@@ -461,7 +461,7 @@ data_generator(struct vyssim_context *vyssim)
 							push_msg_to_queue(
 								vyssim,
 								gen_one_signal_msg(
-									vyssim, &id_num, t_us, a0, a1,
+									vyssim, &id_num, t_us, a0 + 1, a1 + 1,
 									spw_desc->index, sto));
 						}
 						MUTEX_UNLOCK(ctx->queue_mutex);
