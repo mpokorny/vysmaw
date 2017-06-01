@@ -227,7 +227,7 @@ typedef struct _vysmaw_handle *vysmaw_handle;
 enum vysmaw_message_type {
 	VYSMAW_MESSAGE_VALID_BUFFER,
 	VYSMAW_MESSAGE_ID_FAILURE, // failed to verify id number
-	VYSMAW_MESSAGE_QUEUE_OVERFLOW, // message queue overflow
+	VYSMAW_MESSAGE_QUEUE_ALERT, // message queue level alert
 	VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, // data buffers unavailable
 	VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, // signal buffers unavailable
 	VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
@@ -258,8 +258,8 @@ struct vysmaw_message {
 		/* VYSMAW_MESSAGE_ID_FAILURE */
 		struct vysmaw_data_info id_failure;
 
-		/* VYSMAW_MESSAGE_QUEUE_OVERFLOW */
-		unsigned num_overflow;
+		/* VYSMAW_MESSAGE_QUEUE_ALERT */
+		unsigned queue_depth;
 
 		/* VYSMAW_MESSAGE_DATA_BUFFER_STARVATION */
 		unsigned num_data_buffers_unavailable;
