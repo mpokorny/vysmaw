@@ -123,9 +123,9 @@ struct vysmaw_configuration {
 	/* Depth of message queue at which an alert message is generated. */
 	unsigned message_queue_alert_depth;
 
-	/* Overhead needed to resume data flow after message queue overflow.
-	 * Operational value will be limited to < max_depth_message_queue. */
-	unsigned queue_resume_overhead;
+	/* Interval at which message queue alerts are repeated, expressed as the
+	 * number of queue messages between alert messages. */
+	unsigned message_queue_alert_interval;
 
 	/* Maximum number of buffer starvation events to wait before sending a
 	 * VYSMAW_MESSAGE_[DATA|SIGNAL]_BUFFER_STARVATION message.

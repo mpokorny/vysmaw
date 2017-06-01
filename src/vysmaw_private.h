@@ -86,7 +86,7 @@
 #define EAGER_CONNECT_IDLE_SEC_KEY "eager_connect_idle_sec"
 #define PRECONNECT_BACKLOG_KEY "preconnect_backlog"
 #define MESSAGE_QUEUE_ALERT_DEPTH_KEY "message_queue_alert_depth"
-#define QUEUE_RESUME_OVERHEAD_KEY "queue_resume_overhead"
+#define MESSAGE_QUEUE_ALERT_INTERVAL_KEY "message_queue_alert_interval"
 #define MAX_STARVATION_LATENCY_KEY "max_starvation_latency"
 #define MAX_VERSION_MISMATCH_LATENCY_KEY "max_version_mismatch_latency"
 #define RESOLVE_ROUTE_TIMEOUT_MS_KEY "resolve_route_timeout_ms"
