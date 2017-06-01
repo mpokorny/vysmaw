@@ -372,11 +372,11 @@ end_message_new(vysmaw_handle handle, struct vysmaw_result *rc)
 }
 
 struct vysmaw_message *
-queue_overflow_message_new(vysmaw_handle handle, unsigned num_overflow)
+queue_alert_message_new(vysmaw_handle handle, unsigned queue_depth)
 {
 	struct vysmaw_message *result =
-		message_new(handle, VYSMAW_MESSAGE_QUEUE_OVERFLOW);
-	result->content.num_overflow = num_overflow;
+		message_new(handle, VYSMAW_MESSAGE_QUEUE_ALERT);
+	result->content.queue_depth = queue_depth;
 	return result;
 }
 
@@ -625,44 +625,14 @@ new_valid_buffer_from_pool(
 }
 
 void
-message_queue_force_push_one_unlocked(struct vysmaw_message *msg,
-                                      vysmaw_message_queue queue)
+message_queue_push_one_unlocked(struct vysmaw_message *msg,
+                                vysmaw_message_queue queue)
 {
 	/* messages on the queue maintain a reference to the queue to facilitate
 	 * automatic queue reclamation */
 	message_queue_ref(queue);
 	queue->depth++;
 	g_async_queue_push_unlocked(queue->q, msg);
-}
-
-void
-message_queue_push_one_unlocked(struct vysmaw_message *msg,
-                                struct consumer *consumer)
-{
-	/* adjust max depth to accommodate overhead */
-	unsigned max_depth;
-	if (G_LIKELY(msg->typ != VYSMAW_MESSAGE_END)) {
-		max_depth = msg->handle->config.max_depth_message_queue;
-		if (consumer->queue.num_overflow > 0)
-			max_depth -= msg->handle->config.queue_resume_overhead + 1;
-	} else {
-		max_depth = UINT_MAX;
-	}
-
-	if (consumer->queue.depth < max_depth) {
-		if (consumer->queue.num_overflow > 0) {
-			struct vysmaw_message *overflow_msg =
-				queue_overflow_message_new(
-					msg->handle, consumer->queue.num_overflow);
-			message_queue_force_push_one_unlocked(
-				overflow_msg, &consumer->queue);
-			consumer->queue.num_overflow = 0;
-		}
-		message_queue_force_push_one_unlocked(msg, &consumer->queue);
-	} else {
-		consumer->queue.num_overflow++;
-		vysmaw_message_unref(msg);
-	}
 }
 
 void
@@ -727,7 +697,7 @@ init_consumer(vysmaw_spectrum_filter filter, void *user_data,
 {
 	consumer->queue.q = g_async_queue_new();
 	consumer->queue.depth = 0;
-	consumer->queue.num_overflow = 0;
+	consumer->queue.num_queued_in_alert = -1;
 	consumer->spectrum_filter_fn = filter;
 	consumer->pass_filter_array = g_array_new(FALSE, FALSE, sizeof(bool));
 	consumer->user_data = user_data;
@@ -901,7 +871,19 @@ message_queues_push(struct vysmaw_message *msg, GSList *consumers)
 	while (consumers != NULL) {
 		struct consumer *c = consumers->data;
 		g_async_queue_lock(c->queue.q);
-		message_queue_push_one_unlocked(message_ref(msg), c);
+		message_queue_push_one_unlocked(message_ref(msg), &c->queue);
+		if (G_UNLIKELY(c->queue.depth
+		               >= msg->handle->config.message_queue_alert_depth)) {
+			c->queue.num_queued_in_alert =
+				(c->queue.num_queued_in_alert + 1)
+				% msg->handle->config.message_queue_alert_interval;
+			if (G_UNLIKELY(c->queue.num_queued_in_alert == 0))
+				message_queue_push_one_unlocked(
+					queue_alert_message_new(msg->handle, c->queue.depth),
+					&c->queue);
+		} else {
+			c->queue.num_queued_in_alert = -1;
+		}
 		g_async_queue_unlock(c->queue.q);
 		consumers = g_slist_next(consumers);
 	}

@@ -100,7 +100,7 @@
 struct _vysmaw_message_queue {
 	GAsyncQueue *q;
 	unsigned depth;
-	unsigned num_overflow;
+	unsigned num_queued_in_alert;
 };
 
 struct spectrum_buffer_pool {
@@ -248,11 +248,8 @@ extern void *new_valid_buffer_from_pool(
 	size_t buffer_size, pool_id_t *pool_id,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
-extern void message_queue_force_push_one_unlocked(
-	struct vysmaw_message *msg, vysmaw_message_queue queue)
-	__attribute__((nonnull));
 extern void message_queue_push_one_unlocked(
-	struct vysmaw_message *msg, struct consumer *consumer)
+	struct vysmaw_message *msg, vysmaw_message_queue queue)
 	__attribute__((nonnull));
 extern void begin_shutdown(vysmaw_handle handle, struct vysmaw_result *rc)
 	__attribute__((nonnull(1)));
@@ -312,8 +309,8 @@ extern struct vysmaw_message *id_failure_message_new(
 extern struct vysmaw_message *end_message_new(
 	vysmaw_handle handle, struct vysmaw_result *rc)
 	__attribute__((malloc,returns_nonnull,nonnull));
-extern struct vysmaw_message *queue_overflow_message_new(
-	vysmaw_handle handle, unsigned num_overflow)
+extern struct vysmaw_message *queue_alert_message_new(
+	vysmaw_handle handle, unsigned queue_depth)
 	__attribute__((nonnull,returns_nonnull,malloc));
 extern struct vysmaw_message *signal_receive_failure_message_new(
 	vysmaw_handle handle, enum ibv_wc_status status)
