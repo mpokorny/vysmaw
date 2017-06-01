@@ -62,6 +62,7 @@ struct server_connection_context {
 	GHashTable *mrs;
 	uint32_t *rkeys;
 	bool established;
+	bool disconnecting;
 	unsigned max_posted_wr;
 	unsigned num_posted_wr;
 	GQueue *reqs;
@@ -348,6 +349,7 @@ initiate_server_connection(struct spectrum_reader_context_ *context,
 	result->id = id;
 	result->rkeys = NULL;
 	result->established = false;
+	result->disconnecting = false;
 	result->reqs = g_queue_new();
 	set_max_posted_wr(context, result,
 	                  context->shared->handle->config.rdma_read_max_posted);
@@ -373,8 +375,9 @@ find_connection(struct spectrum_reader_context_ *context,
 		if (G_UNLIKELY(*conn_ctx == NULL))
 			return -1;
 	}
-	if ((*conn_ctx)->established
-	    || context->shared->handle->config.preconnect_backlog)
+	if (!(*conn_ctx)->disconnecting
+	    && ((*conn_ctx)->established
+	        || context->shared->handle->config.preconnect_backlog))
 		*req_queue = (*conn_ctx)->reqs;
 	else
 		*req_queue = NULL;
@@ -666,6 +669,7 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
 	while (!g_queue_is_empty(conn_ctx->reqs))
 		free_rdma_req(g_queue_pop_head(conn_ctx->reqs));
 
+	conn_ctx->disconnecting = true;
 	if (conn_ctx->established) {
 		conn_ctx->established = false;
 		rc = rdma_disconnect(conn_ctx->id);
