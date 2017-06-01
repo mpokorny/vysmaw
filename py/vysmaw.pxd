@@ -56,8 +56,8 @@ cdef extern from "vysmaw.h":
         bool eager_connect
         double eager_connect_idle_sec
         bool preconnect_backlog
-        unsigned max_depth_message_queue
-        unsigned queue_resume_overhead
+        unsigned message_queue_alert_depth
+        unsigned message_queue_alert_interval
         unsigned max_starvation_latency
         unsigned resolve_route_timeout_ms
         unsigned resolve_addr_timeout_ms
@@ -103,7 +103,7 @@ cdef extern from "vysmaw.h":
     enum vysmaw_message_type:
         VYSMAW_MESSAGE_VALID_BUFFER,
         VYSMAW_MESSAGE_ID_FAILURE,
-        VYSMAW_MESSAGE_QUEUE_OVERFLOW,
+        VYSMAW_MESSAGE_QUEUE_ALERT,
         VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
@@ -122,7 +122,7 @@ cdef extern from "vysmaw.h":
     union message_content:
         message_valid_buffer valid_buffer
         vysmaw_data_info id_failure
-        unsigned num_overflow
+        unsigned queue_depth
         unsigned num_data_buffers_unavailable
         unsigned num_signal_buffers_unavailable
         char signal_receive_status[VYSMAW_RECEIVE_STATUS_LENGTH]

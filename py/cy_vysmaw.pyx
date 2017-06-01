@@ -190,20 +190,20 @@ cdef class Configuration:
         self._c_configuration.preconnect_backlog = value
 
     @property
-    def max_depth_message_queue(self):
-        return self._c_configuration.max_depth_message_queue
+    def message_queue_alert_depth(self):
+        return self._c_configuration.message_queue_alert_depth
 
-    @max_depth_message_queue.setter
-    def max_depth_message_queue(self, unsigned value):
-        self._c_configuration.max_depth_message_queue = value
+    @message_queue_alert_depth.setter
+    def message_queue_alert_depth(self, unsigned value):
+        self._c_configuration.message_queue_alert_depth = value
 
     @property
-    def queue_resume_overhead(self):
-        return self._c_configuration.queue_resume_overhead
+    def message_queue_alert_interval(self):
+        return self._c_configuration.message_queue_alert_interval
 
-    @queue_resume_overhead.setter
-    def queue_resume_overhead(self, unsigned value):
-        self._c_configuration.queue_resume_overhead = value
+    @message_queue_alert_interval.setter
+    def message_queue_alert_interval(self, unsigned value):
+        self._c_configuration.message_queue_alert_interval = value
 
     @property
     def max_starvation_latency(self):
@@ -502,8 +502,8 @@ cdef class Message:
             result = ValidBufferMessage()
         elif msgtype == VYSMAW_MESSAGE_ID_FAILURE:
             result = IdFailureMessage()
-        elif msgtype == VYSMAW_MESSAGE_QUEUE_OVERFLOW:
-            result = QueueOverflowMessage()
+        elif msgtype == VYSMAW_MESSAGE_QUEUE_ALERT:
+            result = QueueAlertMessage()
         elif msgtype == VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
             result = DataBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
@@ -554,14 +554,14 @@ cdef class IdFailureMessage(Message):
     def info(self):
         return DataInfo.wrap(&(self._c_message[0].content.id_failure))
 
-cdef class QueueOverflowMessage(Message):
+cdef class QueueAlertMessage(Message):
 
     def __str__(self):
-        return show_properties(self, QueueOverflowMessage)
+        return show_properties(self, QueueAlertMessage)
 
     @property
-    def num_overflow(self):
-        return self._c_message[0].content.num_overflow
+    def queue_depth(self):
+        return self._c_message[0].content.queue_depth
 
 cdef class DataBufferStarvationMessage(Message):
 
