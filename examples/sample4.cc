@@ -83,7 +83,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 	const unordered_map<enum vysmaw_message_type,string> names = {
 		{VYSMAW_MESSAGE_VALID_BUFFER, "valid-buffer"},
 		{VYSMAW_MESSAGE_ID_FAILURE, "id-failure"},
-		{VYSMAW_MESSAGE_QUEUE_ALERT, "queue-alert"},
+		{VYSMAW_MESSAGE_QUEUE_ALERT, "message-queue-alert"},
 		{VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
 		{VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
 		{VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
