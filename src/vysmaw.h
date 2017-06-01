@@ -120,8 +120,8 @@ struct vysmaw_configuration {
 	 * resolve. */
 	bool preconnect_backlog;
 
-	/* Maximum depth of message queue. */
-	unsigned max_depth_message_queue;
+	/* Depth of message queue at which an alert message is generated. */
+	unsigned message_queue_alert_depth;
 
 	/* Overhead needed to resume data flow after message queue overflow.
 	 * Operational value will be limited to < max_depth_message_queue. */

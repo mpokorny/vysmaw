@@ -35,7 +35,7 @@
 #define DEFAULT_EAGER_CONNECT true
 #define DEFAULT_EAGER_CONNECT_IDLE_SEC 1
 #define DEFAULT_PRECONNECT_BACKLOG true
-#define DEFAULT_MAX_DEPTH_MESSAGE_QUEUE 1000
+#define DEFAULT_MESSAGE_QUEUE_ALERT_DEPTH 4000
 #define DEFAULT_QUEUE_RESUME_OVERHEAD 100
 #define DEFAULT_MAX_STARVATION_LATENCY 100
 #define DEFAULT_MAX_VERSION_MISMATCH_LATENCY 1000
@@ -99,8 +99,8 @@ default_config_vysmaw()
 	                       PRECONNECT_BACKLOG_KEY,
 	                       DEFAULT_PRECONNECT_BACKLOG);
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
-	                      MAX_DEPTH_MESSAGE_QUEUE_KEY,
-	                      DEFAULT_MAX_DEPTH_MESSAGE_QUEUE);
+	                      MESSAGE_QUEUE_ALERT_DEPTH_KEY,
+	                      DEFAULT_MESSAGE_QUEUE_ALERT_DEPTH);
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      QUEUE_RESUME_OVERHEAD_KEY,
 	                      DEFAULT_QUEUE_RESUME_OVERHEAD);
@@ -235,8 +235,8 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		parse_double(kf, EAGER_CONNECT_IDLE_SEC_KEY, config);
 	config->preconnect_backlog =
 		parse_boolean(kf, PRECONNECT_BACKLOG_KEY, config);
-	config->max_depth_message_queue =
-		parse_uint64(kf, MAX_DEPTH_MESSAGE_QUEUE_KEY, config);
+	config->message_queue_alert_depth =
+		parse_uint64(kf, MESSAGE_QUEUE_ALERT_DEPTH_KEY, config);
 	config->queue_resume_overhead =
 		parse_uint64(kf, QUEUE_RESUME_OVERHEAD_KEY, config);
 	config->max_starvation_latency =
