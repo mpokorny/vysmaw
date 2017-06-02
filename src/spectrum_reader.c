@@ -171,6 +171,7 @@ static int on_cm_event(
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int poll_completions(
+	struct spectrum_reader_context_ *context,
 	struct server_connection_context *conn_ctx, GSList **reqs,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
@@ -535,7 +536,6 @@ on_server_addr_resolved(struct spectrum_reader_context_ *context,
 		VERB_ERR(error_record, errno, "rdma_resolve_route");
 
 	return rc;
-
 }
 
 static int
@@ -666,15 +666,17 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
                         struct vys_error_record **error_record)
 {
 	int rc = 0;
-	while (!g_queue_is_empty(conn_ctx->reqs))
-		free_rdma_req(g_queue_pop_head(conn_ctx->reqs));
+	if (!conn_ctx->disconnecting) {
+		while (!g_queue_is_empty(conn_ctx->reqs))
+			free_rdma_req(g_queue_pop_head(conn_ctx->reqs));
 
-	conn_ctx->disconnecting = true;
-	if (conn_ctx->established) {
-		conn_ctx->established = false;
-		rc = rdma_disconnect(conn_ctx->id);
-		if (G_UNLIKELY(rc != 0))
-			VERB_ERR(error_record, errno, "rdma_disconnect");
+		conn_ctx->disconnecting = true;
+		if (conn_ctx->established) {
+			conn_ctx->established = false;
+			rc = rdma_disconnect(conn_ctx->id);
+			if (G_UNLIKELY(rc != 0))
+				VERB_ERR(error_record, errno, "rdma_disconnect");
+		}
 	}
 	return rc;
 }
@@ -759,11 +761,13 @@ on_cm_event(struct spectrum_reader_context_ *context,
 	struct server_connection_context *conn_ctx =
 		g_hash_table_lookup(context->connections,
 		                    &event->id->route.addr.dst_sin);
-	if (G_UNLIKELY(conn_ctx == NULL))
+	if (G_UNLIKELY(conn_ctx == NULL)) {
 		MSG_ERROR(
 			error_record, -1,
 			"failed to find connection for event %s",
 			rdma_event_str(event->event));
+		return -1;
+	}
 
 	/* Optimistically read some values from the event, even if they might only
 	 * be valid for some event types. */
@@ -831,7 +835,8 @@ on_cm_event(struct spectrum_reader_context_ *context,
 }
 
 static int
-poll_completions(struct server_connection_context *conn_ctx, GSList **reqs,
+poll_completions(struct spectrum_reader_context_ *context,
+                 struct server_connection_context *conn_ctx, GSList **reqs,
                  struct vys_error_record **error_record)
 {
 	*reqs = NULL;
@@ -855,6 +860,12 @@ poll_completions(struct server_connection_context *conn_ctx, GSList **reqs,
 					req->result = RDMA_REQ_ID_VERIFICATION_FAILURE;
 			} else {
 				req->result = RDMA_REQ_READ_FAILURE;
+				/* It's perhaps overkill to disconnect always, but upon some
+				 * failures the QP transitions to the error state, which then
+				 * leads to errors on all subsequent work
+				 * requests. Disconnecting should allow a new connection
+				 * later. */
+				begin_server_disconnect(context, conn_ctx, error_record);
 			}
 			*reqs = g_slist_prepend(*reqs, req);
 		}
@@ -904,7 +915,7 @@ get_completed_requests(struct spectrum_reader_context_ *context, int fd,
 		return rc;
 	}
 
-	return poll_completions(*conn_ctx, reqs, error_record);
+	return poll_completions(context, *conn_ctx, reqs, error_record);
 }
 
 static int
