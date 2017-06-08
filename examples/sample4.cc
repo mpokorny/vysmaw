@@ -172,6 +172,7 @@ main(int argc, char *argv[])
 	unsigned num_buffers_mismatched_version = 0;
 	std::set<std::string> signal_receive_status;
 	std::set<std::string> rdma_read_status;
+	std::set<std::string> config_ids;
 
 	// take messages until a VYSMAW_MESSAGE_END appears
 	auto t0 = std::chrono::high_resolution_clock::now();
@@ -198,6 +199,7 @@ main(int argc, char *argv[])
 				pp_ids.insert(info->polarization_product_id);
 				num_channels.insert(info->num_channels);
 				num_bins.insert(info->num_bins);
+				config_ids.insert(info->config_id);
 				break;
 			}
 			case VYSMAW_MESSAGE_QUEUE_ALERT:
@@ -283,13 +285,13 @@ main(int argc, char *argv[])
 		std::cout << "num vsn mismatch  : "
 		          << num_buffers_mismatched_version << std::endl;
 	if (!signal_receive_status.empty()) {
-		std::cout << "signal rcv errs   : ";
+		std::cout << "signal rcv errs   :";
 		for (auto&& s : signal_receive_status)
 			std::cout << std::endl << " - " << s;
 		std::cout << std::endl;
 	}
 	if (!rdma_read_status.empty()) {
-		std::cout << "rdma read errs    : ";
+		std::cout << "rdma read errs    :";
 		for (auto&& s : rdma_read_status)
 			std::cout << std::endl << " - " << s;
 		std::cout << std::endl;
@@ -310,6 +312,10 @@ main(int argc, char *argv[])
 	          << elements(num_channels) << std::endl;
 	std::cout << "num bins          : "
 	          << elements(num_bins) << std::endl;
+	std::cout << "config ids        :";
+	for (auto&& s : config_ids)
+		std::cout << std::endl << " - " << s;
+	std::cout << std::endl;
 
 	// release the last message and shut down the library if it hasn't already
 	// been done
