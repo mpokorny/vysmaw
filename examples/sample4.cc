@@ -33,19 +33,19 @@
 using namespace std;
 
 namespace std {
-	// default_delete specialization for struct vysmaw_message
-	template <> struct default_delete<struct vysmaw_message> {
-		void operator()(struct vysmaw_message *msg) {
-			vysmaw_message_unref(msg);
-		}
-	};
+// default_delete specialization for struct vysmaw_message
+template <> struct default_delete<struct vysmaw_message> {
+	void operator()(struct vysmaw_message *msg) {
+		vysmaw_message_unref(msg);
+	}
+};
 
-	// default_delete specialization for struct vysmaw_configuration
-	template <> struct default_delete<struct vysmaw_configuration> {
-		void operator()(struct vysmaw_configuration *conf) {
-			vysmaw_configuration_free(conf);
-		}
-	};
+// default_delete specialization for struct vysmaw_configuration
+template <> struct default_delete<struct vysmaw_configuration> {
+	void operator()(struct vysmaw_configuration *conf) {
+		vysmaw_configuration_free(conf);
+	}
+};
 }
 
 // a filter that accepts everything
@@ -56,6 +56,8 @@ filter(const char *config_id, const uint8_t stations[2],
        const struct vys_spectrum_info *infos, uint8_t num_infos,
        void *user_data, bool *pass_filter)
 {
+	unsigned *num_cb = reinterpret_cast<unsigned *>(user_data);
+	*num_cb += 1;
 	for (auto i = 0; i < num_infos; ++i)
 		*pass_filter++ = true;
 }
@@ -139,14 +141,16 @@ main(int argc, char *argv[])
 		config.reset(vysmaw_configuration_new(nullptr));
 
 	// one consumer, using filter()
+	unsigned num_cb = 0;
 	struct vysmaw_consumer consumer = {
-		.filter = filter
+		.filter = filter,
+		.filter_data = &num_cb
 	};
 
 	// this application keeps count of the message types it receives
 	array<unsigned,VYSMAW_MESSAGE_END + 1> counters;
 	counters.fill(0);
-	
+
 	// catch SIGINT to exit gracefully
 	bool interrupted = false;
 	signal(SIGINT, sigint_handler);
@@ -154,11 +158,20 @@ main(int argc, char *argv[])
 	// start vysmaw client
 	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
 
+	// a variety of summary accumulators
 	std::set<uint8_t> stations;
 	std::set<uint8_t> bb_indexes;
 	std::set<uint8_t> bb_ids;
 	std::set<uint8_t> spw_indexes;
 	std::set<uint8_t> pp_ids;
+	std::set<uint16_t> num_channels;
+	std::set<uint16_t> num_bins;
+	unsigned num_alerts = 0;
+	unsigned num_data_buffers_unavailable = 0;
+	unsigned num_signal_buffers_unavailable = 0;
+	unsigned num_buffers_mismatched_version = 0;
+	std::set<std::string> signal_receive_status;
+	std::set<std::string> rdma_read_status;
 
 	// take messages until a VYSMAW_MESSAGE_END appears
 	auto t0 = std::chrono::high_resolution_clock::now();
@@ -169,11 +182,12 @@ main(int argc, char *argv[])
 			vysmaw_shutdown(handle);
 			interrupted = true;
 		}
-		// record message type
+		// record message type and accumulate summary information
 		assert(!message || message->typ < VYSMAW_MESSAGE_END);
 		if (message) {
 			++counters[message->typ];
-			if (message->typ == VYSMAW_MESSAGE_VALID_BUFFER) {
+			switch (message->typ) {
+			case VYSMAW_MESSAGE_VALID_BUFFER: {
 				struct vysmaw_data_info *info =
 					&message->content.valid_buffer.info;
 				stations.insert(info->stations[0]);
@@ -182,6 +196,34 @@ main(int argc, char *argv[])
 				bb_ids.insert(info->baseband_id);
 				spw_indexes.insert(info->spectral_window_index);
 				pp_ids.insert(info->polarization_product_id);
+				num_channels.insert(info->num_channels);
+				num_bins.insert(info->num_bins);
+				break;
+			}
+			case VYSMAW_MESSAGE_QUEUE_ALERT:
+				++num_alerts;
+				break;
+			case VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
+				num_data_buffers_unavailable +=
+					message->content.num_data_buffers_unavailable;
+				break;
+			case VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
+				num_signal_buffers_unavailable +=
+					message->content.num_signal_buffers_unavailable;
+				break;
+			case VYSMAW_MESSAGE_VERSION_MISMATCH:
+				num_buffers_mismatched_version +=
+					message->content.num_buffers_mismatched_version;
+				break;
+			case VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
+				signal_receive_status.insert(
+					message->content.signal_receive_status);
+				break;
+			case VYSMAW_MESSAGE_RDMA_READ_FAILURE:
+				rdma_read_status.insert(message->content.rdma_read_status);
+				break;
+			default:
+				break;
 			}
 		}
 
@@ -214,9 +256,12 @@ main(int argc, char *argv[])
 		break;
 	}
 
+	// performance summary
 	auto span =
 		std::chrono::duration_cast<std::chrono::duration<double> >(t1 - t0);
-	std::cout << std::to_string(counters[VYSMAW_MESSAGE_VALID_BUFFER])
+	std::cout << std::to_string(num_cb)
+	          << " callbacks and "
+	          << std::to_string(counters[VYSMAW_MESSAGE_VALID_BUFFER])
 	          << " valid buffers in "
 	          << span.count()
 	          << " seconds ("
@@ -224,11 +269,47 @@ main(int argc, char *argv[])
 	          << " valid buffers per sec)"
 	          << std::endl;
 
-	std::cout << "stations: " << elements(stations) << std::endl;
-	std::cout << "baseband indexes: " << elements(bb_indexes) << std::endl;
-	std::cout << "baseband ids: " << elements(bb_ids) << std::endl;;
-	std::cout << "spw indexes: " << elements(spw_indexes) << std::endl;
-	std::cout << "pol prod ids: " << elements(pp_ids) << std::endl;
+	// error summary...only when it's interesting
+	if (num_alerts > 0)
+		std::cout << "num queue alerts  : "
+		          << num_alerts << std::endl;
+	if (num_data_buffers_unavailable > 0)
+		std::cout << "num data buff miss: "
+		          << num_data_buffers_unavailable << std::endl;
+	if (num_signal_buffers_unavailable > 0)
+		std::cout << "num sig buff miss : "
+		          << num_signal_buffers_unavailable << std::endl;
+	if (num_buffers_mismatched_version > 0)
+		std::cout << "num vsn mismatch  : "
+		          << num_buffers_mismatched_version << std::endl;
+	if (!signal_receive_status.empty()) {
+		std::cout << "signal rcv errs   : ";
+		for (auto&& s : signal_receive_status)
+			std::cout << std::endl << " - " << s;
+		std::cout << std::endl;
+	}
+	if (!rdma_read_status.empty()) {
+		std::cout << "rdma read errs    : ";
+		for (auto&& s : rdma_read_status)
+			std::cout << std::endl << " - " << s;
+		std::cout << std::endl;
+	}
+
+	// data buffer summary
+	std::cout << "stations          : "
+	          << elements(stations) << std::endl;
+	std::cout << "baseband indexes  : "
+	          << elements(bb_indexes) << std::endl;
+	std::cout << "baseband ids      : "
+	          << elements(bb_ids) << std::endl;;
+	std::cout << "spw indexes       : "
+	          << elements(spw_indexes) << std::endl;
+	std::cout << "pol prod ids      : "
+	          << elements(pp_ids) << std::endl;
+	std::cout << "num channels      : "
+	          << elements(num_channels) << std::endl;
+	std::cout << "num bins          : "
+	          << elements(num_bins) << std::endl;
 
 	// release the last message and shut down the library if it hasn't already
 	// been done
