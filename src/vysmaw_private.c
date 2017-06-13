@@ -270,11 +270,18 @@ void
 handle_unref(vysmaw_handle handle)
 {
 	if (g_atomic_int_dec_and_test(&handle->refcount)) {
-		if (handle->signal_receiver_thread != NULL)
+		GThread *self = g_thread_self();
+
+		if (handle->signal_receiver_thread != NULL
+			&& handle->signal_receiver_thread != self)
 			g_thread_join(handle->signal_receiver_thread);
-		if (handle->spectrum_selector_thread != NULL)
+
+		if (handle->spectrum_selector_thread != NULL
+			&& handle->spectrum_selector_thread != self)
 			g_thread_join(handle->spectrum_selector_thread);
-		if (handle->spectrum_reader_thread != NULL)
+
+		if (handle->spectrum_reader_thread != NULL
+			&& handle->spectrum_reader_thread != self)
 			g_thread_join(handle->spectrum_reader_thread);
 
 		MUTEX_CLEAR(handle->gate.mtx);
@@ -288,11 +295,10 @@ handle_unref(vysmaw_handle handle)
 		}
 		g_free(handle->consumers);
 
-		if (handle->config.single_spectrum_buffer_pool) {
+		if (handle->config.single_spectrum_buffer_pool)
 			spectrum_buffer_pool_unref(handle->pool);
-		} else {
+		else
 			spectrum_buffer_pool_collection_free(handle->pool_collection);
-		}
 
 		MUTEX_CLEAR(handle->mtx);
 		g_free(handle);
