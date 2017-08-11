@@ -32,10 +32,10 @@ extern "C" {
 #include <linux/if_packet.h>
 #include <linux/if_arp.h>
 
-#define VYS_VERSION 3
+#define VYS_VERSION 4
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
-#define VYS_CONFIG_ID_SIZE 32
+#define VYS_CONFIG_ID_SIZE 60
 #define VYS_SPECTRUM_OFFSET 16
 
 struct vys_spectrum_info {
