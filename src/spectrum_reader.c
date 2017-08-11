@@ -543,9 +543,8 @@ on_server_route_resolved(struct spectrum_reader_context_ *context,
                          struct server_connection_context *conn_ctx,
                          struct vys_error_record **error_record)
 {
-	/* register memory for receiving spectra */
-	conn_ctx->mrs = register_spectrum_buffer_pools(
-		context->shared->handle, conn_ctx->id, error_record);
+	/* create table for registered memory keys */
+	conn_ctx->mrs = g_hash_table_new(g_direct_hash, g_direct_equal);
 	if (G_UNLIKELY(conn_ctx->mrs == NULL))
 		return -1;
 
@@ -598,11 +597,19 @@ post_server_reads(struct spectrum_reader_context_ *context,
 			if (G_UNLIKELY(mr == NULL || buff_pool_id != pool_id)) {
 				pool_id = buff_pool_id;
 				mr = g_hash_table_lookup(conn_ctx->mrs, pool_id);
+				if (G_UNLIKELY(mr == NULL)) {
+					struct spectrum_buffer_pool *sb_pool =
+						get_buffer_pool(req->message);
+					rc = register_one_spectrum_buffer_pool(
+						sb_pool, conn_ctx->id, conn_ctx->mrs, error_record);
+					mr = g_hash_table_lookup(conn_ctx->mrs, pool_id);
+				}
 			}
-			rc = rdma_post_read(
-				conn_ctx->id, req, req->message->content.valid_buffer.buffer,
-				req->message->content.valid_buffer.buffer_size, mr, 0,
-				req->spectrum_info.data_addr, conn_ctx->rkeys[req->mr_id]);
+			if (G_LIKELY(rc == 0))
+				rc = rdma_post_read(
+					conn_ctx->id, req, req->message->content.valid_buffer.buffer,
+					req->message->content.valid_buffer.buffer_size, mr, 0,
+					req->spectrum_info.data_addr, conn_ctx->rkeys[req->mr_id]);
 			if (G_LIKELY(rc == 0))
 				conn_ctx->num_posted_wr++;
 			else

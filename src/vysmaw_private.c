@@ -295,10 +295,12 @@ handle_unref(vysmaw_handle handle)
 		}
 		g_free(handle->consumers);
 
-		if (handle->config.single_spectrum_buffer_pool)
+		if (handle->config.single_spectrum_buffer_pool) {
+			REC_MUTEX_CLEAR(handle->pool_collection_mtx);
 			spectrum_buffer_pool_unref(handle->pool);
-		else
+		} else {
 			spectrum_buffer_pool_collection_free(handle->pool_collection);
+		}
 
 		MUTEX_CLEAR(handle->mtx);
 		g_free(handle);
@@ -545,18 +547,22 @@ spectrum_buffer_pool_collection_free(
 struct spectrum_buffer_pool *
 spectrum_buffer_pool_collection_add(
 	spectrum_buffer_pool_collection collection,
+	RecMutex *mtx,
 	size_t buffer_size,
 	size_t num_buffers)
 {
 	struct spectrum_buffer_pool *pool =
 		spectrum_buffer_pool_new(buffer_size, num_buffers);
+	REC_MUTEX_LOCK(*mtx);
 	g_sequence_insert_sorted(collection, pool, compare_pool_buffer_sizes, NULL);
+	REC_MUTEX_UNLOCK(*mtx);
 	return pool;
 }
 
 GSequenceIter *
 spectrum_buffer_pool_collection_lookup_iter(
-	spectrum_buffer_pool_collection collection, size_t buffer_size)
+	spectrum_buffer_pool_collection collection, RecMutex *mtx,
+	size_t buffer_size)
 {
 	struct vys_buffer_pool b = {
 		.buffer_size = buffer_size
@@ -564,28 +570,40 @@ spectrum_buffer_pool_collection_lookup_iter(
 	struct spectrum_buffer_pool s = {
 		.pool = &b
 	};
-	return g_sequence_lookup(
-		collection, &s, (GCompareDataFunc)compare_pool_buffer_sizes, NULL);
+	REC_MUTEX_LOCK(*mtx);
+	GSequenceIter *result =
+		g_sequence_lookup(
+			collection, &s, (GCompareDataFunc)compare_pool_buffer_sizes, NULL);
+	REC_MUTEX_UNLOCK(*mtx);
+	return result;
 }
 
 struct spectrum_buffer_pool *
 spectrum_buffer_pool_collection_lookup(
-	spectrum_buffer_pool_collection collection, size_t buffer_size)
+	spectrum_buffer_pool_collection collection, RecMutex *mtx,
+	size_t buffer_size)
 {
+	REC_MUTEX_LOCK(*mtx);
 	GSequenceIter *iter =
 		spectrum_buffer_pool_collection_lookup_iter(
-			collection, buffer_size);
-	return ((iter == NULL) ? NULL : g_sequence_get(iter));
+			collection, mtx, buffer_size);
+	struct spectrum_buffer_pool *result =
+		((iter == NULL) ? NULL : g_sequence_get(iter));
+	REC_MUTEX_UNLOCK(*mtx);
+	return result;
 }
 
 void
 spectrum_buffer_pool_collection_remove(
-	spectrum_buffer_pool_collection collection, size_t buffer_size)
+	spectrum_buffer_pool_collection collection, RecMutex *mtx,
+	size_t buffer_size)
 {
+	REC_MUTEX_LOCK(*mtx);
 	GSequenceIter *iter =
 		spectrum_buffer_pool_collection_lookup_iter(
-			collection, buffer_size);
+			collection, mtx, buffer_size);
 	if (iter != NULL) g_sequence_remove(iter);
+	REC_MUTEX_UNLOCK(*mtx);
 }
 
 void *
@@ -596,12 +614,13 @@ new_valid_buffer_from_collection(
 {
 	struct spectrum_buffer_pool *pool =
 		spectrum_buffer_pool_collection_lookup(
-			handle->pool_collection, buffer_size);
+			handle->pool_collection, &handle->pool_collection_mtx, buffer_size);
 	if (G_UNLIKELY(pool == NULL)) {
 		size_t num_buffers =
 			handle->config.spectrum_buffer_pool_size / buffer_size;
 		pool = spectrum_buffer_pool_collection_add(
-			handle->pool_collection, buffer_size, num_buffers);
+			handle->pool_collection, &handle->pool_collection_mtx, buffer_size,
+			num_buffers);
 		int rc = register_one_spectrum_buffer_pool(
 			pool, id, mrs, error_record);
 		if (G_UNLIKELY(rc != 0)) pool = NULL;
@@ -661,11 +680,17 @@ get_shutdown_parameters(vysmaw_handle handle, bool *in_shutdown,
 }
 
 struct spectrum_buffer_pool *
+get_buffer_pool(struct vysmaw_message *message)
+{
+	return message->handle->lookup_buffer_pool_fn(message);
+}
+
+struct spectrum_buffer_pool *
 lookup_buffer_pool_from_collection(struct vysmaw_message *message)
 {
 	g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
 	return spectrum_buffer_pool_collection_lookup(
-		message->handle->pool_collection,
+		message->handle->pool_collection, &message->handle->pool_collection_mtx,
 		buffer_size(&message->content.valid_buffer.info));
 }
 
@@ -677,24 +702,6 @@ lookup_buffer_pool_from_pool(struct vysmaw_message *message)
 	return ((buff_size <= message->handle->pool->pool->buffer_size)
 	        ? message->handle->pool
 	        : NULL);
-}
-
-GSList *
-buffer_pool_list_from_collection(vysmaw_handle handle)
-{
-	GSequenceIter *iter = g_sequence_get_begin_iter(handle->pool_collection);
-	GSList *result = NULL;
-	while (!g_sequence_iter_is_end(iter)) {
-		result = g_slist_prepend(result, g_sequence_get(iter));
-		iter = g_sequence_iter_next(iter);
-	}
-	return result;
-}
-
-GSList *
-buffer_pool_list_from_pool(vysmaw_handle handle)
-{
-	return g_slist_prepend(NULL, handle->pool);
 }
 
 void
@@ -1000,25 +1007,6 @@ register_one_spectrum_buffer_pool(
 		}
 		g_list_free(keys0);
 		result = -1;
-	}
-	return result;
-}
-
-GHashTable *
-register_spectrum_buffer_pools(vysmaw_handle handle, struct rdma_cm_id *id,
-                               struct vys_error_record **error_record)
-{
-	GHashTable *result =
-		g_hash_table_new(g_direct_hash, g_direct_equal);
-	GSList *sb_pool_node = handle->list_buffer_pools_fn(handle);
-	while (result != NULL && sb_pool_node != NULL) {
-		int rc = register_one_spectrum_buffer_pool(
-			sb_pool_node->data, id, result, error_record);
-		if (G_UNLIKELY(rc != 0)) {
-			g_hash_table_destroy(result);
-			result = NULL;
-		}
-		sb_pool_node = g_slist_delete_link(sb_pool_node, sb_pool_node);
 	}
 	return result;
 }

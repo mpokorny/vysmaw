@@ -37,10 +37,10 @@
 # define MUTEX_LOCK(m) g_mutex_lock(&(m))
 # define MUTEX_UNLOCK(m) g_mutex_unlock(&(m))
 # define RecMutex GRecMutex
-# define REC_MUTEX_INIT g_rec_mutex_init
-# define REC_MUTEX_CLEAR g_rec_mutex_clear
-# define REC_MUTEX_LOCK g_rec_mutex_lock
-# define REC_MUTEX_UNLOCK g_rec_mutex_unlock
+# define REC_MUTEX_INIT(m) g_rec_mutex_init(&(m))
+# define REC_MUTEX_CLEAR(m) g_rec_mutex_clear(&(m))
+# define REC_MUTEX_LOCK(m) g_rec_mutex_lock(&(m))
+# define REC_MUTEX_UNLOCK(m) g_rec_mutex_unlock(&(m))
 # define Cond GCond
 # define COND_INIT(c) g_cond_init(&(c))
 # define COND_CLEAR(c) g_cond_clear(&(c))
@@ -62,10 +62,10 @@
 # define MUTEX_LOCK(m) { if ((m) != NULL) g_mutex_lock(m); }
 # define MUTEX_UNLOCK(m) { if ((m) != NULL) g_mutex_unlock(m); }
 # define RecMutex GStaticRecMutex
-# define REC_MUTEX_INIT g_static_rec_mutex_init
-# define REC_MUTEX_CLEAR g_static_rec_mutex_free
-# define REC_MUTEX_LOCK g_static_rec_mutex_lock
-# define REC_MUTEX_UNLOCK g_static_rec_mutex_unlock
+# define REC_MUTEX_INIT(m) g_static_rec_mutex_init(&(m))
+# define REC_MUTEX_CLEAR(m) g_static_rec_mutex_free(&(m))
+# define REC_MUTEX_LOCK(m) g_static_rec_mutex_lock(&(m))
+# define REC_MUTEX_UNLOCK(m) g_static_rec_mutex_unlock(&(m))
 # define Cond GCond *
 # define COND_INIT(c) { c = g_cond_new(); }
 # define COND_CLEAR(c) { if ((c) != NULL) g_cond_free(c); }
@@ -117,7 +117,6 @@ typedef void *(*new_valid_buffer)(
 	struct vys_error_record **error_record);
 typedef struct spectrum_buffer_pool *(*lookup_buffer_pool)(
 	struct vysmaw_message *message);
-typedef GSList *(*list_buffer_pools)(vysmaw_handle handle);
 
 struct consumer {
 	struct _vysmaw_message_queue queue;
@@ -147,7 +146,7 @@ struct _vysmaw_handle {
 	/* buffer pool (collection) */
 	new_valid_buffer new_valid_buffer_fn;
 	lookup_buffer_pool lookup_buffer_pool_fn;
-	list_buffer_pools list_buffer_pools_fn;
+	RecMutex pool_collection_mtx;
 	union {
 		spectrum_buffer_pool_collection pool_collection;
 		struct spectrum_buffer_pool *pool;
@@ -226,17 +225,17 @@ extern void spectrum_buffer_pool_collection_free(
 	spectrum_buffer_pool_collection collection)
 	__attribute__((nonnull));
 extern struct spectrum_buffer_pool *spectrum_buffer_pool_collection_add(
-	spectrum_buffer_pool_collection collection, size_t buffer_size,
+	spectrum_buffer_pool_collection collection, RecMutex *mtx, size_t buffer_size,
 	size_t num_buffers)
 	__attribute__((nonnull,returns_nonnull,malloc));
 extern GSequenceIter *spectrum_buffer_pool_collection_lookup_iter(
-	spectrum_buffer_pool_collection collection, size_t buffer_size)
+	spectrum_buffer_pool_collection collection, RecMutex *mtx, size_t buffer_size)
 	__attribute__((nonnull));
 extern struct spectrum_buffer_pool *spectrum_buffer_pool_collection_lookup(
-	spectrum_buffer_pool_collection collection, size_t buffer_size)
+	spectrum_buffer_pool_collection collection, RecMutex *mtx, size_t buffer_size)
 	__attribute__((nonnull));
 extern void spectrum_buffer_pool_collection_remove(
-	spectrum_buffer_pool_collection collection, size_t buffer_size)
+	spectrum_buffer_pool_collection collection, RecMutex *mtx, size_t buffer_size)
 	__attribute__((nonnull));
 extern void *new_valid_buffer_from_collection(
 	vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
@@ -259,6 +258,9 @@ extern void get_shutdown_parameters(
 extern struct vysmaw_message *message_ref(
 	struct vysmaw_message *message)
 	__attribute__((nonnull,returns_nonnull));
+extern struct spectrum_buffer_pool *get_buffer_pool(
+	struct vysmaw_message *message)
+	__attribute__((nonnull));
 extern struct spectrum_buffer_pool *lookup_buffer_pool_from_collection(
 	struct vysmaw_message *message)
 	__attribute__((nonnull));
@@ -375,10 +377,6 @@ static inline size_t buffer_size(const struct vysmaw_data_info *info)
 extern int register_one_spectrum_buffer_pool(
 	struct spectrum_buffer_pool *sb_pool, struct rdma_cm_id *id,
 	GHashTable *mrs, struct vys_error_record **error_record)
-	__attribute__((nonnull));
-extern GHashTable *register_spectrum_buffer_pools(
-	vysmaw_handle handle, struct rdma_cm_id *id,
-	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 
 extern unsigned sockaddr_hash(
