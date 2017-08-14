@@ -28,6 +28,7 @@
 #define DEFAULT_SPECTRUM_BUFFER_POOL_SIZE (10 * (1 << 20))
 #define DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL true
 #define DEFAULT_MAX_SPECTRUM_BUFFER_SIZE (8 * (1 << 10))
+#define DEFAULT_SPECTRUM_BUFFER_POOL_MIN_IDLE_LIFETIME_SEC 30
 #define DEFAULT_SIGNAL_MESSAGE_RECEIVE_MIN_POSTED 4000
 #define DEFAULT_SIGNAL_MESSAGE_RECEIVE_MAX_POSTED 8000
 #define DEFAULT_SIGNAL_MESSAGE_POOL_OVERHEAD_FACTOR 2
@@ -74,6 +75,9 @@ default_config_vysmaw()
 	g_key_file_set_boolean(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                       SINGLE_SPECTRUM_BUFFER_POOL_KEY,
 	                       DEFAULT_SINGLE_SPECTRUM_BUFFER_POOL);
+	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
+	                      SPECTRUM_BUFFER_POOL_MIN_IDLE_LIFETIME_SEC_KEY,
+	                      DEFAULT_SPECTRUM_BUFFER_POOL_MIN_IDLE_LIFETIME_SEC);
 	g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
 	                      MAX_SPECTRUM_BUFFER_SIZE_KEY,
 	                      DEFAULT_MAX_SPECTRUM_BUFFER_SIZE);
@@ -216,6 +220,9 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
 		parse_uint64(kf, SPECTRUM_BUFFER_POOL_SIZE_KEY, config);
 	config->single_spectrum_buffer_pool =
 		parse_boolean(kf, SINGLE_SPECTRUM_BUFFER_POOL_KEY, config);
+	config->spectrum_buffer_pool_min_idle_lifetime_sec =
+		parse_uint64(kf, SPECTRUM_BUFFER_POOL_MIN_IDLE_LIFETIME_SEC_KEY,
+		             config);
 	config->max_spectrum_buffer_size =
 		parse_uint64(kf, MAX_SPECTRUM_BUFFER_SIZE_KEY, config);
 	config->signal_message_receive_min_posted =
@@ -484,6 +491,7 @@ spectrum_buffer_pool_new(size_t buffer_size, size_t num_buffers)
 	struct spectrum_buffer_pool *result =
 		g_new(struct spectrum_buffer_pool, 1);
 	result->refcount = 1;
+	result->inactive = FALSE;
 	result->pool = vys_buffer_pool_new(num_buffers, buffer_size);
 	return result;
 }
@@ -508,6 +516,7 @@ void *
 spectrum_buffer_pool_pop(struct spectrum_buffer_pool *buffer_pool)
 {
 	spectrum_buffer_pool_ref(buffer_pool);
+	buffer_pool->inactive = FALSE;
 	void *result = vys_buffer_pool_pop(buffer_pool->pool);
 	if (result == NULL) spectrum_buffer_pool_unref(buffer_pool);
 	return result;
@@ -702,6 +711,37 @@ lookup_buffer_pool_from_pool(struct vysmaw_message *message)
 	return ((buff_size <= message->handle->pool->pool->buffer_size)
 	        ? message->handle->pool
 	        : NULL);
+}
+
+void
+remove_idle_pools_from_pool(
+	vysmaw_handle handle,
+	void (*cb)(struct spectrum_buffer_pool *, struct vys_error_record **),
+	struct vys_error_record **error_record)
+{
+	return; // no-op
+}
+
+void
+remove_idle_pools_from_collection(
+	vysmaw_handle handle,
+	void (*cb)(struct spectrum_buffer_pool *, struct vys_error_record **),
+	struct vys_error_record **error_record)
+{
+	spectrum_buffer_pool_collection pool_collection = handle->pool_collection;
+	REC_MUTEX_LOCK(handle->pool_collection_mtx);
+	GSequenceIter *iter = g_sequence_get_begin_iter(pool_collection);
+	while (!g_sequence_iter_is_end(iter)) {
+		struct spectrum_buffer_pool *pool = g_sequence_get(iter);
+		if (G_UNLIKELY(pool->inactive)) {
+			cb(pool, error_record);
+			g_sequence_remove(iter);
+		} else {
+			pool->inactive = TRUE;
+		}
+		iter = g_sequence_iter_next(iter);
+	}
+	REC_MUTEX_UNLOCK(handle->pool_collection_mtx);
 }
 
 void
@@ -982,6 +1022,15 @@ vysmaw_message_free_resources(struct vysmaw_message *message)
 }
 
 int
+dereg_mr(struct ibv_mr *mr, struct vys_error_record **error_record)
+{
+	int rc = rdma_dereg_mr(mr);
+	if (G_UNLIKELY(rc != 0))
+		VERB_ERR(error_record, errno, "rdma_dereg_mr");
+	return rc;
+}
+
+int
 register_one_spectrum_buffer_pool(
 	struct spectrum_buffer_pool *sb_pool, struct rdma_cm_id *id,
 	GHashTable *mrs, struct vys_error_record **error_record)
@@ -990,25 +1039,26 @@ register_one_spectrum_buffer_pool(
 	struct ibv_mr *mr = rdma_reg_msgs(
 		id, sb_pool->pool->pool, sb_pool->pool->pool_size);
 	if (G_LIKELY(mr != NULL)) {
-		g_hash_table_insert(mrs, sb_pool, mr);
+		g_hash_table_insert(mrs, spectrum_buffer_pool_ref(sb_pool), mr);
 		result = 0;
 	} else {
 		VERB_ERR(error_record, errno, "rdma_reg_msgs");
-		GList *keys0 = g_hash_table_get_keys(mrs);
-		GList *keys = keys0;
-		while (keys != NULL) {
-			int rc1 =
-				rdma_dereg_mr(
-					(struct ibv_mr *)g_hash_table_lookup(
-						mrs, keys->data));
-			if (G_UNLIKELY(rc1 != 0))
-				VERB_ERR(error_record, errno, "rdma_dereg_mr");
-			keys = g_list_next(keys);
-		}
-		g_list_free(keys0);
 		result = -1;
 	}
 	return result;
+}
+
+int
+deregister_one_spectrum_buffer_pool(
+	struct spectrum_buffer_pool *sb_pool, GHashTable *mrs,
+	struct vys_error_record **error_record)
+{
+	int rc = 0;
+	struct ibv_mr *mr = g_hash_table_lookup(mrs, sb_pool);
+	if (G_LIKELY(mr != NULL))
+		rc = dereg_mr(mr, error_record);
+	g_hash_table_remove(mrs, sb_pool);
+	return rc;
 }
 
 unsigned

@@ -77,6 +77,7 @@
 #define VYSMAW_CONFIG_GROUP_NAME "vysmaw"
 #define SPECTRUM_BUFFER_POOL_SIZE_KEY "spectrum_buffer_pool_size"
 #define SINGLE_SPECTRUM_BUFFER_POOL_KEY "single_spectrum_buffer_pool"
+#define SPECTRUM_BUFFER_POOL_MIN_IDLE_LIFETIME_SEC_KEY "spectrum_buffer_pool_min_idle_lifetime_sec"
 #define MAX_SPECTRUM_BUFFER_SIZE_KEY "max_spectrum_buffer_size"
 #define SIGNAL_MESSAGE_RECEIVE_MIN_POSTED_KEY "signal_message_receive_min_posted"
 #define SIGNAL_MESSAGE_RECEIVE_MAX_POSTED_KEY "signal_message_receive_max_posted"
@@ -105,6 +106,7 @@ struct _vysmaw_message_queue {
 
 struct spectrum_buffer_pool {
 	int refcount;
+	bool inactive;
 	struct vys_buffer_pool *pool;
 };
 
@@ -117,6 +119,10 @@ typedef void *(*new_valid_buffer)(
 	struct vys_error_record **error_record);
 typedef struct spectrum_buffer_pool *(*lookup_buffer_pool)(
 	struct vysmaw_message *message);
+typedef void (*remove_idle_pools)(
+	vysmaw_handle handle,
+	void (*cb)(struct spectrum_buffer_pool *, struct vys_error_record **),
+	struct vys_error_record **error_record);
 
 struct consumer {
 	struct _vysmaw_message_queue queue;
@@ -146,6 +152,7 @@ struct _vysmaw_handle {
 	/* buffer pool (collection) */
 	new_valid_buffer new_valid_buffer_fn;
 	lookup_buffer_pool lookup_buffer_pool_fn;
+	remove_idle_pools remove_idle_pools_fn;
 	RecMutex pool_collection_mtx;
 	union {
 		spectrum_buffer_pool_collection pool_collection;
@@ -267,10 +274,16 @@ extern struct spectrum_buffer_pool *lookup_buffer_pool_from_collection(
 extern struct spectrum_buffer_pool *lookup_buffer_pool_from_pool(
 	struct vysmaw_message *message)
 	__attribute__((nonnull));
-extern GSList *buffer_pool_list_from_collection(vysmaw_handle handle)
-	__attribute__((nonnull,returns_nonnull,malloc));
-extern GSList *buffer_pool_list_from_pool(vysmaw_handle handle)
-	__attribute__((nonnull,returns_nonnull,malloc));
+extern void remove_idle_pools_from_pool(
+	vysmaw_handle handle,
+	void (*cb)(struct spectrum_buffer_pool *, struct vys_error_record **),
+	struct vys_error_record **error_record)
+	__attribute__((nonnull));
+extern void remove_idle_pools_from_collection(
+	vysmaw_handle handle,
+	void (*cb)(struct spectrum_buffer_pool *, struct vys_error_record **),
+	struct vys_error_record **error_record)
+	__attribute__((nonnull));
 extern void init_consumer(
 	vysmaw_spectrum_filter filter, void *user_data,
 	vysmaw_message_queue *queue, struct consumer *consumer)
@@ -374,9 +387,15 @@ static inline size_t buffer_size(const struct vysmaw_data_info *info)
 		* sizeof(float) + VYS_SPECTRUM_OFFSET;
 }
 
+extern int dereg_mr(struct ibv_mr *mr, struct vys_error_record **error_record)
+	__attribute__((nonnull));
 extern int register_one_spectrum_buffer_pool(
 	struct spectrum_buffer_pool *sb_pool, struct rdma_cm_id *id,
 	GHashTable *mrs, struct vys_error_record **error_record)
+	__attribute__((nonnull));
+extern int deregister_one_spectrum_buffer_pool(
+	struct spectrum_buffer_pool *sb_pool, GHashTable *mrs,
+	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 
 extern unsigned sockaddr_hash(

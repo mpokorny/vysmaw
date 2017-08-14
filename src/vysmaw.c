@@ -118,11 +118,13 @@ vysmaw_start(const struct vysmaw_configuration *config,
 				result->config.max_spectrum_buffer_size, num_buffers);
 			result->new_valid_buffer_fn = new_valid_buffer_from_pool;
 			result->lookup_buffer_pool_fn = lookup_buffer_pool_from_pool;
-			REC_MUTEX_INIT(result->pool_collection_mtx);
+			result->remove_idle_pools_fn = remove_idle_pools_from_pool;
 		} else {
 			result->pool_collection = spectrum_buffer_pool_collection_new();
 			result->new_valid_buffer_fn = new_valid_buffer_from_collection;
 			result->lookup_buffer_pool_fn = lookup_buffer_pool_from_collection;
+			result->remove_idle_pools_fn = remove_idle_pools_from_collection;
+			REC_MUTEX_INIT(result->pool_collection_mtx);
 		}
 	}
 

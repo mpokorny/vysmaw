@@ -35,7 +35,8 @@
 #define CM_EVENT_FD_INDEX 0
 #define INACTIVITY_TIMER_FD_INDEX 1
 #define READ_REQUEST_QUEUE_FD_INDEX 2
-#define NUM_FIXED_FDS 3
+#define BUFFER_POOL_IDLE_TIMER_FD_INDEX 3
+#define NUM_FIXED_FDS 4
 
 enum run_state {
 	STATE_INIT,
@@ -191,6 +192,10 @@ static int on_inactivity_timer_event(
 	struct spectrum_reader_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
+static int on_buffer_pool_idle_timer_event(
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
+	__attribute__((nonnull));
 static int on_poll_events(
 	struct spectrum_reader_context_ *context,
 	struct vys_error_record **error_record)
@@ -208,6 +213,14 @@ static int start_inactivity_timer(
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
 static int stop_inactivity_timer(
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
+	__attribute__((nonnull));
+static int start_buffer_pool_idle_timer(
+	struct spectrum_reader_context_ *context,
+	struct vys_error_record **error_record)
+	__attribute__((nonnull));
+static int stop_buffer_pool_idle_timer(
 	struct spectrum_reader_context_ *context,
 	struct vys_error_record **error_record)
 	__attribute__((nonnull));
@@ -544,7 +557,11 @@ on_server_route_resolved(struct spectrum_reader_context_ *context,
                          struct vys_error_record **error_record)
 {
 	/* create table for registered memory keys */
-	conn_ctx->mrs = g_hash_table_new(g_direct_hash, g_direct_equal);
+	conn_ctx->mrs =
+		g_hash_table_new_full(
+			g_direct_hash, g_direct_equal,
+			(GDestroyNotify)spectrum_buffer_pool_unref,
+			NULL);
 	if (G_UNLIKELY(conn_ctx->mrs == NULL))
 		return -1;
 
@@ -727,13 +744,13 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 	//rdma_destroy_qp(conn_ctx->id);
 
 	if (conn_ctx->mrs != NULL) {
-		void dereg_mr(struct spectrum_buffer_pool *unused, struct ibv_mr *mr,
-		              void *unused1) {
-			int rc = rdma_dereg_mr(mr);
-			if (G_UNLIKELY(rc != 0))
-				VERB_ERR(error_record, errno, "rdma_dereg_mr");
+		gboolean dereg(gpointer unused, struct ibv_mr *mr,
+		               struct vys_error_record **errs) {
+			dereg_mr(mr, error_record);
+			return TRUE;
 		}
-		g_hash_table_foreach(conn_ctx->mrs, (GHFunc)dereg_mr, NULL);
+		g_hash_table_foreach_remove(
+			conn_ctx->mrs, (GHRFunc) dereg, error_record);
 		g_hash_table_destroy(conn_ctx->mrs);
 	}
 
@@ -995,6 +1012,33 @@ on_inactivity_timer_event(struct spectrum_reader_context_ *context,
 }
 
 static int
+on_buffer_pool_idle_timer_event(struct spectrum_reader_context_ *context,
+                                struct vys_error_record **error_record)
+{
+	struct pollfd *pollfd = &g_array_index(context->pollfds, struct pollfd,
+	                                       BUFFER_POOL_IDLE_TIMER_FD_INDEX);
+	uint64_t n;
+	read(pollfd->fd, &n, sizeof(n));
+
+	void remove_pool_from(gpointer unused,
+	                      struct server_connection_context *conn_ctx,
+	                      struct spectrum_buffer_pool *pool) {
+		deregister_one_spectrum_buffer_pool(pool, conn_ctx->mrs, error_record);
+	}
+
+	void remove_idle(struct spectrum_buffer_pool *pool,
+	                 struct vys_error_record **unused) {
+		g_hash_table_foreach(
+			context->connections, (GHFunc)remove_pool_from, pool);
+	}
+
+	context->shared->handle->remove_idle_pools_fn(
+		context->shared->handle, remove_idle, NULL);
+
+	return ((G_LIKELY(*error_record == NULL)) ? 0: -1);
+}
+
+static int
 on_poll_events(struct spectrum_reader_context_ *context,
                struct vys_error_record **error_record)
 {
@@ -1028,20 +1072,27 @@ on_poll_events(struct spectrum_reader_context_ *context,
 			rc3 = on_data_path_message(context, msg, error_record);
 	}
 
-	/* read completion events */
+	/* buffer pool idle timer events */
 	int rc4 = 0;
+	struct pollfd *bp_pollfd = &g_array_index(context->pollfds, struct pollfd,
+	                                           BUFFER_POOL_IDLE_TIMER_FD_INDEX);
+	if (bp_pollfd->revents & POLLIN)
+		rc4 = on_buffer_pool_idle_timer_event(context, error_record);
+
+	/* read completion events */
+	int rc5 = 0;
 	for (unsigned i = NUM_FIXED_FDS; i < context->pollfds->len; ++i) {
 		struct pollfd *ev_pollfd =
 			&g_array_index(context->pollfds, struct pollfd, i);
-		int rc5 = 0;
+		int rc6 = 0;
 		if (ev_pollfd->revents & POLLIN) {
-			rc5 = on_read_completion(context, i, error_record);
+			rc6 = on_read_completion(context, i, error_record);
 		} else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
 			MSG_ERROR(error_record, -1, "%s",
 			          "connection event channel ERR or HUP");
-			rc5 = -1;
+			rc6 = -1;
 		}
-		if (G_UNLIKELY(rc4 == 0 && rc5 != 0)) rc4 = rc5;
+		if (G_UNLIKELY(rc5 == 0 && rc6 != 0)) rc5 = rc6;
 	}
 	if (context->new_pollfds->len > 0) {
 		GArray *tmp = context->pollfds;
@@ -1054,6 +1105,7 @@ on_poll_events(struct spectrum_reader_context_ *context,
 	else if (G_UNLIKELY(rc2 != 0)) { rc = rc2; }
 	else if (G_UNLIKELY(rc3 != 0)) { rc = rc3; }
 	else if (G_UNLIKELY(rc4 != 0)) { rc = rc4; }
+	else if (G_UNLIKELY(rc5 != 0)) { rc = rc5; }
 	else { rc = 0; }
 	return rc;
 }
@@ -1164,6 +1216,56 @@ stop_inactivity_timer(struct spectrum_reader_context_ *context,
 }
 
 static int
+start_buffer_pool_idle_timer(struct spectrum_reader_context_ *context,
+                             struct vys_error_record **error_record)
+{
+	struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
+	                                          BUFFER_POOL_IDLE_TIMER_FD_INDEX);
+
+	tm_pollfd->fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+	tm_pollfd->events = POLLIN;
+	if (tm_pollfd->fd >= 0) {
+		time_t sec =
+			context->shared->handle->config
+			.spectrum_buffer_pool_min_idle_lifetime_sec;
+		struct itimerspec itimerspec = {
+			.it_interval = { .tv_sec = sec, .tv_nsec = 0 },
+			.it_value = { .tv_sec = sec, .tv_nsec = 0 }
+		};
+		int rc = timerfd_settime(tm_pollfd->fd, 0, &itimerspec, NULL);
+		if (rc < 0) {
+			MSG_ERROR(error_record, errno,
+			          "Failed to start buffer pool idle timer: %s",
+			          strerror(errno));
+			stop_buffer_pool_idle_timer(context, error_record);
+			return rc;
+		}
+	} else {
+		MSG_ERROR(error_record, errno,
+		          "Failed to create buffer pool idle timer: %s",
+		          strerror(errno));
+	}
+	return tm_pollfd->fd;
+}
+
+static int
+stop_buffer_pool_idle_timer(struct spectrum_reader_context_ *context,
+                            struct vys_error_record **error_record)
+{
+	struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
+	                                          BUFFER_POOL_IDLE_TIMER_FD_INDEX);
+	int rc = 0;
+	if (tm_pollfd->fd >= 0) {
+		rc = close(tm_pollfd->fd);
+		if (rc < 0)
+			MSG_ERROR(error_record, errno,
+			          "Failed to close buffer pool idle timer: %s",
+			          strerror(errno));
+	}
+	return rc;
+}
+
+static int
 start_read_request_poll(struct spectrum_reader_context_ *context,
                         struct vys_error_record **error_record)
 {
@@ -1234,6 +1336,10 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	if (rc < 0)
 		goto cleanup_and_return;
 
+	rc = start_buffer_pool_idle_timer(&context, &error_record);
+	if (rc < 0)
+		goto cleanup_and_return;
+
 	rc = start_read_request_poll(&context, &error_record);
 	if (rc != 0)
 		goto cleanup_and_return;
@@ -1255,6 +1361,8 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	}
 
 	stop_read_request_poll(&context, &error_record);
+
+	stop_buffer_pool_idle_timer(&context, &error_record);
 
 	stop_inactivity_timer(&context, &error_record);
 

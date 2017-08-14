@@ -59,6 +59,10 @@ struct vysmaw_configuration {
 	 * true. */
 	unsigned max_spectrum_buffer_size;
 
+	/* Minimum time that a buffer pool is not accessed before its resources will
+	   be reclaimed, in seconds. */
+	unsigned spectrum_buffer_pool_min_idle_lifetime_sec;
+
 	/* Limits on number of work requests to maintain on the receive queue for
 	 * signal messages. The lower limit should be at least the number of signal
 	 * messages that are expected to arrive in the period that it takes the
