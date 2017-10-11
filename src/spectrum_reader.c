@@ -1075,7 +1075,7 @@ on_poll_events(struct spectrum_reader_context_ *context,
 	/* buffer pool idle timer events */
 	int rc4 = 0;
 	struct pollfd *bp_pollfd = &g_array_index(context->pollfds, struct pollfd,
-	                                           BUFFER_POOL_IDLE_TIMER_FD_INDEX);
+	                                          BUFFER_POOL_IDLE_TIMER_FD_INDEX);
 	if (bp_pollfd->revents & POLLIN)
 		rc4 = on_buffer_pool_idle_timer_event(context, error_record);
 
@@ -1101,12 +1101,12 @@ on_poll_events(struct spectrum_reader_context_ *context,
 		g_array_set_size(context->new_pollfds, 0);
 	}
 	int rc;
-	if (G_UNLIKELY(rc1 != 0)) { rc = rc1; }
-	else if (G_UNLIKELY(rc2 != 0)) { rc = rc2; }
-	else if (G_UNLIKELY(rc3 != 0)) { rc = rc3; }
-	else if (G_UNLIKELY(rc4 != 0)) { rc = rc4; }
-	else if (G_UNLIKELY(rc5 != 0)) { rc = rc5; }
-	else { rc = 0; }
+	if (G_UNLIKELY(rc1 != 0))  rc = rc1;
+	else if (G_UNLIKELY(rc2 != 0))  rc = rc2;
+	else if (G_UNLIKELY(rc3 != 0))  rc = rc3;
+	else if (G_UNLIKELY(rc4 != 0))  rc = rc4;
+	else if (G_UNLIKELY(rc5 != 0))  rc = rc5;
+	else  rc = 0;
 	return rc;
 }
 
@@ -1115,10 +1115,8 @@ to_quit_state(struct spectrum_reader_context_ *context,
               struct data_path_message *quit_msg,
               struct vys_error_record **error_record)
 {
-	g_assert(context->state != STATE_DONE);
-
 	int rc = 0;
-	if (context->state != STATE_QUIT) {
+	if (context->state != STATE_QUIT && context->state != STATE_DONE) {
 		if (context->fd_connections != NULL) {
 			GSequenceIter *iter =
 				g_sequence_get_begin_iter(context->fd_connections);
@@ -1278,7 +1276,7 @@ start_read_request_poll(struct spectrum_reader_context_ *context,
 
 static int
 stop_read_request_poll(struct spectrum_reader_context_ *context,
-                        struct vys_error_record **error_record)
+                       struct vys_error_record **error_record)
 {
 	struct pollfd *qpfd = &g_array_index(context->pollfds, struct pollfd,
 	                                     READ_REQUEST_QUEUE_FD_INDEX);
