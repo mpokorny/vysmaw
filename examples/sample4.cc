@@ -25,6 +25,7 @@
 #include <chrono>
 #include <set>
 #include <sstream>
+#include <string>
 #include <vysmaw.h>
 
 // max time to wait for message on queue
@@ -120,12 +121,12 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 }
 
 template <typename A>
-std::string
-elements(const std::set<A> &s)
+string
+elements(const set<A> &s)
 {
-	std::stringstream result;
+	stringstream result;
 	for (auto &&a : s)
-		result << std::to_string(a) << " ";
+		result << to_string(a) << " ";
 	return result.str();
 }
 
@@ -134,11 +135,23 @@ main(int argc, char *argv[])
 {
 	unique_ptr<struct vysmaw_configuration> config;
 
+	typedef chrono::duration<unsigned long,milli> ms;
+	ms duration = chrono::duration<unsigned long,milli>::max();
+
 	// initialize vysmaw configuration
-	if (argc == 2)
+	switch (argc) {
+	case 3:
+		duration = ms(stoul(argv[2]));
+	case 2:
 		config.reset(vysmaw_configuration_new(argv[1]));
-	else
-		config.reset(vysmaw_configuration_new(nullptr));
+		break;
+	default:
+		cerr << "usage: "
+		          << argv[0]
+		          << " [config] <duration (ms)>"
+		          << endl;
+		return -1;
+	}
 
 	// one consumer, using filter()
 	unsigned num_cb = 0;
@@ -155,33 +168,45 @@ main(int argc, char *argv[])
 	bool interrupted = false;
 	signal(SIGINT, sigint_handler);
 
-	// start vysmaw client
-	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
-
 	// a variety of summary accumulators
-	std::set<uint8_t> stations;
-	std::set<uint8_t> bb_indexes;
-	std::set<uint8_t> bb_ids;
-	std::set<uint8_t> spw_indexes;
-	std::set<uint8_t> pp_ids;
-	std::set<uint16_t> num_channels;
-	std::set<uint16_t> num_bins;
+	set<uint8_t> stations;
+	set<uint8_t> bb_indexes;
+	set<uint8_t> bb_ids;
+	set<uint8_t> spw_indexes;
+	set<uint8_t> pp_ids;
+	set<uint16_t> num_channels;
+	set<uint16_t> num_bins;
 	unsigned num_alerts = 0;
 	unsigned num_data_buffers_unavailable = 0;
 	unsigned num_signal_buffers_unavailable = 0;
 	unsigned num_buffers_mismatched_version = 0;
-	std::set<std::string> signal_receive_status;
-	std::set<std::string> rdma_read_status;
-	std::set<std::string> config_ids;
+	set<string> signal_receive_status;
+	set<string> rdma_read_status;
+	set<string> config_ids;
+
+	// start vysmaw client
+	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
+	bool active = true;
+	bool timeout = false;
 
 	// take messages until a VYSMAW_MESSAGE_END appears
-	auto t0 = std::chrono::high_resolution_clock::now();
+	auto t0 = chrono::high_resolution_clock::now();
 	unique_ptr<struct vysmaw_message> message = move(pop(consumer.queue));
-	while (!message || message->typ != VYSMAW_MESSAGE_END) {
+	auto t1 = chrono::high_resolution_clock::now();
+	while ((!message || message->typ != VYSMAW_MESSAGE_END)) {
 		// start shutdown if requested by user
 		if (sigint_occurred && !interrupted) {
-			vysmaw_shutdown(handle);
+			if (active) vysmaw_shutdown(handle);
+			active = false;
 			interrupted = true;
+		}
+		if (!timeout) {
+			timeout = t1 - t0 > duration;
+			if (timeout) {
+				if (active) vysmaw_shutdown(handle);
+				active = false;
+				cout << "run time duration exceeded" << endl;
+			}
 		}
 		// record message type and accumulate summary information
 		assert(!message || message->typ < VYSMAW_MESSAGE_END);
@@ -231,96 +256,98 @@ main(int argc, char *argv[])
 
 		// get next message
 		message = move(pop(consumer.queue));
+		t1 = chrono::high_resolution_clock::now();
 	}
-	++counters[message->typ];
-	auto t1 = std::chrono::high_resolution_clock::now();
+	if (message) ++counters[message->typ];
 
 	// display counts of received messages
 	if (interrupted) cout << endl;
 	show_counters(counters);
 
 	// display message for end condition
-	switch (message->content.result.code) {
-	case vysmaw_result::VYSMAW_NO_ERROR:
-		cout << "ended without error" << endl;
-		break;
+	if (message) {
+		switch (message->content.result.code) {
+		case vysmaw_result::VYSMAW_NO_ERROR:
+			cout << "ended without error" << endl;
+			break;
 
-	case vysmaw_result::VYSMAW_SYSERR:
-		cout << "ended with errors" << endl
-		     << message->content.result.syserr_desc;
-		break;
+		case vysmaw_result::VYSMAW_SYSERR:
+			cout << "ended with errors" << endl
+			     << message->content.result.syserr_desc;
+			break;
 
-	case vysmaw_result::VYSMAW_ERROR_BUFFPOOL:
-		cout << "ended with fatal 'buffpool' error" << endl;
-		break;
+		case vysmaw_result::VYSMAW_ERROR_BUFFPOOL:
+			cout << "ended with fatal 'buffpool' error" << endl;
+			break;
 
-	default:
-		break;
+		default:
+			break;
+		}
 	}
 
 	// performance summary
 	auto span =
-		std::chrono::duration_cast<std::chrono::duration<double> >(t1 - t0);
-	std::cout << std::to_string(num_cb)
+		chrono::duration_cast<chrono::duration<double> >(t1 - t0);
+	cout << to_string(num_cb)
 	          << " callbacks and "
-	          << std::to_string(counters[VYSMAW_MESSAGE_VALID_BUFFER])
+	          << to_string(counters[VYSMAW_MESSAGE_VALID_BUFFER])
 	          << " valid buffers in "
 	          << span.count()
 	          << " seconds ("
 	          << (counters[VYSMAW_MESSAGE_VALID_BUFFER] / span.count())
 	          << " valid buffers per sec)"
-	          << std::endl;
+	          << endl;
 
 	// error summary...only when it's interesting
 	if (num_alerts > 0)
-		std::cout << "num queue alerts  : "
-		          << num_alerts << std::endl;
+		cout << "num queue alerts  : "
+		          << num_alerts << endl;
 	if (num_data_buffers_unavailable > 0)
-		std::cout << "num data buff miss: "
-		          << num_data_buffers_unavailable << std::endl;
+		cout << "num data buff miss: "
+		          << num_data_buffers_unavailable << endl;
 	if (num_signal_buffers_unavailable > 0)
-		std::cout << "num sig buff miss : "
-		          << num_signal_buffers_unavailable << std::endl;
+		cout << "num sig buff miss : "
+		          << num_signal_buffers_unavailable << endl;
 	if (num_buffers_mismatched_version > 0)
-		std::cout << "num vsn mismatch  : "
-		          << num_buffers_mismatched_version << std::endl;
+		cout << "num vsn mismatch  : "
+		          << num_buffers_mismatched_version << endl;
 	if (!signal_receive_status.empty()) {
-		std::cout << "signal rcv errs   :";
+		cout << "signal rcv errs   :";
 		for (auto&& s : signal_receive_status)
-			std::cout << std::endl << " - " << s;
-		std::cout << std::endl;
+			cout << endl << " - " << s;
+		cout << endl;
 	}
 	if (!rdma_read_status.empty()) {
-		std::cout << "rdma read errs    :";
+		cout << "rdma read errs    :";
 		for (auto&& s : rdma_read_status)
-			std::cout << std::endl << " - " << s;
-		std::cout << std::endl;
+			cout << endl << " - " << s;
+		cout << endl;
 	}
 
 	// data buffer summary
-	std::cout << "stations          : "
-	          << elements(stations) << std::endl;
-	std::cout << "baseband indexes  : "
-	          << elements(bb_indexes) << std::endl;
-	std::cout << "baseband ids      : "
-	          << elements(bb_ids) << std::endl;;
-	std::cout << "spw indexes       : "
-	          << elements(spw_indexes) << std::endl;
-	std::cout << "pol prod ids      : "
-	          << elements(pp_ids) << std::endl;
-	std::cout << "num channels      : "
-	          << elements(num_channels) << std::endl;
-	std::cout << "num bins          : "
-	          << elements(num_bins) << std::endl;
-	std::cout << "config ids        :";
+	cout << "stations          : "
+	          << elements(stations) << endl;
+	cout << "baseband indexes  : "
+	          << elements(bb_indexes) << endl;
+	cout << "baseband ids      : "
+	          << elements(bb_ids) << endl;;
+	cout << "spw indexes       : "
+	          << elements(spw_indexes) << endl;
+	cout << "pol prod ids      : "
+	          << elements(pp_ids) << endl;
+	cout << "num channels      : "
+	          << elements(num_channels) << endl;
+	cout << "num bins          : "
+	          << elements(num_bins) << endl;
+	cout << "config ids        :";
 	for (auto&& s : config_ids)
-		std::cout << std::endl << " - " << s;
-	std::cout << std::endl;
+		cout << endl << " - " << s;
+	cout << endl;
 
 	// release the last message and shut down the library if it hasn't already
 	// been done
 	message.reset();
-	if (!interrupted) vysmaw_shutdown(handle);
+	if (active) vysmaw_shutdown(handle);
 
 	return 0;
 }
