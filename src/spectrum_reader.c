@@ -53,6 +53,7 @@ struct spectrum_reader_context_ {
 	GArray *restrict pollfds;
 	GArray *restrict new_pollfds;
 	struct rdma_event_channel *event_channel;
+	GHashTable *mrs;
 	GHashTable *connections;
 	GSequence *fd_connections;
 };
@@ -60,7 +61,6 @@ struct spectrum_reader_context_ {
 struct server_connection_context {
 	struct rdma_cm_id *id;
 	struct ibv_wc *wcs;
-	GHashTable *mrs;
 	uint32_t *rkeys;
 	bool established;
 	bool disconnecting;
@@ -556,15 +556,6 @@ on_server_route_resolved(struct spectrum_reader_context_ *context,
                          struct server_connection_context *conn_ctx,
                          struct vys_error_record **error_record)
 {
-	/* create table for registered memory keys */
-	conn_ctx->mrs =
-		g_hash_table_new_full(
-			g_direct_hash, g_direct_equal,
-			(GDestroyNotify)spectrum_buffer_pool_unref,
-			NULL);
-	if (G_UNLIKELY(conn_ctx->mrs == NULL))
-		return -1;
-
 	/* set up send completion queue event channel */
 	int fd = conn_ctx->id->send_cq_channel->fd;
 	set_nonblocking(fd);
@@ -608,18 +599,18 @@ post_server_reads(struct spectrum_reader_context_ *context,
 		struct rdma_req *req = g_queue_pop_head(conn_ctx->reqs);
 		pool_id_t buff_pool_id;
 		req->message = valid_buffer_message_new(
-			context->shared->handle, conn_ctx->id, conn_ctx->mrs,
+			context->shared->handle, conn_ctx->id, context->mrs,
 			&req->data_info, &buff_pool_id, error_record);
 		if (req->message != NULL) {
 			if (G_UNLIKELY(mr == NULL || buff_pool_id != pool_id)) {
 				pool_id = buff_pool_id;
-				mr = g_hash_table_lookup(conn_ctx->mrs, pool_id);
+				mr = g_hash_table_lookup(context->mrs, pool_id);
 				if (G_UNLIKELY(mr == NULL)) {
 					struct spectrum_buffer_pool *sb_pool =
 						get_buffer_pool(req->message);
 					rc = register_one_spectrum_buffer_pool(
-						sb_pool, conn_ctx->id, conn_ctx->mrs, error_record);
-					mr = g_hash_table_lookup(conn_ctx->mrs, pool_id);
+						sb_pool, conn_ctx->id, context->mrs, error_record);
+					mr = g_hash_table_lookup(context->mrs, pool_id);
 				}
 			}
 			if (G_LIKELY(rc == 0))
@@ -744,14 +735,13 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 	// TODO: exit can hang here!
 	//rdma_destroy_qp(conn_ctx->id);
 
-	if (conn_ctx->mrs != NULL) {
+	if (context->mrs != NULL && g_hash_table_size(context->connections) == 0) {
 		gboolean dereg(gpointer unused, struct ibv_mr *mr,
 		               struct vys_error_record **errs) {
 			dereg_mr(mr, errs);
 			return TRUE;
 		}
-		g_hash_table_foreach_remove(conn_ctx->mrs, (GHRFunc) dereg, &er);
-		g_hash_table_destroy(conn_ctx->mrs);
+		g_hash_table_foreach_remove(context->mrs, (GHRFunc)dereg, &er);
 	}
 
 	int rc = rdma_destroy_id(conn_ctx->id);
@@ -1021,21 +1011,14 @@ on_buffer_pool_idle_timer_event(struct spectrum_reader_context_ *context,
 	uint64_t n;
 	read(pollfd->fd, &n, sizeof(n));
 
-	struct vys_error_record *er = NULL;
-	void remove_pool_from(gpointer unused,
-	                      struct server_connection_context *conn_ctx,
-	                      struct spectrum_buffer_pool *pool) {
-		deregister_one_spectrum_buffer_pool(pool, conn_ctx->mrs, &er);
-	}
-
 	void remove_idle(struct spectrum_buffer_pool *pool,
-	                 struct vys_error_record **unused) {
-		g_hash_table_foreach(
-			context->connections, (GHFunc)remove_pool_from, pool);
+	                 struct vys_error_record **er) {
+		deregister_one_spectrum_buffer_pool(pool, context->mrs, er);
 	}
 
+	struct vys_error_record *er = NULL;
 	context->shared->handle->remove_idle_pools_fn(
-		context->shared->handle, remove_idle, NULL);
+		context->shared->handle, remove_idle, &er);
 
 	*error_record = vys_error_record_concat(er, *error_record);
 	return (er == NULL) ? 0: -1;
@@ -1322,6 +1305,16 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	context.state = STATE_INIT;
 	context.pollfds = g_array_new(false, false, sizeof(struct pollfd));
 	context.new_pollfds = g_array_new(false, false, sizeof(struct pollfd));
+	/* create table for registered memory keys */
+	context.mrs = g_hash_table_new_full(
+		g_direct_hash, g_direct_equal,
+		(GDestroyNotify)spectrum_buffer_pool_unref,
+		NULL);
+	if (G_UNLIKELY(context.mrs == NULL)) {
+		MSG_ERROR(&error_record, -1,
+		          "Failed to allocate buffer pool hash table");
+		goto cleanup_and_return;
+	}
 
 	g_array_set_size(context.pollfds, NUM_FIXED_FDS);
 	for (unsigned i = 0; i < NUM_FIXED_FDS; ++i) {
@@ -1352,7 +1345,7 @@ spectrum_reader(struct spectrum_reader_context *shared)
 	context.state = STATE_RUN;
 	rc = spectrum_reader_loop(&context, &error_record);
 
- cleanup_and_return:
+cleanup_and_return:
 	READY(&shared->handle->gate);
 
 	/* initialization failures may result in not being in STATE_DONE state */
@@ -1376,19 +1369,24 @@ spectrum_reader(struct spectrum_reader_context *shared)
 		MSG_ERROR(&error_record, errno, "Failed to close loop fd: %s",
 		          strerror(errno));
 
-	g_assert(context.end_msg != NULL && context.end_msg->typ == DATA_PATH_END);
-	context.end_msg->error_record =
-		vys_error_record_concat(error_record, context.end_msg->error_record);
+//  g_assert(context.end_msg != NULL && context.end_msg->typ == DATA_PATH_END);
+	if (context.end_msg != NULL) {
+		error_record =
+			vys_error_record_concat(error_record, context.end_msg->error_record);
+		vys_error_record_free(context.end_msg->error_record);
+		context.end_msg->error_record = NULL;
+	}
+
+	if (context.mrs != NULL) g_hash_table_destroy(context.mrs);
 
 	/* create vysmaw_message for end result */
 	struct vysmaw_result result;
-	if (context.end_msg->error_record == NULL) {
+	if (error_record == NULL) {
 		result.code = VYSMAW_NO_ERROR;
 		result.syserr_desc = NULL;
 	} else {
 		result.code = VYSMAW_SYSERR;
-		result.syserr_desc =
-			vys_error_record_to_string(&(context.end_msg->error_record));
+		result.syserr_desc = vys_error_record_to_string(&error_record);
 	}
 	struct vysmaw_message *msg = end_message_new(shared->handle, &result);
 
