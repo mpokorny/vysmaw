@@ -422,7 +422,7 @@ on_signal_message(struct spectrum_reader_context_ *context,
 			++info;
 		}
 		if (conn_ctx->established)
-			post_server_reads(context, conn_ctx, error_record);
+			rc = post_server_reads(context, conn_ctx, error_record);
 	}
 
 	return rc;
@@ -716,10 +716,11 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 	if (conn_ctx->rkeys != NULL)
 		g_free(conn_ctx->rkeys);
 
+	struct vys_error_record *er = NULL;
 	bool removed = g_hash_table_remove(
 		context->connections, &(conn_ctx->id->route.addr.dst_sin));
 	if (G_UNLIKELY(!removed))
-		MSG_ERROR(error_record, -1, "%s",
+		MSG_ERROR(&er, -1, "%s",
 		          "failed to remove server connection record from client");
 
 	g_sequence_remove(
@@ -746,17 +747,16 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 	if (conn_ctx->mrs != NULL) {
 		gboolean dereg(gpointer unused, struct ibv_mr *mr,
 		               struct vys_error_record **errs) {
-			dereg_mr(mr, error_record);
+			dereg_mr(mr, errs);
 			return TRUE;
 		}
-		g_hash_table_foreach_remove(
-			conn_ctx->mrs, (GHRFunc) dereg, error_record);
+		g_hash_table_foreach_remove(conn_ctx->mrs, (GHRFunc) dereg, &er);
 		g_hash_table_destroy(conn_ctx->mrs);
 	}
 
 	int rc = rdma_destroy_id(conn_ctx->id);
 	if (G_UNLIKELY(rc != 0))
-		VERB_ERR(error_record, errno, "rdma_destroy_id");
+		VERB_ERR(&er, errno, "rdma_destroy_id");
 
 	if (conn_ctx->wcs != NULL)
 		g_free(conn_ctx->wcs);
@@ -766,7 +766,8 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
 
 	g_slice_free(struct server_connection_context, conn_ctx);
 
-	return ((*error_record != NULL) ? -1 : 0);
+	*error_record = vys_error_record_concat(er, *error_record);
+	return ((er != NULL) ? -1 : 0);
 }
 
 static int
@@ -808,11 +809,10 @@ on_cm_event(struct spectrum_reader_context_ *context,
 
 	/* ack event */
 	rc = rdma_ack_cm_event(event);
-	if (G_UNLIKELY(rc != 0))
+	if (G_UNLIKELY(rc != 0)) {
 		VERB_ERR(error_record, errno, "rdma_ack_cm_event");
-
-	if (G_UNLIKELY(*error_record != NULL))
-		return -1;
+		return rc;
+	}
 
 	/* dispatch event based on type */
 	switch (ev_type) {
@@ -996,19 +996,20 @@ on_inactivity_timer_event(struct spectrum_reader_context_ *context,
 	double inactive_server_timeout_sec =
 		context->shared->handle->config.inactive_server_timeout_sec;
 
+	struct vys_error_record *er = NULL;
 	void disconnect_inactive(struct sockaddr_in *unused,
 	                         struct server_connection_context *conn_ctx,
 	                         void *unused1) {
 		if (g_timer_elapsed(conn_ctx->last_access, NULL)
 		    >= inactive_server_timeout_sec)
-			begin_server_disconnect(context, conn_ctx, error_record);
+			begin_server_disconnect(context, conn_ctx, &er);
 	}
 
 	g_hash_table_foreach(
 		context->connections, (GHFunc)disconnect_inactive, NULL);
 
-	if (*error_record != NULL) return -1;
-	return 0;
+	*error_record = vys_error_record_concat(er, *error_record);
+	return (er == NULL) ? 0 : -1;
 }
 
 static int
@@ -1020,10 +1021,11 @@ on_buffer_pool_idle_timer_event(struct spectrum_reader_context_ *context,
 	uint64_t n;
 	read(pollfd->fd, &n, sizeof(n));
 
+	struct vys_error_record *er = NULL;
 	void remove_pool_from(gpointer unused,
 	                      struct server_connection_context *conn_ctx,
 	                      struct spectrum_buffer_pool *pool) {
-		deregister_one_spectrum_buffer_pool(pool, conn_ctx->mrs, error_record);
+		deregister_one_spectrum_buffer_pool(pool, conn_ctx->mrs, &er);
 	}
 
 	void remove_idle(struct spectrum_buffer_pool *pool,
@@ -1035,78 +1037,81 @@ on_buffer_pool_idle_timer_event(struct spectrum_reader_context_ *context,
 	context->shared->handle->remove_idle_pools_fn(
 		context->shared->handle, remove_idle, NULL);
 
-	return ((G_LIKELY(*error_record == NULL)) ? 0: -1);
+	*error_record = vys_error_record_concat(er, *error_record);
+	return (er == NULL) ? 0: -1;
 }
 
 static int
 on_poll_events(struct spectrum_reader_context_ *context,
                struct vys_error_record **error_record)
 {
-	/* cm events */
-	int rc1 = 0;
-	struct pollfd *cm_pollfd =
-		&g_array_index(context->pollfds, struct pollfd, CM_EVENT_FD_INDEX);
-	if (cm_pollfd->revents & POLLIN) {
-		rc1 = on_cm_event(context, error_record);
-	} else if (cm_pollfd->revents & (POLLERR | POLLHUP)) {
-		MSG_ERROR(error_record, -1, "%s",
-		          "rdma cm event channel ERR or HUP");
-		rc1 = -1;
-	}
-
 	/* inactivity timer events */
-	int rc2 = 0;
+	int rc1 = 0;
 	struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
 	                                          INACTIVITY_TIMER_FD_INDEX);
 	if (tm_pollfd->revents & POLLIN)
-		rc2 = on_inactivity_timer_event(context, error_record);
+		rc1 = on_inactivity_timer_event(context, error_record);
 
 	/* read request events */
-	int rc3 = 0;
+	int rc2 = 0;
 	struct pollfd *rr_pollfd = &g_array_index(context->pollfds, struct pollfd,
 	                                          READ_REQUEST_QUEUE_FD_INDEX);
 	if (rr_pollfd->revents & POLLIN) {
 		struct data_path_message *msg =
 			vys_async_queue_pop(context->shared->read_request_queue);
 		if (msg != NULL)
-			rc3 = on_data_path_message(context, msg, error_record);
+			rc2 = on_data_path_message(context, msg, error_record);
 	}
 
 	/* buffer pool idle timer events */
-	int rc4 = 0;
+	int rc3 = 0;
 	struct pollfd *bp_pollfd = &g_array_index(context->pollfds, struct pollfd,
 	                                          BUFFER_POOL_IDLE_TIMER_FD_INDEX);
 	if (bp_pollfd->revents & POLLIN)
-		rc4 = on_buffer_pool_idle_timer_event(context, error_record);
+		rc3 = on_buffer_pool_idle_timer_event(context, error_record);
 
 	/* read completion events */
-	int rc5 = 0;
+	int rc4 = 0;
 	for (unsigned i = NUM_FIXED_FDS; i < context->pollfds->len; ++i) {
 		struct pollfd *ev_pollfd =
 			&g_array_index(context->pollfds, struct pollfd, i);
-		int rc6 = 0;
+		int rc5 = 0;
 		if (ev_pollfd->revents & POLLIN) {
-			rc6 = on_read_completion(context, i, error_record);
+			rc5 = on_read_completion(context, i, error_record);
 		} else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
 			MSG_ERROR(error_record, -1, "%s",
 			          "connection event channel ERR or HUP");
-			rc6 = -1;
+			rc5 = -1;
 		}
-		if (G_UNLIKELY(rc5 == 0 && rc6 != 0)) rc5 = rc6;
+		if (G_UNLIKELY(rc4 == 0 && rc5 != 0)) rc4 = rc5;
 	}
+
+	/* cm events */
+	int rc6 = 0;
+	struct pollfd *cm_pollfd =
+		&g_array_index(context->pollfds, struct pollfd, CM_EVENT_FD_INDEX);
+	if (cm_pollfd->revents & POLLIN) {
+		rc6 = on_cm_event(context, error_record);
+	} else if (cm_pollfd->revents & (POLLERR | POLLHUP)) {
+		MSG_ERROR(error_record, -1, "%s",
+		          "rdma cm event channel ERR or HUP");
+		rc6 = -1;
+	}
+
 	if (context->new_pollfds->len > 0) {
 		GArray *tmp = context->pollfds;
 		context->pollfds = context->new_pollfds;
 		context->new_pollfds = tmp;
 		g_array_set_size(context->new_pollfds, 0);
 	}
+
 	int rc;
-	if (G_UNLIKELY(rc1 != 0))  rc = rc1;
-	else if (G_UNLIKELY(rc2 != 0))  rc = rc2;
-	else if (G_UNLIKELY(rc3 != 0))  rc = rc3;
-	else if (G_UNLIKELY(rc4 != 0))  rc = rc4;
-	else if (G_UNLIKELY(rc5 != 0))  rc = rc5;
-	else  rc = 0;
+	if (G_UNLIKELY(rc1 != 0)) rc = rc1;
+	else if (G_UNLIKELY(rc2 != 0)) rc = rc2;
+	else if (G_UNLIKELY(rc3 != 0)) rc = rc3;
+	else if (G_UNLIKELY(rc4 != 0)) rc = rc4;
+	else if (G_UNLIKELY(rc6 != 0)) rc = rc6;
+	else rc = 0;
 	return rc;
 }
 
