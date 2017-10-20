@@ -186,7 +186,6 @@ main(int argc, char *argv[])
 
 	// start vysmaw client
 	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
-	bool active = true;
 	bool timeout = false;
 
 	// take messages until a VYSMAW_MESSAGE_END appears
@@ -196,16 +195,16 @@ main(int argc, char *argv[])
 	while ((!message || message->typ != VYSMAW_MESSAGE_END)) {
 		// start shutdown if requested by user
 		if (sigint_occurred && !interrupted) {
-			if (active) vysmaw_shutdown(handle);
-			active = false;
+			if (handle) vysmaw_shutdown(handle);
+			handle = nullptr;
 			interrupted = true;
 		}
 		if (!timeout) {
 			timeout = t1 - t0 > duration;
 			if (timeout) {
-				if (active) vysmaw_shutdown(handle);
-				active = false;
-				cout << "run time duration exceeded" << endl;
+				if (handle) vysmaw_shutdown(handle);
+				handle = nullptr;
+				cout << "run time limit exceeded" << endl;
 			}
 		}
 		// record message type and accumulate summary information
@@ -346,8 +345,8 @@ main(int argc, char *argv[])
 
 	// release the last message and shut down the library if it hasn't already
 	// been done
-	message.reset();
-	if (active) vysmaw_shutdown(handle);
+	if (message) message.reset();
+	if (handle) vysmaw_shutdown(handle);
 
 	return 0;
 }
