@@ -22,7 +22,7 @@ from libcpp cimport bool
 
 cdef extern from "vysmaw.h":
 
-    int VYS_SPECTRUM_OFFSET = 16
+    int VYS_SPECTRUM_OFFSET = 32
 
     DEF VYS_MULTICAST_ADDRESS_SIZE = 32
 

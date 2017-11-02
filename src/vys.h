@@ -36,7 +36,7 @@ extern "C" {
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_CONFIG_ID_SIZE 60
-#define VYS_SPECTRUM_OFFSET 16
+#define VYS_SPECTRUM_OFFSET 32
 
 struct vys_spectrum_info {
 	uint64_t data_addr;
