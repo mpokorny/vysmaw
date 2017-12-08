@@ -175,3 +175,8 @@ vys_get_ipoib_addr(void)
 	}
 	return result;
 }
+
+extern size_t vys_spectrum_buffer_size(
+    uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride);
+extern size_t vys_spectrum_max_buffer_size(
+    uint16_t num_channels, uint16_t num_bins);
