@@ -37,6 +37,7 @@ extern "C" {
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_CONFIG_ID_SIZE 60
 #define VYS_SPECTRUM_OFFSET 32
+#define VYS_MAX_BIN_STRIDE_FACTOR 2
 
 struct vys_spectrum_info {
 	uint64_t data_addr;
@@ -142,6 +143,18 @@ extern char *vys_error_record_to_string(
 extern void vys_signal_msg_payload_init(
 	struct vys_signal_msg_payload *payload, const char *config_id)
 	__attribute__((nonnull));
+
+static inline size_t vys_spectrum_buffer_size(
+    uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride) {
+    return 2 * ((num_bins - 1) * bin_stride + num_channels)
+        * sizeof(float) + VYS_SPECTRUM_OFFSET;
+}
+
+static inline size_t vys_spectrum_max_buffer_size(
+    uint16_t num_channels, uint16_t num_bins) {
+    return vys_spectrum_buffer_size(
+        num_channels, num_bins, VYS_MAX_BIN_STRIDE_FACTOR * num_channels);
+}
 
 extern char *vys_get_ipoib_addr(void)
 	__attribute__((malloc,nonnull));
