@@ -150,7 +150,13 @@ inline size_t vys_spectrum_buffer_size(
         * sizeof(float) + VYS_SPECTRUM_OFFSET;
 }
 
-inline size_t vys_spectrum_max_buffer_size(
+__attribute__((deprecated)) inline size_t vys_spectrum_max_buffer_size(
+    uint16_t num_channels, uint16_t num_bins) {
+    return vys_spectrum_buffer_size(
+        num_channels, num_bins, VYS_MAX_BIN_STRIDE_FACTOR * num_channels);
+}
+
+inline size_t vys_max_spectrum_buffer_size(
     uint16_t num_channels, uint16_t num_bins) {
     return vys_spectrum_buffer_size(
         num_channels, num_bins, VYS_MAX_BIN_STRIDE_FACTOR * num_channels);
