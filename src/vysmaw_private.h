@@ -383,8 +383,8 @@ extern void mark_signal_receive_queue_underflow(vysmaw_handle handle)
 
 static inline size_t buffer_size(const struct vysmaw_data_info *info)
 {
-	return 2 * ((info->num_bins - 1) * info->bin_stride + info->num_channels)
-		* sizeof(float) + VYS_SPECTRUM_OFFSET;
+    return vys_spectrum_buffer_size(
+        info->num_channels, info->num_bins, info->bin_stride);
 }
 
 extern int dereg_mr(struct ibv_mr *mr, struct vys_error_record **error_record)
