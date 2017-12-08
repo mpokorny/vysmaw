@@ -173,3 +173,8 @@ cdef extern from "vysmaw.h":
         uint64_t timeout) nogil
 
     vysmaw_message *vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
+
+    stddef.size_t vys_spectrum_buffer_size(
+        uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride)
+
+    stddef.size_t vys_spectrum_max_buffer_size(uint16_t num_channels, uint16_t num_bins)
