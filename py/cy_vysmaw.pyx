@@ -363,18 +363,12 @@ cdef class Consumer:
         return
 
 
-    def test_end(self, message):
-        if isinstance(message, EndMessage):
-            self.clear()
-        return
-
     cpdef pop(self):
         assert self._c_consumer is not NULL
         cdef vysmaw_message *msg
         with nogil:
             msg = vysmaw_message_queue_pop(self._c_consumer[0].queue)
         result = Message.wrap(msg)
-        self.test_end(result)
         return result
 
     cpdef timeout_pop(self, uint64_t timeout):
@@ -387,7 +381,6 @@ cdef class Consumer:
             result = Message.wrap(msg)
         else:
             result = None
-        self.test_end(result)
         return result
 
     cpdef try_pop(self):
@@ -398,7 +391,6 @@ cdef class Consumer:
             result = Message.wrap(msg)
         else:
             result = None
-        self.test_end(result)
         return result
 
     cdef vysmaw_message_queue queue(self):
