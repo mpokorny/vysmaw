@@ -25,6 +25,7 @@ from cython cimport view
 import logging
 import inspect
 import traceback
+import warnings
 
 def __getLogger():
     logging.basicConfig()
@@ -362,6 +363,12 @@ cdef class Consumer:
             self._c_consumer[0].filter_data = user_data
         return
 
+    # Deprecated
+    def test_end(self, message):
+        warnings.warn("to be removed, without replacement",
+                      warnings.DeprecationWarning)
+        if isinstance(message, EndMessage):
+            self.clear()
 
     cpdef pop(self):
         assert self._c_consumer is not NULL
