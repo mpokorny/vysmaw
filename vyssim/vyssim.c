@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <locale.h>
+#include <math.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
@@ -88,6 +89,7 @@
 #define DEFAULT_INTEGRATION_TIME_MICROSEC 100000
 #define DEFAULT_SIGNAL_MSG_NUM_SPECTRA 32
 #define DEFAULT_DATA_BUFFER_LENGTH_SEC 5
+#define DEFAULT_RANDOM_DATA TRUE
 
 #define RESOLVE_ADDR_TIMEOUT_MS 1000
 #define LISTEN_BACKLOG 8
@@ -175,6 +177,7 @@ struct vyssim_context {
   struct server_context server_ctx;
   struct dataset_parameters params;
   struct vys_configuration *vconfig;
+  gboolean random_data;
 
   MPI_Comm comm;
 
@@ -293,7 +296,7 @@ static bool parse_options(
   unsigned *num_spectral_windows, unsigned *num_channels,
   unsigned *num_polprods, unsigned *integration_time_microsec,
   unsigned *signal_msg_num_spectra, unsigned *data_buffer_length_sec,
-  char **vys_configuration_path, GError **error)
+  char **vys_configuration_path, gboolean *random_data, GError **error)
   __attribute__((nonnull));
 
 static char num_antennas_lname[] = "num-antennas";
@@ -312,6 +315,8 @@ static char data_buffer_length_sec_lname[] = "data-buffer-duration";
 static char data_buffer_length_sec_sname[] = "f";
 static char vys_configuration_path_lname[] = "vys";
 static char vys_configuration_path_sname[] = "v";
+static char random_data_lname[] = "no-random-data";
+static char random_data_sname[] = "r";
 static char summary[] =
   "Distributed visibility stream simulator.\n"
   "\n"
@@ -376,6 +381,37 @@ pop_msg_from_queue(struct vyssim_context *vyssim)
   return result;
 }
 
+static void
+gen_normal(guint n, gfloat *buff)
+{
+  // smallest positive, normalized double
+  static const double epsilon = G_MINDOUBLE;
+
+  static const double two_pi = 2.0 * G_PI;
+
+  while (n > 0) {
+    gdouble u1, u2;
+    do {
+      u1 = g_random_double();
+      u2 = g_random_double();
+    } while (G_UNLIKELY(u1 <= epsilon));
+
+    const gfloat th = two_pi * u2;
+    const gfloat r = sqrt(-2.0 * log(u1));
+    const gfloat z0 = r * cos(th);
+    const gfloat z1 = r * sin(th);
+
+    if (G_LIKELY(n >= 2)) {
+      *buff++ = z0;
+      *buff++ = z1;
+      n -= 2;
+    } else {
+      *buff++ = z0;
+      --n;
+    }
+  }
+}
+
 static struct vys_signal_msg *
 gen_one_signal_msg(struct vyssim_context *vyssim, guint32 *id_num,
                    guint64 timestamp_us, unsigned ant0, unsigned ant1,
@@ -414,14 +450,17 @@ gen_one_signal_msg(struct vyssim_context *vyssim, guint32 *id_num,
     __sync_lock_test_and_set((guint32 *)buff, *id_num);
     *id_num += 1;
     buff += VYS_SPECTRUM_OFFSET;
-    /* partially fill buffer */
     gfloat *fbuff = (gfloat *)buff;
-    *fbuff++ = (float)info->timestamp;
-    *fbuff++ = (float)vyssim->params.num_channels;
-    *fbuff++ = (float)ant0;
-    *fbuff++ = (float)ant1;
-    *fbuff++ = (float)spectral_window_index;
-    *fbuff++ = (float)polprods_index;
+    if (vyssim->random_data) {
+      gen_normal(2 * payload->num_channels, fbuff);
+    } else {
+      *fbuff++ = (float)info->timestamp;
+      *fbuff++ = (float)vyssim->params.num_channels;
+      *fbuff++ = (float)ant0;
+      *fbuff++ = (float)ant1;
+      *fbuff++ = (float)spectral_window_index;
+      *fbuff++ = (float)polprods_index;
+    }
     server_ctx->data_buffer_index =
       (server_ctx->data_buffer_index + 1) % server_ctx->num_data_buffers;
   }
@@ -1449,6 +1488,7 @@ parse_options(int *argc, char **argv[], unsigned *num_antennas,
               unsigned *signal_msg_num_spectra,
               unsigned *data_buffer_length_sec,
               char **vys_configuration_path,
+              gboolean *random_data,
               GError **error)
 {
   GOptionContext *context = g_option_context_new(NULL);
@@ -1500,6 +1540,7 @@ parse_options(int *argc, char **argv[], unsigned *num_antennas,
       DEFAULT_DATA_BUFFER_LENGTH_SEC, "Data buffer length (seconds)",
       data_buffer_length_sec);
   *vys_configuration_path = NULL;
+  *random_data = DEFAULT_RANDOM_DATA;
   GOptionEntry entries[] = {
     {num_antennas_lname, num_antennas_sname[0], 0,
      G_OPTION_ARG_CALLBACK, parse_param,
@@ -1522,6 +1563,9 @@ parse_options(int *argc, char **argv[], unsigned *num_antennas,
     {data_buffer_length_sec_lname, data_buffer_length_sec_sname[0], 0,
      G_OPTION_ARG_CALLBACK, parse_param,
      data_buffer_length_sec_desc, "N"},
+    {random_data_lname, random_data_sname[0], G_OPTION_FLAG_REVERSE,
+     G_OPTION_ARG_NONE, random_data,
+     "Don't generate random data [default: false]", NULL},
     {vys_configuration_path_lname, vys_configuration_path_sname[0], 0,
      G_OPTION_ARG_FILENAME, vys_configuration_path,
      "vys configuration file path", "PATH"},
@@ -1561,6 +1605,7 @@ main(int argc, char *argv[])
                      &vyssim.mcast_ctx.signal_msg_num_spectra,
                      &vyssim.data_buffer_length_sec,
                      &vys_configuration_path,
+                     &vyssim.random_data,
                      &error)) {
     g_print("option parsing failed: %s\n", error->message);
     g_error_free(error);
