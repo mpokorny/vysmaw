@@ -1,4 +1,4 @@
-//
+/* -*- mode: c; c-basic-offset: 2; indent-tabs-mode: nil; -*- */
 // Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 //
 // This file is part of vysmaw.
@@ -22,14 +22,14 @@
 #include <vysmaw_private.h>
 
 struct signal_receiver_context {
-	vysmaw_handle handle;
+  vysmaw_handle handle;
 
-	GAsyncQueue *signal_msg_queue;
+  GAsyncQueue *signal_msg_queue;
 
-	unsigned signal_msg_num_spectra;
-	struct vys_buffer_pool *signal_msg_buffers;
+  unsigned signal_msg_num_spectra;
+  struct vys_buffer_pool *signal_msg_buffers;
 
-	int loop_fd;
+  int loop_fd;
 };
 
 void *signal_receiver(struct signal_receiver_context *context);

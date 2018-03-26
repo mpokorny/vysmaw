@@ -1,4 +1,4 @@
-//
+/* -*- mode: c; c-basic-offset: 2; indent-tabs-mode: nil; -*- */
 // Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 //
 // This file is part of vysmaw.
@@ -27,13 +27,13 @@
 #define SIGNAL_MULTICAST_ADDRESS_KEY "signal_multicast_address"
 
 extern char *config_vys_base(void)
-	__attribute__((malloc,returns_nonnull));
+  __attribute__((malloc,returns_nonnull));
 extern char *load_config(
-	const char *path, struct vys_error_record **error_record)
-	__attribute__((malloc,returns_nonnull));
+  const char *path, struct vys_error_record **error_record)
+  __attribute__((malloc,returns_nonnull));
 extern void init_from_key_file_vys(
-	GKeyFile *kf, struct vys_configuration *config)
-	__attribute__((nonnull));
+  GKeyFile *kf, struct vys_configuration *config)
+  __attribute__((nonnull));
 
 extern int set_nonblocking(int fd);
 
