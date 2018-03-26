@@ -1,4 +1,4 @@
-//
+/* -*- mode: c; c-basic-offset: 2; indent-tabs-mode: nil; -*- */
 // Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 //
 // This file is part of vysmaw.
@@ -40,9 +40,9 @@ extern "C" {
 #define VYS_MAX_BIN_STRIDE_FACTOR 2
 
 struct vys_spectrum_info {
-	uint64_t data_addr;
-	uint64_t timestamp;
-	uint32_t id_num;
+  uint64_t data_addr;
+  uint64_t timestamp;
+  uint32_t id_num;
 };
 
 /* polarization product definitions
@@ -67,114 +67,114 @@ struct vys_spectrum_info {
 #define VYS_BASEBAND_UNKNOWN 6
 
 struct vys_signal_msg_payload {
-	uint16_t vys_version; /* present as first field in all versions */
-	struct sockaddr_in sockaddr;
-	char config_id[VYS_CONFIG_ID_SIZE];
-	uint16_t num_channels;
-	uint16_t num_bins;
-	uint16_t bin_stride; /* in number of channels */
-	uint8_t stations[2];
-	uint8_t baseband_index;
-	uint8_t baseband_id;
-	uint8_t spectral_window_index;
-	uint8_t polarization_product_id;
-	uint8_t mr_id;
-	uint8_t num_spectra;
-	struct vys_spectrum_info infos[];
+  uint16_t vys_version; /* present as first field in all versions */
+  struct sockaddr_in sockaddr;
+  char config_id[VYS_CONFIG_ID_SIZE];
+  uint16_t num_channels;
+  uint16_t num_bins;
+  uint16_t bin_stride; /* in number of channels */
+  uint8_t stations[2];
+  uint8_t baseband_index;
+  uint8_t baseband_id;
+  uint8_t spectral_window_index;
+  uint8_t polarization_product_id;
+  uint8_t mr_id;
+  uint8_t num_spectra;
+  struct vys_spectrum_info infos[];
 };
 
 struct vys_signal_msg {
-	struct ibv_grh grh;
-	struct vys_signal_msg_payload payload;
+  struct ibv_grh grh;
+  struct vys_signal_msg_payload payload;
 };
 
-#define SIZEOF_VYS_SIGNAL_MSG_PAYLOAD(n)		\
-	(sizeof(struct vys_signal_msg_payload) +	\
-	 ((n) * sizeof(struct vys_spectrum_info)))
+#define SIZEOF_VYS_SIGNAL_MSG_PAYLOAD(n)        \
+  (sizeof(struct vys_signal_msg_payload) +      \
+   ((n) * sizeof(struct vys_spectrum_info)))
 
-#define SIZEOF_VYS_SIGNAL_MSG(n)				\
-	(sizeof(struct vys_signal_msg) +			\
-	 ((n) * sizeof(struct vys_spectrum_info)))
+#define SIZEOF_VYS_SIGNAL_MSG(n)                \
+  (sizeof(struct vys_signal_msg) +              \
+   ((n) * sizeof(struct vys_spectrum_info)))
 
-#define MAX_VYS_SIGNAL_MSG_LENGTH(sz)			\
-	(((sz) > sizeof(struct vys_signal_msg))		\
-	 ? (((sz) - sizeof(struct vys_signal_msg))	\
-	    / sizeof(struct vys_spectrum_info))		\
-	 : 0)
+#define MAX_VYS_SIGNAL_MSG_LENGTH(sz)           \
+  (((sz) > sizeof(struct vys_signal_msg))       \
+   ? (((sz) - sizeof(struct vys_signal_msg))    \
+      / sizeof(struct vys_spectrum_info))       \
+   : 0)
 
-struct vys_error_record {
-	int errnum;
-	char *desc;
-	struct vys_error_record *next;
-};
+  struct vys_error_record {
+    int errnum;
+    char *desc;
+    struct vys_error_record *next;
+  };
 
 struct vys_configuration {
-	struct vys_error_record *error_record;
+  struct vys_error_record *error_record;
 
-	/* multicast address for signal messages; expected format is dotted quad IP
-	 * address string */
-	char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
+  /* multicast address for signal messages; expected format is dotted quad IP
+   * address string */
+  char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
 };
 
 extern struct vys_configuration *vys_configuration_new(
-	const char *path)
-	__attribute__((malloc,returns_nonnull));
+  const char *path)
+  __attribute__((malloc,returns_nonnull));
 extern void vys_configuration_free(struct vys_configuration *config)
-	__attribute__((nonnull));
+  __attribute__((nonnull));
 
 extern struct vys_error_record *vys_error_record_new(
-	struct vys_error_record *tail, int errnum, char *desc)
-	__attribute__((nonnull(3),returns_nonnull,malloc));
+  struct vys_error_record *tail, int errnum, char *desc)
+  __attribute__((nonnull(3),returns_nonnull,malloc));
 extern struct vys_error_record *vys_error_record_desc_dup(
-	struct vys_error_record *tail, int errnum, const char *desc)
-	__attribute__((nonnull(3),returns_nonnull,malloc));
+  struct vys_error_record *tail, int errnum, const char *desc)
+  __attribute__((nonnull(3),returns_nonnull,malloc));
 extern struct vys_error_record *vys_error_record_desc_dup_printf(
-	struct vys_error_record *tail, int errnum, const char *format, ...)
-	__attribute__((nonnull(3),returns_nonnull,malloc,format(printf,3,4)));
+  struct vys_error_record *tail, int errnum, const char *format, ...)
+  __attribute__((nonnull(3),returns_nonnull,malloc,format(printf,3,4)));
 extern void vys_error_record_free(struct vys_error_record *record);
 extern struct vys_error_record *vys_error_record_reverse(
-	struct vys_error_record *record);
+  struct vys_error_record *record);
 extern struct vys_error_record *vys_error_record_concat(
-	struct vys_error_record *first, struct vys_error_record *second);
+  struct vys_error_record *first, struct vys_error_record *second);
 extern char *vys_error_record_to_string(
-	struct vys_error_record **record)
-	__attribute__((malloc,returns_nonnull,nonnull));
+  struct vys_error_record **record)
+  __attribute__((malloc,returns_nonnull,nonnull));
 
 extern void vys_signal_msg_payload_init(
-	struct vys_signal_msg_payload *payload, const char *config_id)
-	__attribute__((nonnull));
+  struct vys_signal_msg_payload *payload, const char *config_id)
+  __attribute__((nonnull));
 
 inline size_t vys_spectrum_buffer_size(
-    uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride) {
-    return 2 * ((num_bins - 1) * bin_stride + num_channels)
-        * sizeof(float) + VYS_SPECTRUM_OFFSET;
+  uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride) {
+  return 2 * ((num_bins - 1) * bin_stride + num_channels)
+    * sizeof(float) + VYS_SPECTRUM_OFFSET;
 }
 
 __attribute__((deprecated)) inline size_t vys_spectrum_max_buffer_size(
-    uint16_t num_channels, uint16_t num_bins) {
-    return vys_spectrum_buffer_size(
-        num_channels, num_bins, VYS_MAX_BIN_STRIDE_FACTOR * num_channels);
+  uint16_t num_channels, uint16_t num_bins) {
+  return vys_spectrum_buffer_size(
+    num_channels, num_bins, VYS_MAX_BIN_STRIDE_FACTOR * num_channels);
 }
 
 inline size_t vys_max_spectrum_buffer_size(
-    uint16_t num_channels, uint16_t num_bins) {
-    return vys_spectrum_buffer_size(
-        num_channels, num_bins, VYS_MAX_BIN_STRIDE_FACTOR * num_channels);
+  uint16_t num_channels, uint16_t num_bins) {
+  return vys_spectrum_buffer_size(
+    num_channels, num_bins, VYS_MAX_BIN_STRIDE_FACTOR * num_channels);
 }
 
 extern char *vys_get_ipoib_addr(void)
-	__attribute__((malloc,nonnull));
+  __attribute__((malloc,nonnull));
 
-#define MSG_ERROR(records, err, format, ...)                            \
-	{ *(records) = \
-			vys_error_record_desc_dup_printf( \
-				*(records), (err), G_STRLOC ": " format, ##__VA_ARGS__); }
+#define MSG_ERROR(records, err, format, ...)                        \
+  { *(records) =                                                    \
+      vys_error_record_desc_dup_printf(                             \
+        *(records), (err), G_STRLOC ": " format, ##__VA_ARGS__); }
 
-#define VERB_ERR(records, err, fn)                                      \
-	MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
+#define VERB_ERR(records, err, fn)                            \
+  MSG_ERROR(records, err, "%s failed: %s", fn, strerror(err))
 
 #ifdef __cplusplus
 }
 #endif
-	
+
 #endif /* VYS_H_ */

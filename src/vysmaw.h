@@ -1,4 +1,4 @@
-//
+/* -*- mode: c; c-basic-offset: 2; indent-tabs-mode: nil; -*- */
 // Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 //
 // This file is part of vysmaw.
@@ -28,163 +28,163 @@ extern "C" {
 #include <vys.h>
 
 struct vysmaw_configuration {
-	struct vys_error_record *error_record;
+  struct vys_error_record *error_record;
 
-	/* multicast address for signal messages from CBE containing available
-	 * spectrum metadata; expected format is dotted quad IP address string */
-	char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
+  /* multicast address for signal messages from CBE containing available
+   * spectrum metadata; expected format is dotted quad IP address string */
+  char signal_multicast_address[VYS_MULTICAST_ADDRESS_SIZE];
 
-	/* Size of memory region for storing spectra retrieved via RDMA from the
-	 * CBE. The memory region is allocated and registered for RDMA by the
-	 * library. Memory registration affects memory management on the host, as it
-	 * pins physical memory in the virtual address space -- too large an
-	 * allocation may be detrimental to the application; too little, and the
-	 * library may be unable to copy the data from the CBE when it becomes
-	 * available, resulting in lost data. Note that one memory region of the
-	 * given size will be allocated for every size of spectrum that is received
-	 * by the client unless 'single_spectrum_buffer_pool' is true. */
-	size_t spectrum_buffer_pool_size;
+  /* Size of memory region for storing spectra retrieved via RDMA from the
+   * CBE. The memory region is allocated and registered for RDMA by the
+   * library. Memory registration affects memory management on the host, as it
+   * pins physical memory in the virtual address space -- too large an
+   * allocation may be detrimental to the application; too little, and the
+   * library may be unable to copy the data from the CBE when it becomes
+   * available, resulting in lost data. Note that one memory region of the
+   * given size will be allocated for every size of spectrum that is received
+   * by the client unless 'single_spectrum_buffer_pool' is true. */
+  size_t spectrum_buffer_pool_size;
 
-	/* Maintain a single pool containing buffers sized to accommodate the
-	 * maximum expected size of a spectrum.
-	 *
-	 * WARNING: setting this parameter to 'false' is not recommended at this
-	 * time, as the implementation is incomplete. */
-	bool single_spectrum_buffer_pool;
+  /* Maintain a single pool containing buffers sized to accommodate the
+   * maximum expected size of a spectrum.
+   *
+   * WARNING: setting this parameter to 'false' is not recommended at this
+   * time, as the implementation is incomplete. */
+  bool single_spectrum_buffer_pool;
 
-	/* The maximum expected size in bytes of a single spectrum that the client
-	 * will receive. Note that all spectra that exceed this size will not be
-	 * sent to the client, regardless of the result of the client filter
-	 * predicate. This value is ignored unless 'single_spectrum_buffer_pool' is
-	 * true. */
-	unsigned max_spectrum_buffer_size;
+  /* The maximum expected size in bytes of a single spectrum that the client
+   * will receive. Note that all spectra that exceed this size will not be
+   * sent to the client, regardless of the result of the client filter
+   * predicate. This value is ignored unless 'single_spectrum_buffer_pool' is
+   * true. */
+  unsigned max_spectrum_buffer_size;
 
-	/* Minimum time that a buffer pool is not accessed before its resources will
-	   be reclaimed, in seconds. */
-	unsigned spectrum_buffer_pool_min_idle_lifetime_sec;
+  /* Minimum time that a buffer pool is not accessed before its resources will
+     be reclaimed, in seconds. */
+  unsigned spectrum_buffer_pool_min_idle_lifetime_sec;
 
-	/* Limits on number of work requests to maintain on the receive queue for
-	 * signal messages. The lower limit should be at least the number of signal
-	 * messages that are expected to arrive in the period that it takes the
-	 * vysmaw signal_receiver loop to service the receive queue. Unfortunately
-	 * the time required for the aforementioned loop to complete is not known a
-	 * priori, so some tuning of the lower limit parameter by vysmaw
-	 * applications is expected. The upper limit is available to control
-	 * resource usage in the InfiniBand HCA (see
-	 * "signal_message_pool_overhead_factor" parameter to control total memory
-	 * assigned to signal messages.) */
-	unsigned signal_message_receive_min_posted;
-	unsigned signal_message_receive_max_posted;
+  /* Limits on number of work requests to maintain on the receive queue for
+   * signal messages. The lower limit should be at least the number of signal
+   * messages that are expected to arrive in the period that it takes the
+   * vysmaw signal_receiver loop to service the receive queue. Unfortunately
+   * the time required for the aforementioned loop to complete is not known a
+   * priori, so some tuning of the lower limit parameter by vysmaw
+   * applications is expected. The upper limit is available to control
+   * resource usage in the InfiniBand HCA (see
+   * "signal_message_pool_overhead_factor" parameter to control total memory
+   * assigned to signal messages.) */
+  unsigned signal_message_receive_min_posted;
+  unsigned signal_message_receive_max_posted;
 
-	/* The number of signal messages in the registered memory region for signal
-	 * messages is determined by the product of the
-	 * "signal_message_receive_min_posted" parameter, the following
-	 * "signal_message_pool_overhead_factor" value, and the size of one signal
-	 * message (which will be close to the MTU size of the InfiniBand
-	 * network). The value of "signal_message_pool_overhead_factor" should be
-	 * based on the number of signal messages that are expected to be in use by
-	 * the vysmaw application through the consumer callbacks while the vysmaw
-	 * library maintains "signal_message_receive_min_posted" work requests for
-	 * receiving signal messages. The value of this parameter need not be an
-	 * integer, but it's minimum value is 1. */
-	double signal_message_pool_overhead_factor;
+  /* The number of signal messages in the registered memory region for signal
+   * messages is determined by the product of the
+   * "signal_message_receive_min_posted" parameter, the following
+   * "signal_message_pool_overhead_factor" value, and the size of one signal
+   * message (which will be close to the MTU size of the InfiniBand
+   * network). The value of "signal_message_pool_overhead_factor" should be
+   * based on the number of signal messages that are expected to be in use by
+   * the vysmaw application through the consumer callbacks while the vysmaw
+   * library maintains "signal_message_receive_min_posted" work requests for
+   * receiving signal messages. The value of this parameter need not be an
+   * integer, but it's minimum value is 1. */
+  double signal_message_pool_overhead_factor;
 
-	/* Number of work requests on the signal message receive queue at which a
-	 * VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW message is created and sent
-	 * to consumer queues. Ideally, this level would be zero, but as there is no
-	 * signal available from a QP for that event, and can only be inferred by
-	 * comparing the number of receive requests vs the number of completion
-	 * queue entries, this level more accurately can be taken to mean that the
-	 * signal receive queue depth is "dangerously low". A vysmaw application is
-	 * in danger of missing signal messages when a receive queue underflow
-	 * occurs. */
-	unsigned signal_message_receive_queue_underflow_level;
+  /* Number of work requests on the signal message receive queue at which a
+   * VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW message is created and sent
+   * to consumer queues. Ideally, this level would be zero, but as there is no
+   * signal available from a QP for that event, and can only be inferred by
+   * comparing the number of receive requests vs the number of completion
+   * queue entries, this level more accurately can be taken to mean that the
+   * signal receive queue depth is "dangerously low". A vysmaw application is
+   * in danger of missing signal messages when a receive queue underflow
+   * occurs. */
+  unsigned signal_message_receive_queue_underflow_level;
 
-	/* vysmaw clients can either connect to a (CBE) sending process (to read
-	 * spectral data) immediately upon receipt of any signal message from that
-	 * process, or wait until a signal message is received from the process
-	 * which matches (one of) the client's spectrum filter(s). When
-	 * 'eager_connect' is 'false', the connection occurs only after a spectrum
-	 * filter match; set value to 'true' for the other behavior */
-	bool eager_connect;
+  /* vysmaw clients can either connect to a (CBE) sending process (to read
+   * spectral data) immediately upon receipt of any signal message from that
+   * process, or wait until a signal message is received from the process
+   * which matches (one of) the client's spectrum filter(s). When
+   * 'eager_connect' is 'false', the connection occurs only after a spectrum
+   * filter match; set value to 'true' for the other behavior */
+  bool eager_connect;
 
-	/* When 'eager_connect' is true, the following sets the minimum time between
-	 * attempts to connect to each sending process eagerly. (A value less than 0.1
-	 * sec is ignored.)
-	 */
-	double eager_connect_idle_sec;
+  /* When 'eager_connect' is true, the following sets the minimum time between
+   * attempts to connect to each sending process eagerly. (A value less than 0.1
+   * sec is ignored.)
+   */
+  double eager_connect_idle_sec;
 
-	/* Control disposition of client read requests (for spectral data) after
-	 * initiating a connection request to a sending process, but prior to that
-	 * connection becoming ready. A value of 'true' maintains read requests that
-	 * arrive in such intervals in a queue for processing until after the
-	 * connection is ready; a value of 'false' will ignore those requests. Note
-	 * that for fast data streams resulting in many client read requests, the
-	 * backlog can accumulate very quickly, and will take some time to
-	 * resolve. */
-	bool preconnect_backlog;
+  /* Control disposition of client read requests (for spectral data) after
+   * initiating a connection request to a sending process, but prior to that
+   * connection becoming ready. A value of 'true' maintains read requests that
+   * arrive in such intervals in a queue for processing until after the
+   * connection is ready; a value of 'false' will ignore those requests. Note
+   * that for fast data streams resulting in many client read requests, the
+   * backlog can accumulate very quickly, and will take some time to
+   * resolve. */
+  bool preconnect_backlog;
 
-	/* Depth of message queue at which an alert message is generated. */
-	unsigned message_queue_alert_depth;
+  /* Depth of message queue at which an alert message is generated. */
+  unsigned message_queue_alert_depth;
 
-	/* Interval at which message queue alerts are repeated, expressed as the
-	 * number of queue messages between alert messages. */
-	unsigned message_queue_alert_interval;
+  /* Interval at which message queue alerts are repeated, expressed as the
+   * number of queue messages between alert messages. */
+  unsigned message_queue_alert_interval;
 
-	/* Maximum number of buffer starvation events to wait before sending a
-	 * VYSMAW_MESSAGE_[DATA|SIGNAL]_BUFFER_STARVATION message.
-	 *
-	 * TODO: distinguish latency for data and signal buffers? */
-	unsigned max_starvation_latency;
+  /* Maximum number of buffer starvation events to wait before sending a
+   * VYSMAW_MESSAGE_[DATA|SIGNAL]_BUFFER_STARVATION message.
+   *
+   * TODO: distinguish latency for data and signal buffers? */
+  unsigned max_starvation_latency;
 
-	/* Maximum number of vys_version mismatch events to wait before sending a
-	 * VYSMAW_MESSAGE_VERSION_MISMATCH message. */
-	unsigned max_version_mismatch_latency;
+  /* Maximum number of vys_version mismatch events to wait before sending a
+   * VYSMAW_MESSAGE_VERSION_MISMATCH message. */
+  unsigned max_version_mismatch_latency;
 
-	/*
-	 * The following are probably best left at their default values, but expert
-	 * users may find them useful.
-	 */
+  /*
+   * The following are probably best left at their default values, but expert
+   * users may find them useful.
+   */
 
-	/* timeout, in milliseconds, to resolve InfiniBand/RDMA route */
-	unsigned resolve_route_timeout_ms;
+  /* timeout, in milliseconds, to resolve InfiniBand/RDMA route */
+  unsigned resolve_route_timeout_ms;
 
-	/* timeout, in milliseconds, to resolve InfiniBand/RDMA address */
-	unsigned resolve_addr_timeout_ms;
+  /* timeout, in milliseconds, to resolve InfiniBand/RDMA address */
+  unsigned resolve_addr_timeout_ms;
 
-	/* timeout, in seconds, to determine data server inactivity */
-	unsigned inactive_server_timeout_sec;
+  /* timeout, in seconds, to determine data server inactivity */
+  unsigned inactive_server_timeout_sec;
 
-	/* interval to check for shutdown, in milliseconds */
-	unsigned shutdown_check_interval_ms;
+  /* interval to check for shutdown, in milliseconds */
+  unsigned shutdown_check_interval_ms;
 
-	/* number of signal receive completions to acknowledge at one time,
-	 * expressed as a part of the minimum number of posted work requests:
-	 * minimum number acknowledged will be signal_message_receive_min_posted /
-	 * signal_receive_min_ack_part */
-	unsigned signal_receive_min_ack_part;
+  /* number of signal receive completions to acknowledge at one time,
+   * expressed as a part of the minimum number of posted work requests:
+   * minimum number acknowledged will be signal_message_receive_min_posted /
+   * signal_receive_min_ack_part */
+  unsigned signal_receive_min_ack_part;
 
-	/* maximum number of posted (uncompleted) rdma read requests (may be
-	 * automatically reduced by hardware and/or system limitations) */
-	unsigned rdma_read_max_posted;
+  /* maximum number of posted (uncompleted) rdma read requests (may be
+   * automatically reduced by hardware and/or system limitations) */
+  unsigned rdma_read_max_posted;
 
-	/* rdma read request completions to acknowledge at a time, expressed as a
-	 * part of the maximum number of posted work requests: minimum number
-	 * acknowledged will be rdma_read_max_posted / rdma_read_min_ack_part */
-	unsigned rdma_read_min_ack_part;
+  /* rdma read request completions to acknowledge at a time, expressed as a
+   * part of the maximum number of posted work requests: minimum number
+   * acknowledged will be rdma_read_max_posted / rdma_read_min_ack_part */
+  unsigned rdma_read_min_ack_part;
 };
 
 struct vysmaw_data_info {
-	char config_id[VYS_CONFIG_ID_SIZE];
-	uint64_t timestamp;
-	uint16_t num_channels;
-	uint16_t num_bins;
-	uint16_t bin_stride; /* in number of channels */
-	uint8_t stations[2];
-	uint8_t baseband_index;
-	uint8_t baseband_id;
-	uint8_t spectral_window_index;
-	uint8_t polarization_product_id;
+  char config_id[VYS_CONFIG_ID_SIZE];
+  uint64_t timestamp;
+  uint16_t num_channels;
+  uint16_t num_bins;
+  uint16_t bin_stride; /* in number of channels */
+  uint8_t stations[2];
+  uint8_t baseband_index;
+  uint8_t baseband_id;
+  uint8_t spectral_window_index;
+  uint8_t polarization_product_id;
 };
 
 /* vysmaw result codes
@@ -198,13 +198,13 @@ struct vysmaw_data_info {
  * errors to mpokorny@nrao.edu.
  */
 struct vysmaw_result {
-	enum {
-		VYSMAW_NO_ERROR,
-		VYSMAW_SYSERR,
-		VYSMAW_ERROR_NON_FATAL_END,
-		VYSMAW_ERROR_BUFFPOOL
-	} code;
-	char *syserr_desc;
+  enum {
+    VYSMAW_NO_ERROR,
+    VYSMAW_SYSERR,
+    VYSMAW_ERROR_NON_FATAL_END,
+    VYSMAW_ERROR_BUFFPOOL
+  } code;
+  char *syserr_desc;
 };
 
 /* Client reference for vysmaw resources
@@ -229,63 +229,63 @@ typedef struct _vysmaw_handle *vysmaw_handle;
  * pulled from a queue, vysmaw_message_unref() is called promptly thereafter.
  */
 enum vysmaw_message_type {
-	VYSMAW_MESSAGE_VALID_BUFFER,
-	VYSMAW_MESSAGE_ID_FAILURE, // failed to verify id number
-	VYSMAW_MESSAGE_QUEUE_ALERT, // message queue level alert
-	VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, // data buffers unavailable
-	VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, // signal buffers unavailable
-	VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
-										   // message
-	VYSMAW_MESSAGE_RDMA_READ_FAILURE, // failure of rdma read of spectral data
-	VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
-	VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, // underflow on signal
-												   // receive queue
-	VYSMAW_MESSAGE_END // vysmaw_handle exited
+  VYSMAW_MESSAGE_VALID_BUFFER,
+  VYSMAW_MESSAGE_ID_FAILURE, // failed to verify id number
+  VYSMAW_MESSAGE_QUEUE_ALERT, // message queue level alert
+  VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, // data buffers unavailable
+  VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, // signal buffers unavailable
+  VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
+  // message
+  VYSMAW_MESSAGE_RDMA_READ_FAILURE, // failure of rdma read of spectral data
+  VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
+  VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, // underflow on signal
+  // receive queue
+  VYSMAW_MESSAGE_END // vysmaw_handle exited
 };
 
 #define RECEIVE_STATUS_LENGTH 64
 
 struct vysmaw_message {
-	int refcount;
-	enum vysmaw_message_type typ;
-	vysmaw_handle handle;
-	union {
-		/* VYSMAW_MESSAGE_VALID_BUFFER */
-		struct {
-			struct vysmaw_data_info info;
-			size_t buffer_size;
-			void *buffer;
-			uint32_t *id_num;
-			float *spectrum;
-		} valid_buffer;
+  int refcount;
+  enum vysmaw_message_type typ;
+  vysmaw_handle handle;
+  union {
+    /* VYSMAW_MESSAGE_VALID_BUFFER */
+    struct {
+      struct vysmaw_data_info info;
+      size_t buffer_size;
+      void *buffer;
+      uint32_t *id_num;
+      float *spectrum;
+    } valid_buffer;
 
-		/* VYSMAW_MESSAGE_ID_FAILURE */
-		struct vysmaw_data_info id_failure;
+    /* VYSMAW_MESSAGE_ID_FAILURE */
+    struct vysmaw_data_info id_failure;
 
-		/* VYSMAW_MESSAGE_QUEUE_ALERT */
-		unsigned queue_depth;
+    /* VYSMAW_MESSAGE_QUEUE_ALERT */
+    unsigned queue_depth;
 
-		/* VYSMAW_MESSAGE_DATA_BUFFER_STARVATION */
-		unsigned num_data_buffers_unavailable;
+    /* VYSMAW_MESSAGE_DATA_BUFFER_STARVATION */
+    unsigned num_data_buffers_unavailable;
 
-		/* VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION */
-		unsigned num_signal_buffers_unavailable;
+    /* VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION */
+    unsigned num_signal_buffers_unavailable;
 
-		/* VYSMAW_MESSAGE_VERSION_MISMATCH */
-		unsigned num_buffers_mismatched_version;
+    /* VYSMAW_MESSAGE_VERSION_MISMATCH */
+    unsigned num_buffers_mismatched_version;
 
-		/* VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE */
-		char signal_receive_status[RECEIVE_STATUS_LENGTH];
+    /* VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE */
+    char signal_receive_status[RECEIVE_STATUS_LENGTH];
 
-		/* VYSMAW_MESSAGE_RDMA_READ_FAILURE */
-		char rdma_read_status[RECEIVE_STATUS_LENGTH];
+    /* VYSMAW_MESSAGE_RDMA_READ_FAILURE */
+    char rdma_read_status[RECEIVE_STATUS_LENGTH];
 
-		/* VYSMAW_MESSAGE_VERSION_MISMATCH */
-		unsigned received_message_version;
+    /* VYSMAW_MESSAGE_VERSION_MISMATCH */
+    unsigned received_message_version;
 
-		/* VYSMAW_MESSAGE_END */
-		struct vysmaw_result result;
-	} content;
+    /* VYSMAW_MESSAGE_END */
+    struct vysmaw_result result;
+  } content;
 };
 
 /* Spectrum filter predicate (callback)
@@ -314,12 +314,12 @@ struct vysmaw_message {
  * client wishes to receive the data corresponding to 'infos[i]'.
  */
 typedef void (*vysmaw_spectrum_filter)(
-	const char *config_id,
-	const uint8_t stations[2], uint8_t baseband_index, 
-	uint8_t baseband_id, uint8_t spectral_window_index,
-	uint8_t polarization_product_id,
-	const struct vys_spectrum_info *infos, uint8_t num_infos,
-	void *user_data, bool *pass_filter);
+  const char *config_id,
+  const uint8_t stations[2], uint8_t baseband_index,
+  uint8_t baseband_id, uint8_t spectral_window_index,
+  uint8_t polarization_product_id,
+  const struct vys_spectrum_info *infos, uint8_t num_infos,
+  void *user_data, bool *pass_filter);
 
 /* Message queue (FIFO) used to pass spectral data back to client.
  *
@@ -336,9 +336,9 @@ typedef struct _vysmaw_message_queue *vysmaw_message_queue;
 /* Single client data stream
  */
 struct vysmaw_consumer {
-	vysmaw_spectrum_filter filter;
-	void *filter_data;
-	vysmaw_message_queue queue;
+  vysmaw_spectrum_filter filter;
+  void *filter_data;
+  vysmaw_message_queue queue;
 };
 
 /* Free resources allocated by, and associated with, a vysmaw_message.
@@ -348,7 +348,7 @@ struct vysmaw_consumer {
  * would otherwise copy spectra from the CBE (resulting in lost data), or result
  * in other resource leaks. */
 extern void vysmaw_message_unref(struct vysmaw_message *message)
-	__attribute__((nonnull));
+  __attribute__((nonnull));
 
 /* Start vysmaw threads.
  *
@@ -369,14 +369,14 @@ extern void vysmaw_message_unref(struct vysmaw_message *message)
 extern vysmaw_handle vysmaw_start_(const struct vysmaw_configuration *config,
                                    unsigned num_consumers,
                                    struct vysmaw_consumer *consumers)
-	__attribute__((nonnull(1,3),malloc,returns_nonnull));
+  __attribute__((nonnull(1,3),malloc,returns_nonnull));
 
 /* Start vysmaw threads; as above, but more friendly for cython usage.
  */
 extern vysmaw_handle vysmaw_start(const struct vysmaw_configuration *config,
                                   unsigned num_consumers,
                                   struct vysmaw_consumer **consumers)
-	__attribute__((nonnull(1,3),malloc,returns_nonnull));
+  __attribute__((nonnull(1,3),malloc,returns_nonnull));
 
 /* Shut down vysmaw threads.
  *
@@ -386,7 +386,7 @@ extern vysmaw_handle vysmaw_start(const struct vysmaw_configuration *config,
  * on all such messages.)
  */
 extern void vysmaw_shutdown(vysmaw_handle handle)
-	__attribute__((nonnull));
+  __attribute__((nonnull));
 
 /* Get a message from a message queue.
  *
@@ -400,8 +400,8 @@ extern void vysmaw_shutdown(vysmaw_handle handle)
  * @see vysmaw_message_unref()
  */
 extern struct vysmaw_message *vysmaw_message_queue_pop(
-	vysmaw_message_queue queue)
-	__attribute__((nonnull,returns_nonnull));
+  vysmaw_message_queue queue)
+  __attribute__((nonnull,returns_nonnull));
 
 /* Get a message from a message queue, blocking for at most 'timeout'
  * microseconds.
@@ -412,8 +412,8 @@ extern struct vysmaw_message *vysmaw_message_queue_pop(
  * @see vysmaw_message_unref()
  */
 extern struct vysmaw_message *vysmaw_message_queue_timeout_pop(
-	vysmaw_message_queue queue, uint64_t timeout)
-	__attribute__((nonnull));
+  vysmaw_message_queue queue, uint64_t timeout)
+  __attribute__((nonnull));
 
 /* Get a message from a message queue if one is available.
  *
@@ -423,8 +423,8 @@ extern struct vysmaw_message *vysmaw_message_queue_timeout_pop(
  * @see vysmaw_message_unref()
  */
 extern struct vysmaw_message *vysmaw_message_queue_try_pop(
-	vysmaw_message_queue queue)
-	__attribute__((nonnull));
+  vysmaw_message_queue queue)
+  __attribute__((nonnull));
 
 /* Get a configuration instance, filled with default values. Optionally provide
  * a path to a vysmaw configuration file.
@@ -432,8 +432,8 @@ extern struct vysmaw_message *vysmaw_message_queue_try_pop(
  * @see vysmaw_configuration_free()
  */
 extern struct vysmaw_configuration *vysmaw_configuration_new(
-	const char *path)
-	__attribute__((malloc,returns_nonnull));
+  const char *path)
+  __attribute__((malloc,returns_nonnull));
 
 /* Free a configuration instance that was allocated using
  * vysmaw_configuration_new().
@@ -441,7 +441,7 @@ extern struct vysmaw_configuration *vysmaw_configuration_new(
  * @see vysmaw_configuration_new()
  */
 extern void vysmaw_configuration_free(struct vysmaw_configuration *config)
-	__attribute__((nonnull));
+  __attribute__((nonnull));
 
 #ifdef __cplusplus
 }

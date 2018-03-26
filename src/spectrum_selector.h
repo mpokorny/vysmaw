@@ -1,4 +1,4 @@
-//
+/* -*- mode: c; c-basic-offset: 2; indent-tabs-mode: nil; -*- */
 // Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 //
 // This file is part of vysmaw.
@@ -23,12 +23,12 @@
 #include <vys_async_queue.h>
 
 struct spectrum_selector_context {
-	vysmaw_handle handle;
+  vysmaw_handle handle;
 
-	GAsyncQueue *signal_msg_queue;
-	struct vys_async_queue *read_request_queue;
-	struct vys_buffer_pool *signal_msg_buffers;
-	unsigned signal_msg_num_spectra;
+  GAsyncQueue *signal_msg_queue;
+  struct vys_async_queue *read_request_queue;
+  struct vys_buffer_pool *signal_msg_buffers;
+  unsigned signal_msg_num_spectra;
 };
 
 void *spectrum_selector(struct spectrum_selector_context *context);
