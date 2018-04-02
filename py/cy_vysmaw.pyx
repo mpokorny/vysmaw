@@ -541,9 +541,9 @@ cdef class ValidBufferMessage(Message):
     @property
     def spectrum(self):
         n = int((self._c_message[0].content.valid_buffer.buffer_size
-                 - VYS_SPECTRUM_OFFSET) / sizeof(float))
-        cdef float[:] result = \
-            <float[:n]>self._c_message[0].content.valid_buffer.spectrum
+                 - VYS_SPECTRUM_OFFSET) / sizeof(float complex))
+        cdef float complex[:] result = \
+            <float complex[:n]>self._c_message[0].content.valid_buffer.spectrum
         return result
 
 cdef class IdFailureMessage(Message):

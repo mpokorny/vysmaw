@@ -117,7 +117,7 @@ cdef extern from "vysmaw.h":
         stddef.size_t buffer_size
         void *buffer
         uint32_t *id_num
-        float *spectrum
+        float complex *spectrum
 
     union message_content:
         message_valid_buffer valid_buffer

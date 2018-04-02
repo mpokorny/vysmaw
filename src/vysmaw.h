@@ -26,6 +26,7 @@ extern "C" {
 #include <stdint.h>
 #include <sys/types.h>
 #include <vys.h>
+#include <complex.h>
 
 struct vysmaw_configuration {
   struct vys_error_record *error_record;
@@ -256,7 +257,7 @@ struct vysmaw_message {
       size_t buffer_size;
       void *buffer;
       uint32_t *id_num;
-      float *spectrum;
+      _Complex float *spectrum;
     } valid_buffer;
 
     /* VYSMAW_MESSAGE_ID_FAILURE */

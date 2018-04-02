@@ -146,8 +146,8 @@ extern void vys_signal_msg_payload_init(
 
 inline size_t vys_spectrum_buffer_size(
   uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride) {
-  return 2 * ((num_bins - 1) * bin_stride + num_channels)
-    * sizeof(float) + VYS_SPECTRUM_OFFSET;
+  return ((num_bins - 1) * bin_stride + num_channels)
+    * sizeof(_Complex float) + VYS_SPECTRUM_OFFSET;
 }
 
 __attribute__((deprecated)) inline size_t vys_spectrum_max_buffer_size(
