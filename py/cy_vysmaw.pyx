@@ -115,7 +115,7 @@ cdef class Configuration:
         return self._c_configuration.spectrum_buffer_pool_size
 
     @spectrum_buffer_pool_size.setter
-    def spectrum_buffer_pool_size(self, unsigned value):
+    def spectrum_buffer_pool_size(self, size_t value):
         self._c_configuration.spectrum_buffer_pool_size = value
 
     @property
