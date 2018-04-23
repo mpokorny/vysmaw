@@ -1,4 +1,4 @@
-# coding: utf-8
+# coding: iso-8859-1
 #
 # Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 #
@@ -160,11 +160,11 @@ cdef extern from "vysmaw.h":
 
     vysmaw_configuration *vysmaw_configuration_new(char *path) nogil
 
-    void vysmaw_configuration_free(vysmaw_configuration *config)
+    void vysmaw_configuration_free(vysmaw_configuration *config) nogil
 
-    void vysmaw_shutdown(vysmaw_handle handle)
+    void vysmaw_shutdown(vysmaw_handle handle) nogil
 
-    void vysmaw_message_unref(vysmaw_message *message)
+    void vysmaw_message_unref(vysmaw_message *message) nogil
 
     vysmaw_message *vysmaw_message_queue_pop(vysmaw_message_queue queue) nogil
 
@@ -172,10 +172,10 @@ cdef extern from "vysmaw.h":
         vysmaw_message_queue queue,
         uint64_t timeout) nogil
 
-    vysmaw_message *vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
+    vysmaw_message *vysmaw_message_queue_try_pop(vysmaw_message_queue queue) nogil
 
     stddef.size_t vys_spectrum_buffer_size(
-        uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride)
+        uint16_t num_channels, uint16_t num_bins, uint16_t bin_stride) nogil
 
     stddef.size_t vys_spectrum_max_buffer_size(uint16_t num_channels, uint16_t num_bins) # deprecated
-    stddef.size_t vys_max_spectrum_buffer_size(uint16_t num_channels, uint16_t num_bins)
+    stddef.size_t vys_max_spectrum_buffer_size(uint16_t num_channels, uint16_t num_bins) nogil
