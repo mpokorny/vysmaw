@@ -23,8 +23,7 @@ if("${isSystemDir}" STREQUAL "-1")
 endif("${isSystemDir}" STREQUAL "-1")
 
 find_package(Cython)
-set(CYTHON_FLAGS "-I.")
-configure_file(vysmaw.pxd vysmaw.pxd COPYONLY)
+set(CYTHON_FLAGS -I../../py -I../../src)
 add_cython_target(cy_vysmaw cy_vysmaw.pyx)
 
 include_directories(${PYTHON_INCLUDE_DIRS} ../src)

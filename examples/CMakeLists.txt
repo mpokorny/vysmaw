@@ -5,8 +5,9 @@ include(UseCython)
 include(FindPythonExtensions)
 
 find_package(Cython)
+set(CYTHON_FLAGS -I../../py -I../../src)
 
-include_directories(../py ../src)
+include_directories(../src)
 link_directories(../py ../src)
 
 add_cython_target(sample1 EMBED_MAIN)
