@@ -296,7 +296,7 @@ handle_unref(vysmaw_handle handle)
 
     struct consumer *c = handle->consumers;
     for (unsigned i = 0; i < handle->num_consumers; ++i) {
-      message_queue_unref(&c->queue);
+      message_queue_unref(c->queue);
       g_array_free(c->pass_filter_array, TRUE);
       ++c;
     }
@@ -473,16 +473,32 @@ post_signal_receive_queue_underflow(vysmaw_handle handle)
 }
 
 vysmaw_message_queue
+message_queue_new()
+{
+  vysmaw_message_queue result = g_new(struct _vysmaw_message_queue, 1);
+  pthread_spin_init(&result->lock, PTHREAD_PROCESS_PRIVATE);
+  result->refcount = 1;
+  result->q = g_queue_new();
+  result->depth = 0;
+  result->num_queued_in_alert = -1;
+  return result;
+}
+
+vysmaw_message_queue
 message_queue_ref(vysmaw_message_queue queue)
 {
-  g_async_queue_ref(queue->q);
+  g_atomic_int_inc(&queue->refcount);
   return queue;
 }
 
 void
 message_queue_unref(vysmaw_message_queue queue)
 {
-  g_async_queue_unref(queue->q);
+  if (g_atomic_int_dec_and_test(&queue->refcount)) {
+    g_queue_free(queue->q);
+    pthread_spin_destroy(&queue->lock);
+    g_free(queue);
+  }
 }
 
 struct spectrum_buffer_pool *
@@ -663,7 +679,7 @@ message_queue_push_one_unlocked(struct vysmaw_message *msg,
    * automatic queue reclamation */
   message_queue_ref(queue);
   queue->depth++;
-  g_async_queue_push_unlocked(queue->q, msg);
+  g_queue_push_head(queue->q, msg);
 }
 
 void
@@ -745,13 +761,11 @@ void
 init_consumer(vysmaw_spectrum_filter filter, void *user_data,
               vysmaw_message_queue *queue, struct consumer *consumer)
 {
-  consumer->queue.q = g_async_queue_new();
-  consumer->queue.depth = 0;
-  consumer->queue.num_queued_in_alert = -1;
+  consumer->queue = message_queue_new();
   consumer->spectrum_filter_fn = filter;
   consumer->pass_filter_array = g_array_new(FALSE, FALSE, sizeof(bool));
   consumer->user_data = user_data;
-  *queue = &consumer->queue;
+  *queue = message_queue_ref(consumer->queue);
 }
 
 void
@@ -955,8 +969,8 @@ message_queues_push(struct vysmaw_message *msg, GSList *consumers)
   MUTEX_LOCK(msg->handle->mtx);
   while (consumers != NULL) {
     struct consumer *c = consumers->data;
-    struct _vysmaw_message_queue *mq = &c->queue;
-    g_async_queue_lock(mq->q);
+    vysmaw_message_queue mq = c->queue;
+    message_queue_lock(mq);
     message_queue_push_one_unlocked(message_ref(msg), mq);
     if (G_UNLIKELY(
           mq->depth >= msg->handle->config.message_queue_alert_depth)) {
@@ -970,7 +984,7 @@ message_queues_push(struct vysmaw_message *msg, GSList *consumers)
     } else {
       mq->num_queued_in_alert = -1;
     }
-    g_async_queue_unlock(mq->q);
+    message_queue_unlock(mq);
     consumers = g_slist_next(consumers);
   }
   MUTEX_UNLOCK(msg->handle->mtx);

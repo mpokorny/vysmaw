@@ -22,10 +22,14 @@
 struct vysmaw_message *
 vysmaw_message_queue_pop(vysmaw_message_queue queue)
 {
-  g_async_queue_lock(queue->q);
-  struct vysmaw_message *result = g_async_queue_pop_unlocked(queue->q);
-  queue->depth--;
-  g_async_queue_unlock(queue->q);
+  struct vysmaw_message *result = NULL;
+  while (result == NULL) {
+    message_queue_lock(queue);
+    result = g_queue_pop_tail(queue->q);
+    if (result != NULL)
+      queue->depth--;
+    message_queue_unlock(queue);
+  }
   message_queue_unref(queue); // release message's queue reference
   return result;
 }
@@ -33,20 +37,18 @@ vysmaw_message_queue_pop(vysmaw_message_queue queue)
 struct vysmaw_message *
 vysmaw_message_queue_timeout_pop(vysmaw_message_queue queue, uint64_t timeout)
 {
+  // timeout in microseconds
   struct vysmaw_message *result;
-  g_async_queue_lock(queue->q);
-#if GLIB_CHECK_VERSION(2,32,0)
-  result = g_async_queue_timeout_pop_unlocked(queue->q, timeout);
-#else
-  GTimeVal end;
-  g_get_current_time(&end);
-  g_time_val_add(&end, timeout);
-  result = g_async_queue_timed_pop_unlocked(queue->q, &end);
-#endif
-  if (result != NULL)
-    queue->depth--;
-  g_assert(queue->depth >= 0);
-  g_async_queue_unlock(queue->q);
+  gint64 end = g_get_monotonic_time() + timeout;
+  result = NULL;
+  while (result == NULL && g_get_monotonic_time() < end) {
+    message_queue_lock(queue);
+    result = g_queue_pop_tail(queue->q);
+    if (result != NULL)
+      queue->depth--;
+    g_assert(queue->depth >= 0);
+    message_queue_unlock(queue);
+  }
   /* release message's queue reference */
   if (result != NULL) message_queue_unref(queue);
   return result;
@@ -55,12 +57,12 @@ vysmaw_message_queue_timeout_pop(vysmaw_message_queue queue, uint64_t timeout)
 struct vysmaw_message *
 vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
 {
-  g_async_queue_lock(queue->q);
-  struct vysmaw_message *result = g_async_queue_try_pop_unlocked(queue->q);
+  message_queue_lock(queue);
+  struct vysmaw_message *result = g_queue_pop_tail(queue->q);
   if (result != NULL)
     queue->depth--;
   g_assert(queue->depth >= 0);
-  g_async_queue_unlock(queue->q);
+  message_queue_unlock(queue);
   /* release message's queue reference */
   if (result != NULL) message_queue_unref(queue);
   return result;

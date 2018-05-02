@@ -27,6 +27,7 @@
 #include <infiniband/verbs.h>
 #include <rdma/rdma_verbs.h>
 #include <poll.h>
+#include <pthread.h>
 
 #if GLIB_CHECK_VERSION(2,32,0)
 # define THREAD_INIT while (false)
@@ -101,7 +102,9 @@
 #define RDMA_READ_MIN_ACK_PART_KEY "rdma_read_min_ack_part"
 
 struct _vysmaw_message_queue {
-  GAsyncQueue *q;
+  int refcount;
+  pthread_spinlock_t lock;
+  GQueue *q;
   unsigned depth;
   unsigned num_queued_in_alert;
 };
@@ -127,7 +130,7 @@ typedef void (*remove_idle_pools)(
   struct vys_error_record **error_record);
 
 struct consumer {
-  struct _vysmaw_message_queue queue;
+  struct _vysmaw_message_queue *queue;
   vysmaw_spectrum_filter spectrum_filter_fn;
   GArray *pass_filter_array;
   void *user_data;
@@ -214,6 +217,8 @@ extern vysmaw_handle handle_ref(vysmaw_handle handle)
   __attribute__((nonnull,returns_nonnull));
 extern void handle_unref(vysmaw_handle handle)
   __attribute__((nonnull));
+extern vysmaw_message_queue message_queue_new()
+  __attribute((returns_nonnull));
 extern vysmaw_message_queue message_queue_ref(vysmaw_message_queue queue)
   __attribute__((nonnull,returns_nonnull));
 extern void message_queue_unref(vysmaw_message_queue queue)
@@ -370,6 +375,16 @@ extern struct vysmaw_message *valid_buffer_message_new(
   const struct vysmaw_data_info *info, pool_id_t *pool_id,
   struct vys_error_record **error_record)
   __attribute__((nonnull,malloc));
+
+static inline void message_queue_lock(vysmaw_message_queue queue)
+{
+  pthread_spin_lock(&queue->lock);
+}
+
+static inline void message_queue_unlock(vysmaw_message_queue queue)
+{
+  pthread_spin_unlock(&queue->lock);
+}
 
 extern void message_queues_push_unlocked(
   struct vysmaw_message *msg, GSList *consumers)
