@@ -900,10 +900,10 @@ valid_buffer_message_new(
   void *buffer = handle->new_valid_buffer_fn(
     handle, id, mrs, buff_size, pool_id, error_record);
   struct vysmaw_message *result = NULL;
-  if (buffer != NULL) {
-    if (handle->num_data_buffers_unavailable > 0)
+  if (G_LIKELY(buffer != NULL)) {
+    if (G_UNLIKELY(handle->num_data_buffers_unavailable > 0))
       post_data_buffer_starvation(handle);
-    if (handle->num_buffers_mismatched_version > 0)
+    if (G_UNLIKELY(handle->num_buffers_mismatched_version > 0))
       post_version_mismatch(handle);
     result = message_new(handle, VYSMAW_MESSAGE_VALID_BUFFER);
     result->content.valid_buffer.info = *info;
@@ -923,21 +923,22 @@ message_queues_push(struct vysmaw_message *msg, GSList *consumers)
   MUTEX_LOCK(msg->handle->mtx);
   while (consumers != NULL) {
     struct consumer *c = consumers->data;
-    g_async_queue_lock(c->queue.q);
-    message_queue_push_one_unlocked(message_ref(msg), &c->queue);
-    if (G_UNLIKELY(c->queue.depth
-                   >= msg->handle->config.message_queue_alert_depth)) {
-      c->queue.num_queued_in_alert =
-        (c->queue.num_queued_in_alert + 1)
+    struct _vysmaw_message_queue *mq = &c->queue;
+    g_async_queue_lock(mq->q);
+    message_queue_push_one_unlocked(message_ref(msg), mq);
+    if (G_UNLIKELY(
+          mq->depth >= msg->handle->config.message_queue_alert_depth)) {
+      mq->num_queued_in_alert =
+        (mq->num_queued_in_alert + 1)
         % msg->handle->config.message_queue_alert_interval;
-      if (G_UNLIKELY(c->queue.num_queued_in_alert == 0))
+      if (G_UNLIKELY(mq->num_queued_in_alert == 0))
         message_queue_push_one_unlocked(
-          queue_alert_message_new(msg->handle, c->queue.depth),
-          &c->queue);
+          queue_alert_message_new(msg->handle, mq->depth),
+          mq);
     } else {
-      c->queue.num_queued_in_alert = -1;
+      mq->num_queued_in_alert = -1;
     }
-    g_async_queue_unlock(c->queue.q);
+    g_async_queue_unlock(mq->q);
     consumers = g_slist_next(consumers);
   }
   MUTEX_UNLOCK(msg->handle->mtx);
