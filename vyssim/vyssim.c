@@ -385,21 +385,25 @@ static void
 gen_normal(guint n, gfloat *buff)
 {
   // smallest positive, normalized double
-  static const double epsilon = G_MINDOUBLE;
+  static const gfloat epsilon = G_MINFLOAT;
 
-  static const double two_pi = 2.0 * G_PI;
+  static const gfloat two_pi = 2.0 * G_PI;
+
+  static GRand* rand = NULL;
+  if (G_UNLIKELY(rand == NULL))
+    rand = g_rand_new();
 
   while (n > 0) {
-    gdouble u1, u2;
+    gfloat u1, u2;
     do {
-      u1 = g_random_double();
-      u2 = g_random_double();
+      u1 = g_rand_double(rand);
+      u2 = g_rand_double(rand);
     } while (G_UNLIKELY(u1 <= epsilon));
 
     const gfloat th = two_pi * u2;
-    const gfloat r = sqrt(-2.0 * log(u1));
-    const gfloat z0 = r * cos(th);
-    const gfloat z1 = r * sin(th);
+    const gfloat r = sqrtf(-2.0 * log(u1));
+    const gfloat z0 = r * cosf(th);
+    const gfloat z1 = r * sinf(th);
 
     if (G_LIKELY(n >= 2)) {
       *buff++ = z0;
