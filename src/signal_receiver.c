@@ -931,9 +931,13 @@ signal_receiver_loop(struct signal_receiver_context_ *context,
   }
   while (!quit) {
     rc = 0;
-    int nfd = poll(context->pollfds, NUM_FDS, -1);
+    int timeout = ((context->num_posted_wr > 0) ? -1 : 1);
+    int nfd = poll(context->pollfds, NUM_FDS, timeout);
     if (G_LIKELY(nfd > 0)) {
       rc = on_poll_events(context, error_record);
+    } else if (nfd == 0) {
+      create_new_wrs(context);
+      rc = post_wrs(context, error_record);
     } else if (G_UNLIKELY(nfd < 0) && errno != EINTR) {
       MSG_ERROR(error_record, errno, "Failed to poll fds: %s",
                 strerror(errno));
