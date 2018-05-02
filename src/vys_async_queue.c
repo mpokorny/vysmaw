@@ -95,14 +95,13 @@ void
 vys_async_queue_push(struct vys_async_queue *queue, void *item)
 {
   g_async_queue_push(queue->q, item);
-  unsigned u;
+  char u;
   size_t w = 0;
-  ssize_t n;
   do {
     errno = 0;
-    n = write(PUSH_FD(queue), (void *)&u + w, sizeof(u) - w);
+    ssize_t n = write(PUSH_FD(queue), (void *)&u + w, sizeof(u) - w);
     if (G_LIKELY(n >= 0)) w += n;
-  } while (errno == EINTR || w != sizeof(u));
+  } while (w != sizeof(u) && (errno == 0 || errno == EINTR || errno == EAGAIN));
   if (G_UNLIKELY(errno != 0))
     g_error("vys_async_queue_push write failed: %s", strerror(errno));
 }
@@ -110,14 +109,13 @@ vys_async_queue_push(struct vys_async_queue *queue, void *item)
 void *
 vys_async_queue_pop(struct vys_async_queue *queue)
 {
-  unsigned u;
+  char u;
   size_t r = 0;
-  ssize_t n;
   do {
     errno = 0;
-    n = read(POP_FD(queue), (void *)&u + r, sizeof(u) - r);
+    ssize_t n = read(POP_FD(queue), (void *)&u + r, sizeof(u) - r);
     if (G_LIKELY(n >= 0)) r += n;
-  } while (errno == EINTR || r != sizeof(u));
+  } while (r != sizeof(u) && (errno == 0 || errno == EINTR || errno == EAGAIN));
   if (G_UNLIKELY(errno != 0))
     g_error("vys_async_queue_pop read failed: %s", strerror(errno));
   return g_async_queue_pop(queue->q);
@@ -128,18 +126,17 @@ vys_async_queue_try_pop(struct vys_async_queue *queue)
 {
   void *result = g_async_queue_try_pop(queue->q);
   if (result != NULL) {
-    unsigned u;
+    char u;
     size_t r = 0;
-    ssize_t n;
     /* The following read could block for a short period of time if the
      * element was popped from the queue before the writer has written the
      * notification element to the pipe, but normally no blocking should
      * occur. */
     do {
       errno = 0;
-      n = read(POP_FD(queue), (void *)&u + r, sizeof(u) - r);
+      ssize_t n = read(POP_FD(queue), (void *)&u + r, sizeof(u) - r);
       if (G_LIKELY(n >= 0)) r += n;
-    } while (errno == EINTR || r != sizeof(u));
+    } while (r != sizeof(u) && (errno == 0 || errno == EINTR || errno == EAGAIN));
     if (G_UNLIKELY(errno != 0))
       g_error("vys_async_queue_pop read failed: %s", strerror(errno));
   }
