@@ -23,6 +23,7 @@ extern "C" {
 #endif
 
 #include <stdio.h>
+#include <pthread.h>
 #include <glib.h>
 
 struct vys_buffer_stack;
@@ -32,6 +33,7 @@ struct vys_buffer_stack {
 };
 
 struct vys_buffer_pool {
+  pthread_spinlock_t lock;
   size_t buffer_size;
   size_t pool_size;
   void *pool;
@@ -51,27 +53,21 @@ static inline void
 vys_buffer_pool_push(struct vys_buffer_pool *buffer_pool, void *data_p)
 {
   struct vys_buffer_stack *new_root = data_p;
-  struct vys_buffer_stack *root;
-  do {
-    root = g_atomic_pointer_get(&buffer_pool->root);
-    new_root->next = root;
-  } while (!g_atomic_pointer_compare_and_exchange(
-             (void **)&buffer_pool->root, root, new_root));
+  pthread_spin_lock(&buffer_pool->lock);
+  new_root->next = buffer_pool->root;
+  buffer_pool->root = new_root;
+  pthread_spin_unlock(&buffer_pool->lock);
 }
 
 static inline void *
 vys_buffer_pool_pop(struct vys_buffer_pool *buffer_pool)
 {
-  struct vys_buffer_stack *root;
-  struct vys_buffer_stack *new_root;
-  do {
-    root = g_atomic_pointer_get(&buffer_pool->root);
-    new_root = (root ? root->next : root);
-  } while (root != NULL &&
-           !g_atomic_pointer_compare_and_exchange(
-             (void **)&buffer_pool->root, root, new_root));
-  if (root) root->next = NULL;
-  return root;
+  pthread_spin_lock(&buffer_pool->lock);
+  struct vys_buffer_stack *result = buffer_pool->root;
+  if (result != NULL)
+    buffer_pool->root = result->next;
+  pthread_spin_unlock(&buffer_pool->lock);
+  return result;
 }
 
 static inline void *
