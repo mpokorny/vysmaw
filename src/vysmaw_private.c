@@ -515,10 +515,8 @@ spectrum_buffer_pool_unref(struct spectrum_buffer_pool *buffer_pool)
 void *
 spectrum_buffer_pool_pop(struct spectrum_buffer_pool *buffer_pool)
 {
-  spectrum_buffer_pool_ref(buffer_pool);
   buffer_pool->inactive = FALSE;
   void *result = vys_buffer_pool_pop(buffer_pool->pool);
-  if (result == NULL) spectrum_buffer_pool_unref(buffer_pool);
   return result;
 }
 
@@ -527,7 +525,6 @@ spectrum_buffer_pool_push(struct spectrum_buffer_pool *buffer_pool,
                           void *buffer)
 {
   vys_buffer_pool_push(buffer_pool->pool, buffer);
-  spectrum_buffer_pool_unref(buffer_pool);
 }
 
 int
