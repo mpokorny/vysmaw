@@ -855,6 +855,41 @@ init_service_threads(vysmaw_handle handle)
   return 0;
 }
 
+void
+start_service_in_order(vysmaw_handle handle, service_type_t service)
+{
+  struct service_gate *gate = &handle->gate;
+
+  MUTEX_LOCK(gate->mtx);
+  switch (service) {
+  case SIGNAL_RECEIVER:
+    gate->signal_receiver_ready = true;
+    break;
+  case SPECTRUM_SELECTOR:
+    gate->spectrum_selector_ready = true;
+    break;
+  case SPECTRUM_READER:
+    gate->spectrum_reader_ready = true;
+    break;
+  }
+  COND_BCAST(gate->cond);
+  MUTEX_UNLOCK(gate->mtx);
+
+#define WAIT_FOR_FLAG(flag)                     \
+  G_STMT_START {                                \
+    MUTEX_LOCK(gate->mtx);                      \
+    while (!gate->flag)                         \
+      COND_WAIT(gate->cond, gate->mtx);         \
+    MUTEX_UNLOCK(gate->mtx);                    \
+  } G_STMT_END
+
+  WAIT_FOR_FLAG(spectrum_reader_ready);
+  WAIT_FOR_FLAG(spectrum_selector_ready);
+  WAIT_FOR_FLAG(signal_receiver_ready);
+
+#undef WAIT_FOR_FLAG
+}
+
 struct vysmaw_message *
 message_ref(struct vysmaw_message *message)
 {

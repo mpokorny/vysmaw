@@ -25,13 +25,6 @@
 #include <rdma/rdma_cma.h>
 #include <spectrum_reader.h>
 
-#define READY(gate) G_STMT_START {              \
-    MUTEX_LOCK((gate)->mtx);                    \
-    (gate)->spectrum_reader_ready = true;       \
-    COND_SIGNAL((gate)->cond);                  \
-    MUTEX_UNLOCK((gate)->mtx);                  \
-  } G_STMT_END
-
 #define CM_EVENT_FD_INDEX 0
 #define INACTIVITY_TIMER_FD_INDEX 1
 #define READ_REQUEST_QUEUE_FD_INDEX 2
@@ -1340,13 +1333,12 @@ spectrum_reader(struct spectrum_reader_context *shared)
   if (rc != 0)
     goto cleanup_and_return;
 
-  READY(&shared->handle->gate);
-
   context.state = STATE_RUN;
+  start_service_in_order(shared->handle, SPECTRUM_READER);
   rc = spectrum_reader_loop(&context, &error_record);
 
 cleanup_and_return:
-  READY(&shared->handle->gate);
+  start_service_in_order(shared->handle, SPECTRUM_READER);
 
   /* initialization failures may result in not being in STATE_DONE state */
   if (context.state != STATE_DONE) {

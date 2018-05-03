@@ -952,13 +952,6 @@ signal_receiver_loop(struct signal_receiver_context_ *context,
   return result;
 }
 
-#define READY(gate) G_STMT_START {              \
-    MUTEX_LOCK((gate)->mtx);                    \
-    (gate)->signal_receiver_ready = true;       \
-    COND_SIGNAL((gate)->cond);                  \
-    MUTEX_UNLOCK((gate)->mtx);                  \
-  } G_STMT_END
-
 void *
 signal_receiver(struct signal_receiver_context *shared)
 {
@@ -989,13 +982,12 @@ signal_receiver(struct signal_receiver_context *shared)
   if (rc < 0)
     goto signal_data_path_end_and_return;
 
-  READY(&shared->handle->gate);
-
   context.state = STATE_RUN;
+  start_service_in_order(shared->handle, SIGNAL_RECEIVER);
   rc = signal_receiver_loop(&context, &error_record);
 
 signal_data_path_end_and_return:
-  READY(&shared->handle->gate);
+  start_service_in_order(shared->handle, SIGNAL_RECEIVER);
 
   /* initialization failures may result in not being in STATE_DONE state */
   if (context.state != STATE_DONE) {

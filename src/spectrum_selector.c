@@ -63,14 +63,6 @@ select_spectra(struct data_path_message *msg, struct consumer *consumers,
   return result;
 }
 
-
-#define READY(gate) G_STMT_START {              \
-    MUTEX_LOCK((gate)->mtx);                    \
-    (gate)->spectrum_selector_ready = true;     \
-    COND_SIGNAL((gate)->cond);                  \
-    MUTEX_UNLOCK((gate)->mtx);                  \
-  } G_STMT_END
-
 void *
 spectrum_selector(struct spectrum_selector_context *context)
 {
@@ -82,13 +74,14 @@ spectrum_selector(struct spectrum_selector_context *context)
                           (GDestroyNotify)free_sockaddr_key,
                           (GDestroyNotify)g_timer_destroy);
 
-  READY(&context->handle->gate);
-
   double eager_connect_idle_sec =
     MIN(context->handle->config.eager_connect_idle_sec,
         MIN_EAGER_CONNECT_IDLE_SEC);
   bool quitting = false;
   bool quit = false;
+
+  start_service_in_order(context->handle, SPECTRUM_SELECTOR);
+
   while (!quit) {
     struct data_path_message *msg =
       g_async_queue_pop(context->signal_msg_queue);

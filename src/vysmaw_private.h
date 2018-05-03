@@ -46,6 +46,7 @@
 # define COND_CLEAR(c) g_cond_clear(&(c))
 # define COND_WAIT(c, m) g_cond_wait(&(c), &(m))
 # define COND_SIGNAL(c) g_cond_signal(&(c))
+# define COND_BCAST(c) g_cond_broadcast(&(c))
 #else
 # define THREAD_INIT g_thread_init(NULL)
 # define THREAD_NEW(name, func, data) ({                                \
@@ -71,6 +72,7 @@
 # define COND_CLEAR(c) { if ((c) != NULL) g_cond_free(c); }
 # define COND_WAIT(c, m) { if ((c) != NULL && (m) != NULL) g_cond_wait(c, m); }
 # define COND_SIGNAL(c) { if ((c) != NULL) g_cond_signal(c); }
+# define COND_BCAST(c) { if ((c) != NULL) g_cond_broadcast(c); }
 #endif
 
 /* vysmaw configuration file keys */
@@ -138,6 +140,12 @@ struct service_gate {
   Mutex mtx;
   Cond cond;
 };
+
+typedef enum {
+  SIGNAL_RECEIVER,
+  SPECTRUM_SELECTOR,
+  SPECTRUM_READER
+} service_type_t;
 
 struct _vysmaw_handle {
   int refcount;
@@ -305,6 +313,8 @@ extern void init_spectrum_reader(
   int loop_fd)
   __attribute__((nonnull));
 extern int init_service_threads(vysmaw_handle handle)
+  __attribute__((nonnull));
+extern void start_service_in_order(vysmaw_handle handle, service_type_t service)
   __attribute__((nonnull));
 extern struct vysmaw_message *message_new(
   vysmaw_handle handle, enum vysmaw_message_type typ)
