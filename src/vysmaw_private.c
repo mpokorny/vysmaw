@@ -649,7 +649,7 @@ new_valid_buffer_from_pool(
 {
   void *buffer = NULL;
   struct spectrum_buffer_pool *pool = handle->pool;
-  if (buffer_size <= pool->pool->buffer_size)
+  if (G_LIKELY(buffer_size <= pool->pool->buffer_size))
     buffer = spectrum_buffer_pool_pop(pool);
   *pool_id = pool;
   return buffer;
