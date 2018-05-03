@@ -230,7 +230,7 @@ typedef struct _vysmaw_handle *vysmaw_handle;
  * pulled from a queue, vysmaw_message_unref() is called promptly thereafter.
  */
 enum vysmaw_message_type {
-  VYSMAW_MESSAGE_VALID_BUFFER,
+  VYSMAW_MESSAGE_BUFFERS,
   VYSMAW_MESSAGE_ID_FAILURE, // failed to verify id number
   VYSMAW_MESSAGE_QUEUE_ALERT, // message queue level alert
   VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, // data buffers unavailable
@@ -251,7 +251,7 @@ struct vysmaw_message {
   enum vysmaw_message_type typ;
   vysmaw_handle handle;
   union {
-    /* VYSMAW_MESSAGE_VALID_BUFFER */
+    /* VYSMAW_MESSAGE_BUFFERS */
     struct {
       struct vysmaw_data_info info;
       size_t buffer_size;

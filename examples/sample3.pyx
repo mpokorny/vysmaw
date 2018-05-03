@@ -85,7 +85,7 @@ cdef vysmaw_message_queue queue = c0.queue()
 cdef vysmaw_message *msg = NULL
 while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
     if msg is not NULL:
-        if msg[0].typ is VYSMAW_MESSAGE_VALID_BUFFER:
+        if msg[0].typ is VYSMAW_MESSAGE_BUFFERS:
             num_spectra += 1
         # for other message types, which should be received much less frequently
         # than the "valid buffer" messages, it could be convenient at this stage

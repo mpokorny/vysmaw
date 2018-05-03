@@ -710,7 +710,7 @@ get_buffer_pool(struct vysmaw_message *message)
 struct spectrum_buffer_pool *
 lookup_buffer_pool_from_collection(struct vysmaw_message *message)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
+  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
   return spectrum_buffer_pool_collection_lookup(
     message->handle->pool_collection, &message->handle->pool_collection_mtx,
     buffer_size(&message->content.valid_buffer.info));
@@ -719,7 +719,7 @@ lookup_buffer_pool_from_collection(struct vysmaw_message *message)
 struct spectrum_buffer_pool *
 lookup_buffer_pool_from_pool(struct vysmaw_message *message)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
+  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
   size_t buff_size = buffer_size(&message->content.valid_buffer.info);
   return ((buff_size <= message->handle->pool->pool->buffer_size)
           ? message->handle->pool
@@ -951,7 +951,7 @@ valid_buffer_message_new(
       post_data_buffer_starvation(handle);
     if (G_UNLIKELY(handle->num_buffers_mismatched_version > 0))
       post_version_mismatch(handle);
-    result = message_new(handle, VYSMAW_MESSAGE_VALID_BUFFER);
+    result = message_new(handle, VYSMAW_MESSAGE_BUFFERS);
     result->content.valid_buffer.info = *info;
     result->content.valid_buffer.buffer_size = buff_size;
     result->content.valid_buffer.buffer = buffer;
@@ -1036,7 +1036,7 @@ mark_signal_receive_queue_underflow(vysmaw_handle handle)
 static void
 vysmaw_message_release_buffer(struct vysmaw_message *message)
 {
-  if (message->typ == VYSMAW_MESSAGE_VALID_BUFFER
+  if (message->typ == VYSMAW_MESSAGE_BUFFERS
       && message->content.valid_buffer.buffer != NULL) {
     struct spectrum_buffer_pool *pool =
       message->handle->lookup_buffer_pool_fn(message);
@@ -1139,7 +1139,7 @@ free_sockaddr_key(struct sockaddr_in *sockaddr)
 void
 convert_valid_to_id_failure(struct vysmaw_message *message)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
+  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
   vysmaw_message_release_buffer(message);
   message->typ = VYSMAW_MESSAGE_ID_FAILURE;
   if (offsetof(struct vysmaw_message, content.id_failure) !=
@@ -1153,7 +1153,7 @@ void
 convert_valid_to_rdma_read_failure(struct vysmaw_message *message,
                                    enum ibv_wc_status status)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
+  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
   vysmaw_message_release_buffer(message);
   message->typ = VYSMAW_MESSAGE_RDMA_READ_FAILURE;
   g_strlcpy(message->content.rdma_read_status, ibv_wc_status_str(status),

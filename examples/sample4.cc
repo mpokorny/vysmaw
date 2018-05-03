@@ -84,7 +84,7 @@ void
 show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
 	const unordered_map<enum vysmaw_message_type,string> names = {
-		{VYSMAW_MESSAGE_VALID_BUFFER, "valid-buffer"},
+		{VYSMAW_MESSAGE_BUFFERS, "valid-buffer"},
 		{VYSMAW_MESSAGE_ID_FAILURE, "id-failure"},
 		{VYSMAW_MESSAGE_QUEUE_ALERT, "message-queue-alert"},
 		{VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
@@ -101,7 +101,7 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 		max_name_len = max(n.second.length(), max_name_len);
 
 	const enum vysmaw_message_type msg_types[] = {
-		VYSMAW_MESSAGE_VALID_BUFFER,
+		VYSMAW_MESSAGE_BUFFERS,
 		VYSMAW_MESSAGE_ID_FAILURE,
 		VYSMAW_MESSAGE_QUEUE_ALERT,
 		VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
@@ -212,7 +212,7 @@ main(int argc, char *argv[])
 		if (message) {
 			++counters[message->typ];
 			switch (message->typ) {
-			case VYSMAW_MESSAGE_VALID_BUFFER: {
+			case VYSMAW_MESSAGE_BUFFERS: {
 				struct vysmaw_data_info *info =
 					&message->content.valid_buffer.info;
 				stations.insert(info->stations[0]);
@@ -289,11 +289,11 @@ main(int argc, char *argv[])
 		chrono::duration_cast<chrono::duration<double> >(t1 - t0);
 	cout << to_string(num_cb)
 	          << " callbacks and "
-	          << to_string(counters[VYSMAW_MESSAGE_VALID_BUFFER])
+	          << to_string(counters[VYSMAW_MESSAGE_BUFFERS])
 	          << " valid buffers in "
 	          << span.count()
 	          << " seconds ("
-	          << (counters[VYSMAW_MESSAGE_VALID_BUFFER] / span.count())
+	          << (counters[VYSMAW_MESSAGE_BUFFERS] / span.count())
 	          << " valid buffers per sec)"
 	          << endl;
 

@@ -497,7 +497,7 @@ cdef class Message:
     cdef Message wrap(vysmaw_message *msg):
         assert msg is not NULL
         msgtype = msg[0].typ
-        if msgtype == VYSMAW_MESSAGE_VALID_BUFFER:
+        if msgtype == VYSMAW_MESSAGE_BUFFERS:
             result = ValidBufferMessage()
         elif msgtype == VYSMAW_MESSAGE_ID_FAILURE:
             result = IdFailureMessage()

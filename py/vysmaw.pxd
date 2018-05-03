@@ -101,7 +101,7 @@ cdef extern from "vysmaw.h":
     ctypedef _vysmaw_handle * vysmaw_handle
 
     enum vysmaw_message_type:
-        VYSMAW_MESSAGE_VALID_BUFFER,
+        VYSMAW_MESSAGE_BUFFERS,
         VYSMAW_MESSAGE_ID_FAILURE,
         VYSMAW_MESSAGE_QUEUE_ALERT,
         VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
