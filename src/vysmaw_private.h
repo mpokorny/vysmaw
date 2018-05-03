@@ -333,9 +333,6 @@ extern struct vysmaw_message *signal_buffer_starvation_message_new(
 extern struct vysmaw_message *signal_receive_queue_underflow_message_new(
   vysmaw_handle handle)
   __attribute__((nonnull,returns_nonnull));
-extern struct vysmaw_message *id_failure_message_new(
-  vysmaw_handle handle, const struct vysmaw_data_info *info)
-  __attribute__((malloc,returns_nonnull,nonnull));
 extern struct vysmaw_message *end_message_new(
   vysmaw_handle handle, struct vysmaw_result *rc)
   __attribute__((malloc,returns_nonnull,nonnull));

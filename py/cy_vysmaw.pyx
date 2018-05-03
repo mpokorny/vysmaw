@@ -499,8 +499,6 @@ cdef class Message:
         msgtype = msg[0].typ
         if msgtype == VYSMAW_MESSAGE_BUFFERS:
             result = ValidBufferMessage()
-        elif msgtype == VYSMAW_MESSAGE_ID_FAILURE:
-            result = IdFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_QUEUE_ALERT:
             result = QueueAlertMessage()
         elif msgtype == VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
@@ -545,15 +543,6 @@ cdef class ValidBufferMessage(Message):
         cdef float complex[:] result = \
             <float complex[:n]>self._c_message[0].content.valid_buffer.spectrum
         return result
-
-cdef class IdFailureMessage(Message):
-
-    def __str__(self):
-        return show_properties(self, IdFailureMessage)
-
-    @property
-    def info(self):
-        return DataInfo.wrap(&(self._c_message[0].content.id_failure))
 
 cdef class QueueAlertMessage(Message):
 

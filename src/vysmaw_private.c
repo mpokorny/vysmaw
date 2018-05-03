@@ -367,16 +367,6 @@ signal_buffer_starvation_message_new(vysmaw_handle handle,
 }
 
 struct vysmaw_message *
-id_failure_message_new(vysmaw_handle handle,
-                       const struct vysmaw_data_info *info)
-{
-  struct vysmaw_message *result =
-    message_new(handle, VYSMAW_MESSAGE_ID_FAILURE);
-  result->content.id_failure = *info;
-  return result;
-}
-
-struct vysmaw_message *
 end_message_new(vysmaw_handle handle, struct vysmaw_result *rc)
 {
   /* this steals ownership of rc->syserr_desc */
@@ -953,6 +943,7 @@ valid_buffer_message_new(
       post_version_mismatch(handle);
     result = message_new(handle, VYSMAW_MESSAGE_BUFFERS);
     result->content.valid_buffer.info = *info;
+    result->content.valid_buffer.id_failure = false;
     result->content.valid_buffer.buffer_size = buff_size;
     result->content.valid_buffer.buffer = buffer;
     result->content.valid_buffer.id_num = buffer;
@@ -1141,12 +1132,7 @@ convert_valid_to_id_failure(struct vysmaw_message *message)
 {
   g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
   vysmaw_message_release_buffer(message);
-  message->typ = VYSMAW_MESSAGE_ID_FAILURE;
-  if (offsetof(struct vysmaw_message, content.id_failure) !=
-      offsetof(struct vysmaw_message, content.valid_buffer.info))
-    memmove(&message->content.id_failure,
-            &message->content.valid_buffer.info,
-            sizeof(message->content.valid_buffer.info));
+  message->content.valid_buffer.id_failure = true;
 }
 
 void
