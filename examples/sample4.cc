@@ -1,4 +1,4 @@
-//
+/* -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*- */
 // Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 //
 // This file is part of vysmaw.
@@ -84,12 +84,11 @@ void
 show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
 	const unordered_map<enum vysmaw_message_type,string> names = {
-		{VYSMAW_MESSAGE_BUFFERS, "valid-buffer"},
+		{VYSMAW_MESSAGE_BUFFERS, "buffers"},
 		{VYSMAW_MESSAGE_QUEUE_ALERT, "message-queue-alert"},
 		{VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
 		{VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
 		{VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
-		{VYSMAW_MESSAGE_RDMA_READ_FAILURE, "rdma-read-failure"},
 		{VYSMAW_MESSAGE_VERSION_MISMATCH, "vys-version-mismatch"},
 		{VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, "signal-receive-queue-underflow"},
 		{VYSMAW_MESSAGE_END, "end"},
@@ -106,7 +105,6 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 		VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
 		VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
 		VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
-		VYSMAW_MESSAGE_RDMA_READ_FAILURE,
 		VYSMAW_MESSAGE_VERSION_MISMATCH,
 		VYSMAW_MESSAGE_END
 	};
@@ -161,6 +159,7 @@ main(int argc, char *argv[])
 	// this application keeps count of the message types it receives
 	array<unsigned,VYSMAW_MESSAGE_END + 1> counters;
 	counters.fill(0);
+  unsigned num_valid_buffers = 0;
 
 	// catch SIGINT to exit gracefully
 	bool interrupted = false;
@@ -178,6 +177,7 @@ main(int argc, char *argv[])
 	unsigned num_data_buffers_unavailable = 0;
 	unsigned num_signal_buffers_unavailable = 0;
 	unsigned num_buffers_mismatched_version = 0;
+  unsigned num_id_failures = 0;
 	set<string> signal_receive_status;
 	set<string> rdma_read_status;
 	set<string> config_ids;
@@ -212,7 +212,7 @@ main(int argc, char *argv[])
 			switch (message->typ) {
 			case VYSMAW_MESSAGE_BUFFERS: {
 				struct vysmaw_data_info *info =
-					&message->content.valid_buffer.info;
+					&message->content.buffers.info;
 				stations.insert(info->stations[0]);
 				stations.insert(info->stations[1]);
 				bb_indexes.insert(info->baseband_index);
@@ -222,6 +222,14 @@ main(int argc, char *argv[])
 				num_channels.insert(info->num_channels);
 				num_bins.insert(info->num_bins);
 				config_ids.insert(info->config_id);
+        for (unsigned i = 0; i < message->content.buffers.num_buffers; ++i) {
+          if (message->data[i].id_failure)
+            ++num_id_failures;
+          else if (message->data[i].rdma_read_status[0] != '\0')
+            rdma_read_status.insert(message->data[i].rdma_read_status);
+          else
+            ++num_valid_buffers;
+        }
 				break;
 			}
 			case VYSMAW_MESSAGE_QUEUE_ALERT:
@@ -242,9 +250,6 @@ main(int argc, char *argv[])
 			case VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
 				signal_receive_status.insert(
 					message->content.signal_receive_status);
-				break;
-			case VYSMAW_MESSAGE_RDMA_READ_FAILURE:
-				rdma_read_status.insert(message->content.rdma_read_status);
 				break;
 			default:
 				break;
@@ -287,11 +292,11 @@ main(int argc, char *argv[])
 		chrono::duration_cast<chrono::duration<double> >(t1 - t0);
 	cout << to_string(num_cb)
 	          << " callbacks and "
-	          << to_string(counters[VYSMAW_MESSAGE_BUFFERS])
+	          << to_string(num_valid_buffers)
 	          << " valid buffers in "
 	          << span.count()
 	          << " seconds ("
-	          << (counters[VYSMAW_MESSAGE_BUFFERS] / span.count())
+	          << (num_valid_buffers / span.count())
 	          << " valid buffers per sec)"
 	          << endl;
 

@@ -160,6 +160,8 @@ struct _vysmaw_handle {
   struct vysmaw_result *result; // for passing errors from main thread to
   // workers
 
+  unsigned signal_msg_num_spectra;
+
   /* buffer pool (collection) */
   new_valid_buffer new_valid_buffer_fn;
   lookup_buffer_pool lookup_buffer_pool_fn;
@@ -303,19 +305,16 @@ extern void init_consumer(
   __attribute__((nonnull));
 extern void init_signal_receiver(
   vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-  struct vys_buffer_pool **signal_msg_buffers,
-  unsigned *signal_msg_num_spectra, int loop_fd)
+  struct vys_buffer_pool **signal_msg_buffers, int loop_fd)
   __attribute__((nonnull));
 extern void init_spectrum_selector(
   vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
   struct vys_async_queue *read_request_queue,
-  struct vys_buffer_pool *signal_msg_buffers,
-  unsigned signal_msg_num_spectra)
+  struct vys_buffer_pool *signal_msg_buffers)
   __attribute__((nonnull));
 extern void init_spectrum_reader(
   vysmaw_handle handle, struct vys_async_queue *read_request_queue,
-  struct vys_buffer_pool *signal_msg_buffers, unsigned signal_msg_num_spectra,
-  int loop_fd)
+  struct vys_buffer_pool *signal_msg_buffers, int loop_fd)
   __attribute__((nonnull));
 extern int init_service_threads(vysmaw_handle handle)
   __attribute__((nonnull));
@@ -358,6 +357,11 @@ extern void post_version_mismatch(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void post_signal_receive_queue_underflow(vysmaw_handle handle)
   __attribute__((nonnull));
+extern void message_release_all_buffers(struct vysmaw_message *message)
+  __attribute__((nonnull));
+extern void message_release_buffer(
+  struct vysmaw_message *message, unsigned buffer_index)
+  __attribute__((nonnull));
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
   __attribute__((nonnull));
 
@@ -367,9 +371,9 @@ extern struct data_path_message *data_path_message_new(
 extern void data_path_message_free(struct data_path_message *msg)
   __attribute__((nonnull));
 
-extern struct vysmaw_message *valid_buffer_message_new(
+extern struct vysmaw_message *buffers_message_new(
   vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
-  const struct vysmaw_data_info *info, pool_id_t *pool_id,
+  const struct vysmaw_data_info *info, unsigned num_buffers, pool_id_t *pool_id,
   struct vys_error_record **error_record)
   __attribute__((nonnull,malloc));
 
@@ -433,10 +437,12 @@ extern void free_sockaddr_key(
   struct sockaddr_in *sockaddr)
   __attribute__((nonnull));
 
-extern void convert_valid_to_id_failure(struct vysmaw_message *message)
+extern void convert_valid_to_id_failure(
+  struct vysmaw_message *message, unsigned buffer_index)
   __attribute__((nonnull));
 extern void convert_valid_to_rdma_read_failure(
-  struct vysmaw_message *message, enum ibv_wc_status status)
+  struct vysmaw_message *message, unsigned buffer_index,
+  enum ibv_wc_status status)
   __attribute__((nonnull));
 
 #endif /* VYSMAW_PRIVATE_H_ */

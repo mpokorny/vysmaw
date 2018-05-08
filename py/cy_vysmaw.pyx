@@ -498,7 +498,7 @@ cdef class Message:
         assert msg is not NULL
         msgtype = msg[0].typ
         if msgtype == VYSMAW_MESSAGE_BUFFERS:
-            result = ValidBufferMessage()
+            result = BuffersMessage()
         elif msgtype == VYSMAW_MESSAGE_QUEUE_ALERT:
             result = QueueAlertMessage()
         elif msgtype == VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
@@ -507,8 +507,6 @@ cdef class Message:
             result = SignalBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
             result = SignalReceiveFailureMessage()
-        elif msgtype == VYSMAW_MESSAGE_RDMA_READ_FAILURE:
-            result = RDMAReceiveFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_VERSION_MISMATCH:
             result = VersionMismatchMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW:
@@ -524,25 +522,28 @@ cdef class Message:
             self._c_message = NULL
         return
 
-cdef class ValidBufferMessage(Message):
+cdef class BuffersMessage(Message):
 
     def __cinit__(self):
         return
 
     def __str__(self):
-        return show_properties(self, ValidBufferMessage)
+        return show_properties(self, BuffersMessage)
 
     @property
     def info(self):
-        return DataInfo.wrap(&(self._c_message[0].content.valid_buffer.info))
+        return DataInfo.wrap(&(self._c_message[0].content.buffers.info))
 
     @property
-    def spectrum(self):
-        n = int((self._c_message[0].content.valid_buffer.buffer_size
-                 - VYS_SPECTRUM_OFFSET) / sizeof(float complex))
-        cdef float complex[:] result = \
-            <float complex[:n]>self._c_message[0].content.valid_buffer.spectrum
-        return result
+    def buffer_size(self):
+        return self._c_message[0].content.buffers.buffer_size
+
+    @property
+    def num_buffers(self):
+        return self._c_message[0].content.buffers.num_buffers
+
+    def buffer(self, unsigned n):
+        return Buffer.get(self._c_message, n)
 
 cdef class QueueAlertMessage(Message):
 
@@ -581,15 +582,6 @@ cdef class SignalReceiveFailureMessage(Message):
         return (<bytes>self._c_message[0].content.signal_receive_status).\
             decode('ascii')
 
-cdef class RDMAReceiveFailureMessage(Message):
-
-    def __str__(self):
-        return show_properties(self, RDMAReceiveFailureMessage)
-
-    @property
-    def rdma_read_status(self):
-        return (<bytes>self._c_message[0].content.rdma_read_status)
-
 cdef class VersionMismatchMessage(Message):
 
     def __str__(self):
@@ -613,3 +605,36 @@ cdef class EndMessage(Message):
     def result(self):
         cdef vysmaw_result *vr = &self._c_message[0].content.result
         return Result.wrap(vr)
+
+cdef class Buffer:
+
+    def __cinit__(self):
+        return
+
+    @staticmethod
+    cdef Buffer get(vysmaw_message* msg, unsigned n):
+        result = Buffer()
+        result._c_buffer = &msg[0].data[n]
+        result._length = \
+            (msg[0].content.buffers.buffer_size - VYS_SPECTRUM_OFFSET) \
+            // sizeof(float complex)
+        return result
+
+
+    @property
+    def timestamp(self):
+        return self._c_buffer[0].timestamp
+
+    @property
+    def id_failure(self):
+        return self._c_buffer[0].id_failure
+
+    @property
+    def rdma_read_status(self):
+        return (<bytes>self._c_buffer[0].rdma_read_status).decode('ascii')
+
+    @property
+    def spectrum(self):
+        cdef float complex[:] result = \
+                <float complex[:self._length]>self._c_buffer[0].spectrum
+        return result

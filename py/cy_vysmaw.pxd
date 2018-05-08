@@ -67,3 +67,11 @@ cdef class Message:
     cdef Message wrap(vysmaw_message *msg)
 
     cpdef unref(self)
+
+cdef class Buffer:
+    cdef vysmaw_buffer *_c_buffer
+
+    cdef unsigned _length
+
+    @staticmethod
+    cdef Buffer get(vysmaw_message *msg, unsigned n)

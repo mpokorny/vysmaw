@@ -102,31 +102,34 @@ cdef extern from "vysmaw.h":
 
     enum vysmaw_message_type:
         VYSMAW_MESSAGE_BUFFERS,
-        VYSMAW_MESSAGE_ID_FAILURE,
         VYSMAW_MESSAGE_QUEUE_ALERT,
         VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
-        VYSMAW_MESSAGE_RDMA_READ_FAILURE,
         VYSMAW_MESSAGE_VERSION_MISMATCH,
         VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
         VYSMAW_MESSAGE_END
 
-    struct message_valid_buffer:
-        vysmaw_data_info info
-        stddef.size_t buffer_size
+    struct vysmaw_buffer:
+        uint64_t timestamp
+        bool id_failure
+        char rdma_read_status[VYSMAW_RECEIVE_STATUS_LENGTH]
         void *buffer
         uint32_t *id_num
         float complex *spectrum
 
+    struct message_buffers:
+        vysmaw_data_info info
+        stddef.size_t buffer_size
+        unsigned num_buffers
+
     union message_content:
-        message_valid_buffer valid_buffer
-        vysmaw_data_info id_failure
+        message_buffers buffers
         unsigned queue_depth
         unsigned num_data_buffers_unavailable
         unsigned num_signal_buffers_unavailable
+        unsigned num_buffers_mismatched_version
         char signal_receive_status[VYSMAW_RECEIVE_STATUS_LENGTH]
-        char rdma_read_status[VYSMAW_RECEIVE_STATUS_LENGTH]
         unsigned received_message_version
         vysmaw_result result
 
@@ -135,6 +138,7 @@ cdef extern from "vysmaw.h":
         vysmaw_message_type typ
         vysmaw_handle handle
         message_content content
+        vysmaw_buffer data[0]
 
     struct _vysmaw_message_queue:
         pass

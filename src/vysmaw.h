@@ -236,7 +236,6 @@ enum vysmaw_message_type {
   VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, // signal buffers unavailable
   VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
   // message
-  VYSMAW_MESSAGE_RDMA_READ_FAILURE, // failure of rdma read of spectral data
   VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
   VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, // underflow on signal
   // receive queue
@@ -245,6 +244,15 @@ enum vysmaw_message_type {
 
 #define RECEIVE_STATUS_LENGTH 64
 
+struct vysmaw_buffer {
+  uint64_t timestamp;
+  bool id_failure;
+  char rdma_read_status[RECEIVE_STATUS_LENGTH];
+  void *buffer;
+  uint32_t *id_num;
+  _Complex float *spectrum;
+};
+
 struct vysmaw_message {
   int refcount;
   enum vysmaw_message_type typ;
@@ -252,13 +260,13 @@ struct vysmaw_message {
   union {
     /* VYSMAW_MESSAGE_BUFFERS */
     struct {
+      // don't use timestamp in the following info field, use timestamp fields
+      // in array of struct vysmaw_buffer elements at the end of the
+      // vysmaw_message
       struct vysmaw_data_info info;
-      bool id_failure;
       size_t buffer_size;
-      void *buffer;
-      uint32_t *id_num;
-      _Complex float *spectrum;
-    } valid_buffer;
+      unsigned num_buffers;
+    } buffers;
 
     /* VYSMAW_MESSAGE_QUEUE_ALERT */
     unsigned queue_depth;
@@ -275,16 +283,18 @@ struct vysmaw_message {
     /* VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE */
     char signal_receive_status[RECEIVE_STATUS_LENGTH];
 
-    /* VYSMAW_MESSAGE_RDMA_READ_FAILURE */
-    char rdma_read_status[RECEIVE_STATUS_LENGTH];
-
     /* VYSMAW_MESSAGE_VERSION_MISMATCH */
     unsigned received_message_version;
 
     /* VYSMAW_MESSAGE_END */
     struct vysmaw_result result;
   } content;
+
+  struct vysmaw_buffer data[];
 };
+
+#define SIZEOF_VYSMAW_MESSAGE(n) (\
+    sizeof(struct vysmaw_message) + (n) * sizeof(struct vysmaw_buffer))
 
 /* Spectrum filter predicate (callback)
  *

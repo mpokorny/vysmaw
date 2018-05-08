@@ -60,6 +60,8 @@ struct server_connection_context {
   unsigned max_posted_wr;
   unsigned num_posted_wr;
   GQueue *reqs;
+  struct vysmaw_message *prev_message;
+  pool_id_t prev_pool;
 
   unsigned num_not_ack;
   unsigned min_ack;
@@ -79,15 +81,20 @@ struct rdma_req {
   enum rdma_req_result result;
   enum ibv_wc_status status;
   GSList *consumers;
+  unsigned buffer_index;
+  unsigned *num_buffers_pending;
   struct vysmaw_message *message;
 };
 
 static struct rdma_req *new_rdma_req(
   GSList *consumers, const struct server_connection_context *conn_ctx,
   const struct vys_signal_msg_payload *payload,
+  unsigned spectrum_index, unsigned *num_buffers_pending,
   const struct vys_spectrum_info *spectrum_info)
   __attribute__((nonnull,returns_nonnull,malloc));
-static void free_rdma_req(struct rdma_req *req)
+static void cancel_rdma_req(struct rdma_req *req)
+  __attribute__((nonnull));
+static void fulfill_rdma_req(struct rdma_req *req)
   __attribute__((nonnull));
 static int compare_server_comp_ch_fd(
   const struct server_connection_context *c1,
@@ -234,9 +241,12 @@ static struct rdma_req *
 new_rdma_req(GSList *consumers,
              const struct server_connection_context *conn_ctx,
              const struct vys_signal_msg_payload *payload,
+             unsigned spectrum_index, unsigned *num_buffers_pending,
              const struct vys_spectrum_info *spectrum_info)
 {
   struct rdma_req *result = g_slice_new(struct rdma_req);
+  result->buffer_index = spectrum_index;
+  result->num_buffers_pending = num_buffers_pending;
   memcpy(&(result->spectrum_info), spectrum_info,
          sizeof(result->spectrum_info));
   result->mr_id = payload->mr_id;
@@ -253,12 +263,26 @@ new_rdma_req(GSList *consumers,
   memcpy(result->data_info.config_id, payload->config_id,
          sizeof(result->data_info.config_id));
   result->consumers = consumers;
+  result->message = NULL;
   return result;
 }
 
 static void
-free_rdma_req(struct rdma_req *req)
+cancel_rdma_req(struct rdma_req *req)
 {
+  if (req->message != NULL)
+    message_release_buffer(req->message, req->buffer_index);
+  fulfill_rdma_req(req);
+}
+
+static void
+fulfill_rdma_req(struct rdma_req *req)
+{
+  if (--(*req->num_buffers_pending) == 0) {
+    if (G_LIKELY(req->message != NULL))
+      message_queues_push(req->message, req->consumers);
+    g_slice_free(unsigned, req->num_buffers_pending);
+  }
   g_slist_free(req->consumers);
   g_slice_free(struct rdma_req, req);
 }
@@ -354,14 +378,9 @@ initiate_server_connection(struct spectrum_reader_context_ *context,
   struct server_connection_context *result =
     g_slice_new0(struct server_connection_context);
   result->id = id;
-  result->rkeys = NULL;
-  result->established = false;
-  result->disconnecting = false;
   result->reqs = g_queue_new();
   set_max_posted_wr(context, result,
                     context->shared->handle->config.rdma_read_max_posted);
-  result->num_posted_wr = 0;
-  result->num_not_ack = 0;
   /* set wcs field later, after final value of max_posted_wr has been
    * computed */
   result->last_access = g_timer_new();
@@ -405,17 +424,29 @@ on_signal_message(struct spectrum_reader_context_ *context,
 
   if (G_LIKELY(rc == 0 && reqs != NULL)) {
     struct vys_spectrum_info *info = payload->infos;
-    for (unsigned i = payload->num_spectra; i > 0; --i) {
-      if (*consumers != NULL)
-        g_queue_push_tail(
-          reqs,
-          new_rdma_req(*consumers, conn_ctx, payload, info));
-      *consumers = NULL; //rdma req takes list
-      ++consumers;
-      ++info;
+    unsigned num_rdma = 0;
+    GSList **c = consumers;
+    for (unsigned i = 0; i < payload->num_spectra; ++i) {
+      if (*c != NULL)
+        ++num_rdma;
+      ++c;
     }
-    if (conn_ctx->established)
-      rc = post_server_reads(context, conn_ctx, error_record);
+    if (num_rdma > 0) {
+      unsigned *num_buffers_pending = g_slice_new(unsigned);
+      *num_buffers_pending = num_rdma;
+      for (unsigned i = 0, j = 0; i < payload->num_spectra; ++i) {
+        if (*consumers != NULL)
+          g_queue_push_tail(
+            reqs,
+            new_rdma_req(
+              *consumers, conn_ctx, payload, j++, num_buffers_pending, info));
+        *consumers = NULL; //rdma req takes list
+        ++consumers;
+        ++info;
+      }
+      if (conn_ctx->established)
+        rc = post_server_reads(context, conn_ctx, error_record);
+    }
   }
 
   return rc;
@@ -468,7 +499,7 @@ on_data_path_message(struct spectrum_reader_context_ *context,
         if (handle->num_buffers_mismatched_version > 0)
           post_version_mismatch(handle);
         context->end_msg = data_path_message_new(
-          context->shared->signal_msg_num_spectra);
+          context->shared->handle->signal_msg_num_spectra);
         context->end_msg->typ = DATA_PATH_END;
         rc = loopback_msg(context, context->end_msg, error_record);
         context->quit_msg = NULL;
@@ -587,36 +618,48 @@ post_server_reads(struct spectrum_reader_context_ *context,
   struct ibv_mr *mr = NULL;
   pool_id_t pool_id = NULL;
   while (rc == 0
-         && conn_ctx->num_posted_wr < conn_ctx->max_posted_wr
-         && !g_queue_is_empty(conn_ctx->reqs)) {
+         && !g_queue_is_empty(conn_ctx->reqs)
+         && conn_ctx->num_posted_wr < conn_ctx->max_posted_wr) {
     struct rdma_req *req = g_queue_pop_head(conn_ctx->reqs);
-    pool_id_t buff_pool_id;
-    req->message = valid_buffer_message_new(
-      context->shared->handle, conn_ctx->id, context->mrs,
-      &req->data_info, &buff_pool_id, error_record);
-    if (req->message != NULL) {
-      if (G_UNLIKELY(mr == NULL || buff_pool_id != pool_id)) {
-        pool_id = buff_pool_id;
+    if (req->buffer_index == 0) {
+      req->message = buffers_message_new(
+        context->shared->handle, conn_ctx->id, context->mrs,
+        &req->data_info, *req->num_buffers_pending,
+        &conn_ctx->prev_pool, error_record);
+      conn_ctx->prev_message = req->message;
+    } else {
+      g_assert(conn_ctx->prev_message != NULL);
+      req->message = conn_ctx->prev_message;
+    }
+    struct vysmaw_buffer *vb = &req->message->data[req->buffer_index];
+    vb->timestamp = req->data_info.timestamp;
+    if (G_UNLIKELY((mr == NULL || conn_ctx->prev_pool != pool_id)
+                   && vb->buffer != NULL)) {
+      pool_id = conn_ctx->prev_pool;
+      mr = g_hash_table_lookup(context->mrs, pool_id);
+      if (G_UNLIKELY(mr == NULL)) {
+        struct spectrum_buffer_pool *sb_pool =
+          get_buffer_pool(req->message);
+        rc = register_one_spectrum_buffer_pool(
+          sb_pool, conn_ctx->id, context->mrs, error_record);
         mr = g_hash_table_lookup(context->mrs, pool_id);
-        if (G_UNLIKELY(mr == NULL)) {
-          struct spectrum_buffer_pool *sb_pool =
-            get_buffer_pool(req->message);
-          rc = register_one_spectrum_buffer_pool(
-            sb_pool, conn_ctx->id, context->mrs, error_record);
-          mr = g_hash_table_lookup(context->mrs, pool_id);
-        }
+        g_assert(mr != NULL);
       }
+    }
+    if (G_LIKELY(vb->buffer != NULL)) {
       if (G_LIKELY(rc == 0))
         rc = rdma_post_read(
-          conn_ctx->id, req, req->message->content.valid_buffer.buffer,
-          req->message->content.valid_buffer.buffer_size, mr, 0,
+          conn_ctx->id, req, vb->buffer,
+          req->message->content.buffers.buffer_size, mr, 0,
           req->spectrum_info.data_addr, conn_ctx->rkeys[req->mr_id]);
-      if (G_LIKELY(rc == 0))
-        conn_ctx->num_posted_wr++;
-      else
+      if (G_LIKELY(rc == 0)) {
+        ++(conn_ctx->num_posted_wr);
+      } else {
+        cancel_rdma_req(req);
         VERB_ERR(error_record, errno, "rdma_post_read");
+      }
     } else {
-      free_rdma_req(req);
+      cancel_rdma_req(req);
     }
   }
   return rc;
@@ -676,7 +719,7 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
   int rc = 0;
   if (!conn_ctx->disconnecting) {
     while (!g_queue_is_empty(conn_ctx->reqs))
-      free_rdma_req(g_queue_pop_head(conn_ctx->reqs));
+      cancel_rdma_req(g_queue_pop_head(conn_ctx->reqs));
 
     conn_ctx->disconnecting = true;
     if (conn_ctx->established) {
@@ -860,7 +903,7 @@ poll_completions(struct spectrum_reader_context_ *context,
       struct rdma_req *req = (struct rdma_req *)conn_ctx->wcs[i].wr_id;
       req->status = conn_ctx->wcs[i].status;
       if (G_LIKELY(req->status == IBV_WC_SUCCESS)) {
-        if (*req->message->content.valid_buffer.id_num
+        if (*req->message->data[req->buffer_index].id_num
             == req->spectrum_info.id_num)
           req->result = RDMA_REQ_SUCCESS;
         else
@@ -947,16 +990,16 @@ on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
     struct rdma_req *req = reqs->data;
     switch (req->result) {
     case RDMA_REQ_ID_VERIFICATION_FAILURE:
-      convert_valid_to_id_failure(req->message);
+      convert_valid_to_id_failure(req->message, req->buffer_index);
       break;
     case RDMA_REQ_READ_FAILURE:
-      convert_valid_to_rdma_read_failure(req->message, req->status);
+      convert_valid_to_rdma_read_failure(
+        req->message, req->buffer_index, req->status);
       break;
     default:
       break;
     }
-    message_queues_push(req->message, req->consumers);
-    free_rdma_req(req);
+    fulfill_rdma_req(req);
     reqs = g_slist_delete_link(reqs, reqs);
   }
 
@@ -1109,7 +1152,7 @@ to_quit_state(struct spectrum_reader_context_ *context,
     }
     if (quit_msg == NULL) {
       quit_msg =
-        data_path_message_new(context->shared->signal_msg_num_spectra);
+        data_path_message_new(context->shared->handle->signal_msg_num_spectra);
       quit_msg->typ = DATA_PATH_QUIT;
     }
     rc = loopback_msg(context, quit_msg, error_record);

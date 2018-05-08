@@ -73,7 +73,11 @@ vysmaw_message_unref(struct vysmaw_message *message)
 {
   if (g_atomic_int_dec_and_test(&message->refcount)) {
     vysmaw_message_free_resources(message);
-    g_slice_free(struct vysmaw_message, message);
+    if (message->typ == VYSMAW_MESSAGE_BUFFERS)
+      g_slice_free1(
+        SIZEOF_VYSMAW_MESSAGE(message->content.buffers.num_buffers), message);
+    else
+      g_slice_free(struct vysmaw_message, message);
   }
 }
 

@@ -375,10 +375,10 @@ start_signal_receive(struct signal_receiver_context_ *context,
   unsigned mtu = 1u << (port_attr.active_mtu + 7);
 
   /* set size of signal buffers to be maximum possible given mtu */
-  context->shared->signal_msg_num_spectra =
+  context->shared->handle->signal_msg_num_spectra =
     MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
   size_t sizeof_signal_msg =
-    SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
+    SIZEOF_VYS_SIGNAL_MSG(context->shared->handle->signal_msg_num_spectra);
 
   /* create signal message buffer pool...num_signal_msg_buffers must be
    * updated, as min_posted_wr may have been reduced. */
@@ -530,7 +530,7 @@ new_wr(struct signal_receiver_context_ *context)
     context->rem_wrs = recv_wr_prepend_new(
       context->rem_wrs,
       (uint64_t)buff,
-      SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra),
+      SIZEOF_VYS_SIGNAL_MSG(context->shared->handle->signal_msg_num_spectra),
       context->mr->lkey);
     context->len_rem_wrs++;
     result = true;
@@ -564,11 +564,13 @@ poll_completions(struct signal_receiver_context_ *context,
     context->num_posted_wr -= nc;
     if (G_LIKELY(context->state == STATE_RUN)) {
       /* for each completion event, process the event */
+      unsigned signal_msg_num_spectra =
+        context->shared->handle->signal_msg_num_spectra;
       for (int i = 0; i < nc; ++i) {
         struct vys_signal_msg *s_msg =
           (struct vys_signal_msg *)context->wcs[i].wr_id;
-        struct data_path_message *dp_msg = data_path_message_new(
-          context->shared->signal_msg_num_spectra);
+        struct data_path_message *dp_msg =
+          data_path_message_new(signal_msg_num_spectra);
         if (G_LIKELY(context->wcs[i].status == IBV_WC_SUCCESS)) {
           /* got a signal message */
           if (G_LIKELY(s_msg->payload.vys_version == VYS_VERSION)) {
@@ -621,7 +623,7 @@ create_new_wrs(struct signal_receiver_context_ *context)
     }
     if (total_wrs < context->min_posted_wr) {
       struct data_path_message *dp_msg =
-        data_path_message_new(context->shared->signal_msg_num_spectra);
+        data_path_message_new(context->shared->handle->signal_msg_num_spectra);
       dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
       g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
     }
@@ -671,8 +673,7 @@ post_wrs(struct signal_receiver_context_ *context,
       /* transitioned from not-underflow to underflow...send message */
       context->in_underflow = true;
       struct data_path_message *dp_msg =
-        data_path_message_new(
-          context->shared->signal_msg_num_spectra);
+        data_path_message_new(context->shared->handle->signal_msg_num_spectra);
       dp_msg->typ = DATA_PATH_RECEIVE_UNDERFLOW;
       g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
     }
@@ -726,7 +727,7 @@ to_quit_state(struct signal_receiver_context_ *context,
   g_assert(context->state != STATE_DONE);
   if (quit_msg == NULL) {
     quit_msg =
-      data_path_message_new(context->shared->signal_msg_num_spectra);
+      data_path_message_new(context->shared->handle->signal_msg_num_spectra);
     quit_msg->typ = DATA_PATH_QUIT;
   }
   g_async_queue_push(context->shared->signal_msg_queue, quit_msg);

@@ -25,7 +25,6 @@
 struct spectrum_reader_context {
   vysmaw_handle handle;
 
-  unsigned signal_msg_num_spectra;
   struct vys_buffer_pool *signal_msg_buffers;
 
   struct vys_async_queue *read_request_queue;
