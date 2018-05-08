@@ -26,6 +26,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <ctime>
 #include <vysmaw.h>
 
 // max time to wait for message on queue
@@ -83,37 +84,37 @@ pop(vysmaw_message_queue q)
 void
 show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
-	const unordered_map<enum vysmaw_message_type,string> names = {
-		{VYSMAW_MESSAGE_BUFFERS, "buffers"},
-		{VYSMAW_MESSAGE_QUEUE_ALERT, "message-queue-alert"},
-		{VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
-		{VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
-		{VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
-		{VYSMAW_MESSAGE_VERSION_MISMATCH, "vys-version-mismatch"},
-		{VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, "signal-receive-queue-underflow"},
-		{VYSMAW_MESSAGE_END, "end"},
-	};
+  const unordered_map<enum vysmaw_message_type,string> names = {
+    {VYSMAW_MESSAGE_BUFFERS, "buffers-message"},
+    {VYSMAW_MESSAGE_QUEUE_ALERT, "message-queue-alert"},
+    {VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
+    {VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
+    {VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
+    {VYSMAW_MESSAGE_VERSION_MISMATCH, "vys-version-mismatch"},
+    {VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, "signal-receive-queue-underflow"},
+    {VYSMAW_MESSAGE_END, "end"},
+  };
 
-	size_t max_name_len = 0;
-	for (auto&& n : names)
-		max_name_len = max(n.second.length(), max_name_len);
+  size_t max_name_len = 0;
+  for (auto&& n : names)
+    max_name_len = max(n.second.length(), max_name_len);
 
-	const enum vysmaw_message_type msg_types[] = {
-		VYSMAW_MESSAGE_BUFFERS,
-		VYSMAW_MESSAGE_QUEUE_ALERT,
-		VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
-		VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
-		VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
-		VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
-		VYSMAW_MESSAGE_VERSION_MISMATCH,
-		VYSMAW_MESSAGE_END
-	};
+  const enum vysmaw_message_type msg_types[] = {
+    VYSMAW_MESSAGE_BUFFERS,
+    VYSMAW_MESSAGE_QUEUE_ALERT,
+    VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
+    VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
+    VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
+    VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
+    VYSMAW_MESSAGE_VERSION_MISMATCH,
+    VYSMAW_MESSAGE_END
+  };
 
-	for (auto&& m : msg_types) {
-		cout.width(max_name_len);
-		cout << right << names.at(m);
-		cout << ": " << counters[m] << endl;
-	}
+  for (auto&& m : msg_types) {
+    cout.width(max_name_len);
+    cout << right << names.at(m);
+    cout << ": " << counters[m] << endl;
+  }
 }
 
 template <typename A>
@@ -131,8 +132,10 @@ main(int argc, char *argv[])
 {
 	unique_ptr<struct vysmaw_configuration> config;
 
-	typedef chrono::duration<unsigned long,milli> ms;
-	ms duration = chrono::duration<unsigned long,milli>::max();
+	typedef chrono::duration<long> sec;
+	typedef chrono::duration<long,milli> ms;
+	typedef chrono::duration<long,nano> ns;
+	ms duration = chrono::duration<long,milli>::max();
 
 	// initialize vysmaw configuration
 	switch (argc) {
@@ -183,13 +186,19 @@ main(int argc, char *argv[])
 	set<string> config_ids;
 
 	// start vysmaw client
-	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
 	bool timeout = false;
 
 	// take messages until a VYSMAW_MESSAGE_END appears
-	auto t0 = chrono::high_resolution_clock::now();
+	sec report = chrono::duration<long>(1);
+	auto t0 = chrono::system_clock::now();
+  auto last_report = t0;
+  long latest_spectrum_ts = 0;
+
+	vysmaw_handle handle = vysmaw_start_(config.get(), 1, &consumer);
 	unique_ptr<struct vysmaw_message> message = move(pop(consumer.queue));
-	auto t1 = chrono::high_resolution_clock::now();
+#define TCOUNT_MAX 100
+  unsigned tcount = TCOUNT_MAX;
+	auto t1 = chrono::system_clock::now();
 	while ((!message || message->typ != VYSMAW_MESSAGE_END)) {
 		// start shutdown if requested by user
 		if (sigint_occurred && !interrupted) {
@@ -211,18 +220,19 @@ main(int argc, char *argv[])
 			++counters[message->typ];
 			switch (message->typ) {
 			case VYSMAW_MESSAGE_BUFFERS: {
-				struct vysmaw_data_info *info =
-					&message->content.buffers.info;
-				stations.insert(info->stations[0]);
-				stations.insert(info->stations[1]);
-				bb_indexes.insert(info->baseband_index);
-				bb_ids.insert(info->baseband_id);
-				spw_indexes.insert(info->spectral_window_index);
-				pp_ids.insert(info->polarization_product_id);
-				num_channels.insert(info->num_channels);
-				num_bins.insert(info->num_bins);
-				config_ids.insert(info->config_id);
+				// struct vysmaw_data_info *info =
+				// 	&message->content.buffers.info;
+				// stations.insert(info->stations[0]);
+				// stations.insert(info->stations[1]);
+				// bb_indexes.insert(info->baseband_index);
+				// bb_ids.insert(info->baseband_id);
+				// spw_indexes.insert(info->spectral_window_index);
+				// pp_ids.insert(info->polarization_product_id);
+				// num_channels.insert(info->num_channels);
+				// num_bins.insert(info->num_bins);
+				// config_ids.insert(info->config_id);
         for (unsigned i = 0; i < message->content.buffers.num_buffers; ++i) {
+          latest_spectrum_ts = message->data[i].timestamp;
           if (message->data[i].id_failure)
             ++num_id_failures;
           else if (message->data[i].rdma_read_status[0] != '\0')
@@ -258,7 +268,19 @@ main(int argc, char *argv[])
 
 		// get next message
 		message = move(pop(consumer.queue));
-		t1 = chrono::high_resolution_clock::now();
+    if (--tcount == 0) {
+      tcount = TCOUNT_MAX;
+      t1 = chrono::system_clock::now();
+      if (t1 - last_report >= report) {
+        auto ts = ns(latest_spectrum_ts);
+        chrono::time_point<std::chrono::system_clock,ns> tp(ts);
+        ns diff(t1 - tp);
+        cout << "timestamp diff "
+             << diff.count() * ((double)ns::period::num / ns::period::den)
+             << endl;
+        last_report = t1;
+      }
+    }
 	}
 	if (message) ++counters[message->typ];
 
