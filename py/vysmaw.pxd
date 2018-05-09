@@ -159,8 +159,7 @@ cdef extern from "vysmaw.h":
         vysmaw_message_queue queue
 
     vysmaw_handle vysmaw_start(vysmaw_configuration *config,
-                               unsigned num_consumers,
-                               vysmaw_consumer **consumers) nogil
+                               vysmaw_consumer *consumer) nogil
 
     vysmaw_configuration *vysmaw_configuration_new(char *path) nogil
 

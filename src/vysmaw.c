@@ -82,23 +82,9 @@ vysmaw_message_unref(struct vysmaw_message *message)
 }
 
 vysmaw_handle
-vysmaw_start_(const struct vysmaw_configuration *config,
-              unsigned num_consumers, struct vysmaw_consumer *consumers)
-{
-  GPtrArray *cps = g_ptr_array_new();
-  for (unsigned i = num_consumers; i > 0; --i) {
-    g_ptr_array_add(cps, consumers);
-    ++consumers;
-  }
-  vysmaw_handle result = vysmaw_start(
-    config, num_consumers, (struct vysmaw_consumer **)cps->pdata);
-  g_ptr_array_free(cps, TRUE);
-  return result;
-}
-
-vysmaw_handle
-vysmaw_start(const struct vysmaw_configuration *config,
-             unsigned num_consumers, struct vysmaw_consumer **consumers)
+vysmaw_start(
+  const struct vysmaw_configuration *config,
+  struct vysmaw_consumer *consumer)
 {
   THREAD_INIT;
 
@@ -106,7 +92,7 @@ vysmaw_start(const struct vysmaw_configuration *config,
   vysmaw_handle result = g_new0(struct _vysmaw_handle, 1);
   /* result is initialized with a reference count of 2: one for the caller,
    * and another for the end message that we guarantee will be posted for
-   * every consumer */
+   * the consumer */
   result->refcount = 2;
   MUTEX_INIT(result->mtx);
   result->in_shutdown = false;
@@ -134,12 +120,10 @@ vysmaw_start(const struct vysmaw_configuration *config,
     }
   }
 
-  /* per consumer initialization */
-  result->consumers = g_new(struct consumer, num_consumers);
-  result->num_consumers = num_consumers;
-  for (unsigned i = 0; i < num_consumers; ++i)
-    init_consumer(consumers[i]->filter, consumers[i]->filter_data,
-                  &consumers[i]->queue, &result->consumers[i]);
+  /* transform vysmaw_consumer to struct consumer */
+  result->consumer = g_new(struct consumer, 1);
+  init_consumer(consumer->filter, consumer->filter_data,
+                &consumer->queue, result->consumer);
 
 
   if (result->config.error_record == NULL) {

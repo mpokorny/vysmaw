@@ -367,24 +367,11 @@ extern void vysmaw_message_unref(struct vysmaw_message *message)
  * received. Calling vysmaw_message_unref() on the VYSMAW_MESSAGE_END message
  * will release all remaining queue resources. The 'user_data' pointer will be
  * passed as an argument in all calls to the 'spectrum_filter' function.
- *
- * This function allows a single client to set up multiple filters and queues.
- * It is advisable for the distribution of messages from a single queue to
- * multiple threads, if desired, to be done by the client, and not by setting up
- * multiple queues with the same filter predicate, in order to prevent the
- * evaluation of the predicate multiple times for each argument query.
- */
-extern vysmaw_handle vysmaw_start_(const struct vysmaw_configuration *config,
-                                   unsigned num_consumers,
-                                   struct vysmaw_consumer *consumers)
-  __attribute__((nonnull(1,3),malloc,returns_nonnull));
-
-/* Start vysmaw threads; as above, but more friendly for cython usage.
  */
 extern vysmaw_handle vysmaw_start(const struct vysmaw_configuration *config,
-                                  unsigned num_consumers,
-                                  struct vysmaw_consumer **consumers)
-  __attribute__((nonnull(1,3),malloc,returns_nonnull));
+                                  struct vysmaw_consumer *consumer)
+  __attribute__((nonnull,malloc,returns_nonnull));
+
 
 /* Shut down vysmaw threads.
  *

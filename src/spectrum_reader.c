@@ -80,14 +80,14 @@ struct rdma_req {
   uint8_t mr_id;
   enum rdma_req_result result;
   enum ibv_wc_status status;
-  GSList *consumers;
+  vysmaw_handle handle;
   unsigned buffer_index;
   unsigned *num_buffers_pending;
   struct vysmaw_message *message;
 };
 
 static struct rdma_req *new_rdma_req(
-  GSList *consumers, const struct server_connection_context *conn_ctx,
+  vysmaw_handle handle, const struct server_connection_context *conn_ctx,
   const struct vys_signal_msg_payload *payload,
   unsigned spectrum_index, unsigned *num_buffers_pending,
   const struct vys_spectrum_info *spectrum_info)
@@ -124,7 +124,7 @@ static int find_connection(
   __attribute__((nonnull));
 static int on_signal_message(
   struct spectrum_reader_context_ *context, struct vys_signal_msg *msg,
-  GSList **consumers, struct vys_error_record **error_record)
+  struct vys_error_record **error_record)
   __attribute__((nonnull));
 static int on_data_path_message(
   struct spectrum_reader_context_ *context, struct data_path_message *msg,
@@ -238,7 +238,7 @@ static int loopback_msg(
   __attribute__((nonnull));
 
 static struct rdma_req *
-new_rdma_req(GSList *consumers,
+new_rdma_req(vysmaw_handle handle,
              const struct server_connection_context *conn_ctx,
              const struct vys_signal_msg_payload *payload,
              unsigned spectrum_index, unsigned *num_buffers_pending,
@@ -262,7 +262,7 @@ new_rdma_req(GSList *consumers,
   result->data_info.timestamp = spectrum_info->timestamp;
   memcpy(result->data_info.config_id, payload->config_id,
          sizeof(result->data_info.config_id));
-  result->consumers = consumers;
+  result->handle = handle;
   result->message = NULL;
   return result;
 }
@@ -280,10 +280,9 @@ fulfill_rdma_req(struct rdma_req *req)
 {
   if (--(*req->num_buffers_pending) == 0) {
     if (G_LIKELY(req->message != NULL))
-      message_queues_push(req->message, req->consumers);
+      post_msg(req->handle, req->message);
     g_slice_free(unsigned, req->num_buffers_pending);
   }
-  g_slist_free(req->consumers);
   g_slice_free(struct rdma_req, req);
 }
 
@@ -412,7 +411,7 @@ find_connection(struct spectrum_reader_context_ *context,
 
 static int
 on_signal_message(struct spectrum_reader_context_ *context,
-                  struct vys_signal_msg *msg, GSList **consumers,
+                  struct vys_signal_msg *msg,
                   struct vys_error_record **error_record)
 {
   struct vys_signal_msg_payload *payload = &(msg->payload);
@@ -424,29 +423,20 @@ on_signal_message(struct spectrum_reader_context_ *context,
 
   if (G_LIKELY(rc == 0 && reqs != NULL)) {
     struct vys_spectrum_info *info = payload->infos;
-    unsigned num_rdma = 0;
-    GSList **c = consumers;
-    for (unsigned i = 0; i < payload->num_spectra; ++i) {
-      if (*c != NULL)
-        ++num_rdma;
-      ++c;
-    }
-    if (num_rdma > 0) {
-      unsigned *num_buffers_pending = g_slice_new(unsigned);
-      *num_buffers_pending = num_rdma;
-      for (unsigned i = 0, j = 0; i < payload->num_spectra; ++i) {
-        if (*consumers != NULL)
-          g_queue_push_tail(
-            reqs,
-            new_rdma_req(
-              *consumers, conn_ctx, payload, j++, num_buffers_pending, info));
-        *consumers = NULL; //rdma req takes list
-        ++consumers;
-        ++info;
-      }
-      if (conn_ctx->established)
-        rc = post_server_reads(context, conn_ctx, error_record);
-    }
+    unsigned *num_buffers_pending = g_slice_new(unsigned);
+    *num_buffers_pending = payload->num_spectra;
+    for (unsigned i = 0; i < payload->num_spectra; ++i)
+      g_queue_push_tail(
+        reqs,
+        new_rdma_req(
+          context->shared->handle,
+          conn_ctx,
+          payload,
+          i,
+          num_buffers_pending,
+          info++));
+    if (conn_ctx->established)
+      rc = post_server_reads(context, conn_ctx, error_record);
   }
 
   return rc;
@@ -462,8 +452,7 @@ on_data_path_message(struct spectrum_reader_context_ *context,
   switch (msg->typ) {
   case DATA_PATH_SIGNAL_MSG:
     if (G_LIKELY(context->state == STATE_RUN))
-      rc = on_signal_message(
-        context, msg->signal_msg, msg->consumers, error_record);
+      rc = on_signal_message(context, msg->signal_msg, error_record);
     vys_buffer_pool_push(context->shared->signal_msg_buffers,
                          msg->signal_msg);
     data_path_message_free(msg);
@@ -1425,7 +1414,7 @@ cleanup_and_return:
   }
   struct vysmaw_message *msg = end_message_new(shared->handle, &result);
 
-  /* post result message to all consumer queues */
+  /* post result message consumer queue */
   post_msg(shared->handle, msg);
   handle_unref(shared->handle); // end message has been posted
   data_path_message_free(context.end_msg);

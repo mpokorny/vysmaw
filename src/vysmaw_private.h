@@ -176,9 +176,8 @@ struct _vysmaw_handle {
   unsigned num_buffers_mismatched_version;
   unsigned mismatched_version;
 
-  /* message consumers */
-  unsigned num_consumers;
-  struct consumer *consumers;
+  /* message consumer */
+  struct consumer *consumer;
 
   /* service threads */
   struct service_gate gate;
@@ -197,15 +196,11 @@ struct data_path_message {
     DATA_PATH_QUIT,
     DATA_PATH_END
   } typ;
-  size_t message_size;
   union {
     enum ibv_wc_status wc_status;
     struct vys_error_record *error_record;
     unsigned received_message_version;
-    struct {
-      struct vys_signal_msg *signal_msg;
-      GSList *consumers[];
-    };
+    struct vys_signal_msg *signal_msg;
   };
 };
 
@@ -388,11 +383,8 @@ static inline void message_queue_unlock(vysmaw_message_queue queue)
 }
 
 extern void message_queues_push_unlocked(
-  struct vysmaw_message *msg, GSList *consumers)
-  __attribute__((nonnull(1)));
-extern void message_queues_push(
-  struct vysmaw_message *msg, GSList *consumers)
-  __attribute__((nonnull(1)));
+  vysmaw_handle handle, struct vysmaw_message *msg)
+  __attribute__((nonnull));
 
 extern void mark_data_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));

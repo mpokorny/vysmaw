@@ -62,8 +62,6 @@ static gdouble parse_double(
   GKeyFile *kf, const gchar *key,
   struct vysmaw_configuration *config)
   __attribute__((nonnull));
-static GSList *all_consumers(vysmaw_handle handle)
-  __attribute__((nonnull,returns_nonnull,malloc));
 
 static gchar *
 default_config_vysmaw()
@@ -294,13 +292,9 @@ handle_unref(vysmaw_handle handle)
     MUTEX_CLEAR(handle->gate.mtx);
     COND_CLEAR(handle->gate.cond);
 
-    struct consumer *c = handle->consumers;
-    for (unsigned i = 0; i < handle->num_consumers; ++i) {
-      message_queue_unref(c->queue);
-      g_array_free(c->pass_filter_array, TRUE);
-      ++c;
-    }
-    g_free(handle->consumers);
+    message_queue_unref(handle->consumer->queue);
+    g_array_free(handle->consumer->pass_filter_array, TRUE);
+    g_free(handle->consumer);
 
     if (handle->config.single_spectrum_buffer_pool) {
       REC_MUTEX_CLEAR(handle->pool_collection_mtx);
@@ -312,20 +306,6 @@ handle_unref(vysmaw_handle handle)
     MUTEX_CLEAR(handle->mtx);
     g_free(handle);
   }
-}
-
-static GSList *
-all_consumers(vysmaw_handle handle)
-{
-  MUTEX_LOCK(handle->mtx);
-  GSList *result = NULL;
-  struct consumer *consumer = handle->consumers;
-  for (unsigned i = handle->num_consumers; i > 0; --i) {
-    result = g_slist_prepend(result, consumer);
-    ++consumer;
-  }
-  MUTEX_UNLOCK(handle->mtx);
-  return result;
 }
 
 struct vysmaw_message *
@@ -417,9 +397,23 @@ version_mismatch_message_new(vysmaw_handle handle, unsigned num_buffers,
 void
 post_msg(vysmaw_handle handle, struct vysmaw_message *msg)
 {
-  GSList *consumers = all_consumers(handle);
-  message_queues_push(msg, consumers);
-  g_slist_free(consumers);
+  vysmaw_message_queue mq = handle->consumer->queue;
+  message_queue_lock(mq);
+  message_queue_push_one_unlocked(message_ref(msg), mq);
+  if (G_UNLIKELY(
+        mq->depth >= msg->handle->config.message_queue_alert_depth)) {
+    mq->num_queued_in_alert =
+      (mq->num_queued_in_alert + 1)
+      % msg->handle->config.message_queue_alert_interval;
+    if (G_UNLIKELY(mq->num_queued_in_alert == 0))
+      message_queue_push_one_unlocked(
+        queue_alert_message_new(msg->handle, mq->depth),
+        mq);
+  } else {
+    mq->num_queued_in_alert = -1;
+  }
+  message_queue_unlock(mq);
+  vysmaw_message_unref(msg);
 }
 
 void
@@ -902,29 +896,15 @@ message_ref(struct vysmaw_message *message)
 struct data_path_message *
 data_path_message_new(unsigned max_spectra_per_signal)
 {
-  size_t message_size =
-    sizeof(struct data_path_message)
-    + max_spectra_per_signal * sizeof(GSList *);
-  struct data_path_message *result = g_slice_alloc0(message_size);
-  result->message_size = message_size;
-  return result;
+  return g_slice_new(struct data_path_message);
 }
 
 void
 data_path_message_free(struct data_path_message *msg)
 {
-  if (msg->typ == DATA_PATH_SIGNAL_MSG) {
-    size_t consumer_offset = offsetof(struct data_path_message, consumers);
-    GSList **l = (GSList **)((void *)msg + consumer_offset);
-    while (consumer_offset < msg->message_size) {
-      if (*l != NULL) g_slist_free(*l);
-      ++l;
-      consumer_offset += sizeof(GSList *);
-    }
-  } else if (msg->typ == DATA_PATH_END) {
+  if (msg->typ == DATA_PATH_END)
     vys_error_record_free(msg->error_record);
-  }
-  g_slice_free1(msg->message_size, msg);
+  g_slice_free(struct data_path_message, msg);
 }
 
 struct vysmaw_message *
@@ -963,31 +943,8 @@ buffers_message_new(
 }
 
 void
-message_queues_push(struct vysmaw_message *msg, GSList *consumers)
+message_queues_push(vysmaw_handle handle, struct vysmaw_message *msg)
 {
-  MUTEX_LOCK(msg->handle->mtx);
-  while (consumers != NULL) {
-    struct consumer *c = consumers->data;
-    vysmaw_message_queue mq = c->queue;
-    message_queue_lock(mq);
-    message_queue_push_one_unlocked(message_ref(msg), mq);
-    if (G_UNLIKELY(
-          mq->depth >= msg->handle->config.message_queue_alert_depth)) {
-      mq->num_queued_in_alert =
-        (mq->num_queued_in_alert + 1)
-        % msg->handle->config.message_queue_alert_interval;
-      if (G_UNLIKELY(mq->num_queued_in_alert == 0))
-        message_queue_push_one_unlocked(
-          queue_alert_message_new(msg->handle, mq->depth),
-          mq);
-    } else {
-      mq->num_queued_in_alert = -1;
-    }
-    message_queue_unlock(mq);
-    consumers = g_slist_next(consumers);
-  }
-  MUTEX_UNLOCK(msg->handle->mtx);
-  vysmaw_message_unref(msg);
 }
 
 void

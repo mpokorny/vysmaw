@@ -270,45 +270,21 @@ cdef class Configuration:
     def rdma_read_min_ack_part(self, unsigned value):
         self._c_configuration.rdma_read_min_ack_part = value
 
-    cdef tuple start(self, unsigned num_filters,
-                     vysmaw_spectrum_filter *filters,
-                     void **user_data):
-        if filters is NULL or num_filters == 0:
-            raise ValueError("At least one filter is required to start vysmaw")
-        consumers = [Consumer() for i in range(num_filters)]
-        cdef vysmaw_consumer **cp_array = <vysmaw_consumer **>malloc(
-            num_filters * sizeof(vysmaw_consumer *))
-        cdef void *udata
-        cdef Consumer c
-        for i in range(num_filters):
-            if user_data is not NULL:
-                udata = user_data[i]
-            else:
-                udata = NULL
-            c = consumers[i]
-            c.set_filter(filters[i], udata)
-            cp_array[i] = c._c_consumer
-        handle = Handle.wrap(vysmaw_start(
-            self._c_configuration, num_filters, cp_array))
-        free(cp_array)
-        return (handle, consumers)
+    cdef tuple start(self, vysmaw_spectrum_filter filtr, void *user_data):
+        if filtr is NULL:
+            raise ValueError("Non-null filter required to start vysmaw")
+        cdef Consumer c = Consumer()
+        c.set_filter(filtr, user_data)
+        handle = Handle.wrap(vysmaw_start(self._c_configuration, c._c_consumer))
+        return (handle, c)
 
-    def start_py(self, filters):
+    def start_py(self, filtr):
         __logger.warning("'start_py' function is for testing only, "
                          "and should not be used in production code")
-        n = len(filters)
-        consumers = [Consumer() for i in range(n)]
-        for i in range(n):
-            consumers[i].set_py_filter(filters[i])
-        cdef vysmaw_consumer **cp_array = <vysmaw_consumer **>malloc(
-            n * sizeof(vysmaw_consumer *))
-        cdef Consumer c
-        for i in range(n):
-            c = consumers[i]
-            cp_array[i] = c._c_consumer
-        handle = Handle.wrap(vysmaw_start(self._c_configuration, n, cp_array))
-        free(cp_array)
-        return (handle, consumers)
+        cdef Consumer c = Consumer()
+        c.set_py_filter(filtr)
+        handle = Handle.wrap(vysmaw_start(self._c_configuration, c._c_consumer))
+        return (handle, c)
 
 cdef class Handle:
 

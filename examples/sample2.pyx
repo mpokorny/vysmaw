@@ -41,10 +41,7 @@ else:
     config = cy_vysmaw.Configuration()
 
 # Allocate client resources
-cdef vysmaw_spectrum_filter *f = \
-    <vysmaw_spectrum_filter *>malloc(sizeof(vysmaw_spectrum_filter))
-f[0] = cb
-handle, consumers = config.start(1, f, NULL)
+handle, consumer = config.start(cb, NULL)
 
 # Immediately shut down client resources, since we don't intend to receive
 # any spectra.
@@ -54,7 +51,7 @@ handle.shutdown()
 # EndMessage appears; here, since no spectra are selected by the callback,
 # and the handle shutdown method has already been called, the only message
 # should be the EndMessage.
-msg = consumers[0].pop()
+msg = consumer.pop()
 assert(isinstance(msg, cy_vysmaw.EndMessage))
 
 # display the message
