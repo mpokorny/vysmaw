@@ -30,7 +30,6 @@ vysmaw_message_queue_pop(vysmaw_message_queue queue)
       queue->depth--;
     message_queue_unlock(queue);
   }
-  message_queue_unref(queue); // release message's queue reference
   return result;
 }
 
@@ -49,8 +48,6 @@ vysmaw_message_queue_timeout_pop(vysmaw_message_queue queue, uint64_t timeout)
     g_assert(queue->depth >= 0);
     message_queue_unlock(queue);
   }
-  /* release message's queue reference */
-  if (result != NULL) message_queue_unref(queue);
   return result;
 }
 
@@ -63,8 +60,6 @@ vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
     queue->depth--;
   g_assert(queue->depth >= 0);
   message_queue_unlock(queue);
-  /* release message's queue reference */
-  if (result != NULL) message_queue_unref(queue);
   return result;
 }
 

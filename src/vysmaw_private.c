@@ -666,9 +666,6 @@ void
 message_queue_push_one_unlocked(struct vysmaw_message *msg,
                                 vysmaw_message_queue queue)
 {
-  /* messages on the queue maintain a reference to the queue to facilitate
-   * automatic queue reclamation */
-  message_queue_ref(queue);
   queue->depth++;
   g_queue_push_head(queue->q, msg);
 }
