@@ -85,9 +85,9 @@ void
 show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
 {
   const unordered_map<enum vysmaw_message_type,string> names = {
-    {VYSMAW_MESSAGE_BUFFERS, "buffers-message"},
+    {VYSMAW_MESSAGE_SPECTRA, "spectra-message"},
     {VYSMAW_MESSAGE_QUEUE_ALERT, "message-queue-alert"},
-    {VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, "data-buffer-starvation"},
+    {VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION, "data-buffer-starvation"},
     {VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
     {VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
     {VYSMAW_MESSAGE_VERSION_MISMATCH, "vys-version-mismatch"},
@@ -100,9 +100,9 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
     max_name_len = max(n.second.length(), max_name_len);
 
   const enum vysmaw_message_type msg_types[] = {
-    VYSMAW_MESSAGE_BUFFERS,
+    VYSMAW_MESSAGE_SPECTRA,
     VYSMAW_MESSAGE_QUEUE_ALERT,
-    VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
+    VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION,
     VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
     VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
     VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
@@ -162,7 +162,7 @@ main(int argc, char *argv[])
   // this application keeps count of the message types it receives
   array<unsigned,VYSMAW_MESSAGE_END + 1> counters;
   counters.fill(0);
-  unsigned num_valid_buffers = 0;
+  unsigned num_valid_spectra = 0;
 
   // catch SIGINT to exit gracefully
   bool interrupted = false;
@@ -177,10 +177,10 @@ main(int argc, char *argv[])
   set<uint16_t> num_channels;
   set<uint16_t> num_bins;
   unsigned num_alerts = 0;
-  unsigned num_data_buffers_unavailable = 0;
+  unsigned num_spectrum_buffers_unavailable = 0;
   unsigned num_signal_buffers_unavailable = 0;
-  unsigned num_buffers_mismatched_version = 0;
-  unsigned num_id_failures = 0;
+  unsigned num_spectra_mismatched_version = 0;
+  unsigned num_verification_failures = 0;
   set<string> signal_receive_status;
   set<string> rdma_read_status;
   set<string> config_ids;
@@ -219,9 +219,9 @@ main(int argc, char *argv[])
     if (message) {
       ++counters[message->typ];
       switch (message->typ) {
-      case VYSMAW_MESSAGE_BUFFERS: {
+      case VYSMAW_MESSAGE_SPECTRA: {
         // struct vysmaw_data_info *info =
-        //  &message->content.buffers.info;
+        //  &message->content.spectra.info;
         // stations.insert(info->stations[0]);
         // stations.insert(info->stations[1]);
         // bb_indexes.insert(info->baseband_index);
@@ -231,31 +231,31 @@ main(int argc, char *argv[])
         // num_channels.insert(info->num_channels);
         // num_bins.insert(info->num_bins);
         // config_ids.insert(info->config_id);
-        for (unsigned i = 0; i < message->content.buffers.num_buffers; ++i) {
+        for (unsigned i = 0; i < message->content.spectra.num_spectra; ++i) {
           latest_spectrum_ts = message->data[i].timestamp;
-          if (message->data[i].id_failure)
-            ++num_id_failures;
+          if (message->data[i].failed_verification)
+            ++num_verification_failures;
           else if (message->data[i].rdma_read_status[0] != '\0')
             rdma_read_status.insert(message->data[i].rdma_read_status);
           else
-            ++num_valid_buffers;
+            ++num_valid_spectra;
         }
         break;
       }
       case VYSMAW_MESSAGE_QUEUE_ALERT:
         ++num_alerts;
         break;
-      case VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
-        num_data_buffers_unavailable +=
-          message->content.num_data_buffers_unavailable;
+      case VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION:
+        num_spectrum_buffers_unavailable +=
+          message->content.num_spectrum_buffers_unavailable;
         break;
       case VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
         num_signal_buffers_unavailable +=
           message->content.num_signal_buffers_unavailable;
         break;
       case VYSMAW_MESSAGE_VERSION_MISMATCH:
-        num_buffers_mismatched_version +=
-          message->content.num_buffers_mismatched_version;
+        num_spectra_mismatched_version +=
+          message->content.num_spectra_mismatched_version;
         break;
       case VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
         signal_receive_status.insert(
@@ -314,27 +314,27 @@ main(int argc, char *argv[])
     chrono::duration_cast<chrono::duration<double> >(t1 - t0);
   cout << to_string(num_cb)
        << " callbacks and "
-       << to_string(num_valid_buffers)
-       << " valid buffers in "
+       << to_string(num_valid_spectra)
+       << " valid spectra in "
        << span.count()
        << " seconds ("
-       << (num_valid_buffers / span.count())
-       << " valid buffers per sec)"
+       << (num_valid_spectra / span.count())
+       << " valid spectra per sec)"
        << endl;
 
   // error summary...only when it's interesting
   if (num_alerts > 0)
     cout << "num queue alerts  : "
          << num_alerts << endl;
-  if (num_data_buffers_unavailable > 0)
+  if (num_spectrum_buffers_unavailable > 0)
     cout << "num data buff miss: "
-         << num_data_buffers_unavailable << endl;
+         << num_spectrum_buffers_unavailable << endl;
   if (num_signal_buffers_unavailable > 0)
     cout << "num sig buff miss : "
          << num_signal_buffers_unavailable << endl;
-  if (num_buffers_mismatched_version > 0)
+  if (num_spectra_mismatched_version > 0)
     cout << "num vsn mismatch  : "
-         << num_buffers_mismatched_version << endl;
+         << num_spectra_mismatched_version << endl;
   if (!signal_receive_status.empty()) {
     cout << "signal rcv errs   :";
     for (auto&& s : signal_receive_status)

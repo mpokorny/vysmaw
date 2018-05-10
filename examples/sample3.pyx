@@ -76,8 +76,8 @@ cdef vysmaw_message_queue queue = consumer.queue()
 cdef vysmaw_message *msg = NULL
 while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
     if msg is not NULL:
-        if msg[0].typ is VYSMAW_MESSAGE_BUFFERS:
-            num_spectra += 1
+        if msg[0].typ is VYSMAW_MESSAGE_SPECTRA:
+            num_spectra += msg[0].content.spectra.num_spectra
         # for other message types, which should be received much less frequently
         # than the "valid buffer" messages, it could be convenient at this stage
         # to wrap them in Python objects, like so: py_msg = Message.wrap(msg)

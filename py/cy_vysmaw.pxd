@@ -67,10 +67,10 @@ cdef class Message:
 
     cpdef unref(self)
 
-cdef class Buffer:
-    cdef vysmaw_buffer *_c_buffer
+cdef class Spectrum:
+    cdef vysmaw_spectrum *_c_spectrum
 
     cdef unsigned _length
 
     @staticmethod
-    cdef Buffer get(vysmaw_message *msg, unsigned n)
+    cdef Spectrum get(vysmaw_message *msg, unsigned n)

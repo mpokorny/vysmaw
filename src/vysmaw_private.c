@@ -312,10 +312,10 @@ struct vysmaw_message *
 message_new(vysmaw_handle handle, enum vysmaw_message_type typ)
 {
   struct vysmaw_message *result;
-  if (typ == VYSMAW_MESSAGE_BUFFERS) {
-    result = g_slice_alloc0(
+  if (typ == VYSMAW_MESSAGE_SPECTRA) {
+    result = g_slice_alloc(
       SIZEOF_VYSMAW_MESSAGE(handle->signal_msg_num_spectra));
-    result->content.buffers.num_buffers = handle->signal_msg_num_spectra;
+    result->content.spectra.num_spectra = handle->signal_msg_num_spectra;
   } else {
     result = g_slice_new(struct vysmaw_message);
   }
@@ -326,13 +326,13 @@ message_new(vysmaw_handle handle, enum vysmaw_message_type typ)
 }
 
 struct vysmaw_message *
-data_buffer_starvation_message_new(vysmaw_handle handle,
-                                   unsigned num_unavailable)
+spectrum_buffer_starvation_message_new(vysmaw_handle handle,
+                                       unsigned num_unavailable)
 {
   struct vysmaw_message *result =
-    message_new(handle, VYSMAW_MESSAGE_DATA_BUFFER_STARVATION);
-  result->content.num_data_buffers_unavailable =
-    handle->num_data_buffers_unavailable;
+    message_new(handle, VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION);
+  result->content.num_spectrum_buffers_unavailable =
+    handle->num_spectrum_buffers_unavailable;
   return result;
 }
 
@@ -384,12 +384,12 @@ signal_receive_failure_message_new(vysmaw_handle handle,
 }
 
 struct vysmaw_message *
-version_mismatch_message_new(vysmaw_handle handle, unsigned num_buffers,
+version_mismatch_message_new(vysmaw_handle handle, unsigned num_spectra,
                              unsigned mismatched_version)
 {
   struct vysmaw_message *result =
     message_new(handle, VYSMAW_MESSAGE_VERSION_MISMATCH);
-  result->content.num_buffers_mismatched_version = num_buffers;
+  result->content.num_spectra_mismatched_version = num_spectra;
   result->content.received_message_version = mismatched_version;
   return result;
 }
@@ -417,13 +417,13 @@ post_msg(vysmaw_handle handle, struct vysmaw_message *msg)
 }
 
 void
-post_data_buffer_starvation(vysmaw_handle handle)
+post_spectrum_buffer_starvation(vysmaw_handle handle)
 {
   struct vysmaw_message *msg =
-    data_buffer_starvation_message_new(
-      handle, handle->num_data_buffers_unavailable);
+    spectrum_buffer_starvation_message_new(
+      handle, handle->num_spectrum_buffers_unavailable);
   post_msg(handle, msg);
-  handle->num_data_buffers_unavailable = 0;
+  handle->num_spectrum_buffers_unavailable = 0;
 }
 
 void
@@ -449,10 +449,10 @@ post_version_mismatch(vysmaw_handle handle)
 {
   struct vysmaw_message *msg =
     version_mismatch_message_new(
-      handle, handle->num_buffers_mismatched_version,
+      handle, handle->num_spectra_mismatched_version,
       handle->mismatched_version);
   post_msg(handle, msg);
-  handle->num_buffers_mismatched_version = 0;
+  handle->num_spectra_mismatched_version = 0;
 }
 
 void
@@ -698,17 +698,17 @@ get_buffer_pool(struct vysmaw_message *message)
 struct spectrum_buffer_pool *
 lookup_buffer_pool_from_collection(struct vysmaw_message *message)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
   return spectrum_buffer_pool_collection_lookup(
     message->handle->pool_collection, &message->handle->pool_collection_mtx,
-    buffer_size(&message->content.buffers.info));
+    spectrum_buffer_size(&message->content.spectra.info));
 }
 
 struct spectrum_buffer_pool *
 lookup_buffer_pool_from_pool(struct vysmaw_message *message)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
-  size_t buff_size = buffer_size(&message->content.buffers.info);
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
+  size_t buff_size = spectrum_buffer_size(&message->content.spectra.info);
   return ((buff_size <= message->handle->pool->pool->buffer_size)
           ? message->handle->pool
           : NULL);
@@ -905,52 +905,46 @@ data_path_message_free(struct data_path_message *msg)
 }
 
 struct vysmaw_message *
-buffers_message_new(
+spectra_message_new(
   vysmaw_handle handle, struct rdma_cm_id *id,
   GHashTable *mrs, const struct vysmaw_data_info *info,
-  unsigned num_buffers, pool_id_t *pool_id,
+  unsigned num_spectra, pool_id_t *pool_id,
   struct vys_error_record **error_record)
 {
-  size_t buff_size = buffer_size(info);
-  struct vysmaw_message *result = message_new(handle, VYSMAW_MESSAGE_BUFFERS);
-  result->content.buffers.info = *info;
-  result->content.buffers.buffer_size = buff_size;
-  result->content.buffers.num_buffers = num_buffers;
-
-  for (unsigned i = 0; i < num_buffers; ++i) {
-    void *buffer = handle->new_valid_buffer_fn(
-      handle, id, mrs, buff_size, pool_id, error_record);
-    if (G_LIKELY(buffer != NULL)) {
-      if (G_UNLIKELY(handle->num_data_buffers_unavailable > 0))
-        post_data_buffer_starvation(handle);
-      if (G_UNLIKELY(handle->num_buffers_mismatched_version > 0))
+  size_t buff_size = spectrum_buffer_size(info);
+  struct vysmaw_message *result = message_new(handle, VYSMAW_MESSAGE_SPECTRA);
+  result->content.spectra.info = *info;
+  result->content.spectra.spectrum_buffer_size = buff_size;
+  result->content.spectra.num_spectra = num_spectra;
+  result->content.spectra.buffer = handle->new_valid_buffer_fn(
+    handle, id, mrs, num_spectra * buff_size, pool_id, error_record);
+  if (G_LIKELY(result->content.spectra.buffer != NULL)) {
+    result->content.spectra.mr =
+      rdma_reg_msgs(id, result->data, num_spectra * sizeof(result->data[0]));
+    if (G_LIKELY(result->content.spectra.mr != NULL)) {
+      // note that we don't initialize the result->content.data array
+      if (G_UNLIKELY(handle->num_spectrum_buffers_unavailable > 0))
+        post_spectrum_buffer_starvation(handle);
+      if (G_UNLIKELY(handle->num_spectra_mismatched_version > 0))
         post_version_mismatch(handle);
-      // result->content.data[i].timestamp remains uninitialized
-      result->data[i].buffer = buffer;
-      result->data[i].id_num = buffer;
-      result->data[i].spectrum = buffer + VYS_SPECTRUM_OFFSET;
     } else {
-      result->data[i].buffer = NULL;
-      result->data[i].id_num = NULL;
-      result->data[i].spectrum = NULL;
-      mark_data_buffer_starvation(handle);
+      message_release_all_buffers(result);
+      mark_spectrum_buffer_starvation(handle); 
     }
+  } else {
+    result->content.spectra.mr = NULL;
+    mark_spectrum_buffer_starvation(handle); 
   }
   return result;
 }
 
 void
-message_queues_push(vysmaw_handle handle, struct vysmaw_message *msg)
+mark_spectrum_buffer_starvation(vysmaw_handle handle)
 {
-}
-
-void
-mark_data_buffer_starvation(vysmaw_handle handle)
-{
-  handle->num_data_buffers_unavailable++;
-  if (handle->num_data_buffers_unavailable
+  handle->num_spectrum_buffers_unavailable++;
+  if (handle->num_spectrum_buffers_unavailable
       >= handle->config.max_starvation_latency)
-    post_data_buffer_starvation(handle);
+    post_spectrum_buffer_starvation(handle);
 }
 
 void
@@ -972,10 +966,10 @@ void
 mark_version_mismatch(vysmaw_handle handle, unsigned received_message_version)
 {
   if (received_message_version != handle->mismatched_version
-      && handle->num_buffers_mismatched_version > 0)
+      && handle->num_spectra_mismatched_version > 0)
     post_version_mismatch(handle);
-  handle->num_buffers_mismatched_version++;
-  if (handle->num_buffers_mismatched_version
+  handle->num_spectra_mismatched_version++;
+  if (handle->num_spectra_mismatched_version
       >= handle->config.max_version_mismatch_latency)
     post_version_mismatch(handle);
 }
@@ -989,37 +983,12 @@ mark_signal_receive_queue_underflow(vysmaw_handle handle)
 void
 message_release_all_buffers(struct vysmaw_message *message)
 {
-  if (message->typ == VYSMAW_MESSAGE_BUFFERS) {
+  if (message->typ == VYSMAW_MESSAGE_SPECTRA) {
     struct spectrum_buffer_pool *pool =
       message->handle->lookup_buffer_pool_fn(message);
     if (G_LIKELY(pool != NULL)) {
-      for (unsigned i = 0; i < message->content.buffers.num_buffers; ++i) {
-        void **b = &message->data[i].buffer;
-        if (G_LIKELY(*b != NULL))
-          spectrum_buffer_pool_push(pool, *b);
-        *b = NULL;
-      }
-    } else {
-      struct vysmaw_result *rc = g_new(struct vysmaw_result, 1);
-      rc->code = VYSMAW_ERROR_BUFFPOOL;
-      rc->syserr_desc = g_strdup("");
-      begin_shutdown(message->handle, rc);
-    }
-  }
-}
-
-void
-message_release_buffer(struct vysmaw_message *message, unsigned buffer_index)
-{
-  if (message->typ == VYSMAW_MESSAGE_BUFFERS) {
-    struct spectrum_buffer_pool *pool =
-      message->handle->lookup_buffer_pool_fn(message);
-    if (G_LIKELY(pool != NULL)) {
-      g_assert(buffer_index < message->content.buffers.num_buffers);
-      void **b = &message->data[buffer_index].buffer;
-      if (G_LIKELY(*b != NULL))
-        spectrum_buffer_pool_push(pool, *b);
-      *b = NULL;
+      if (G_LIKELY(message->content.spectra.buffer != NULL))
+        spectrum_buffer_pool_push(pool, message->content.spectra.buffer);
     } else {
       struct vysmaw_result *rc = g_new(struct vysmaw_result, 1);
       rc->code = VYSMAW_ERROR_BUFFPOOL;
@@ -1041,6 +1010,11 @@ void
 vysmaw_message_free_resources(struct vysmaw_message *message)
 {
   message_release_all_buffers(message);
+  if (message->typ == VYSMAW_MESSAGE_SPECTRA
+      && message->content.spectra.mr != NULL) {
+    int rc = rdma_dereg_mr(message->content.spectra.mr);
+    g_assert(rc == 0);
+  }
   vysmaw_message_free_syserr_desc(message);
   handle_unref(message->handle);
 }
@@ -1117,9 +1091,9 @@ void
 convert_valid_to_id_failure(
   struct vysmaw_message *message, unsigned buffer_index)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
-  message_release_buffer(message, buffer_index);
-  message->data[buffer_index].id_failure = true;
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
+  message->data[buffer_index].failed_verification = true;
+  message->data[buffer_index].values = NULL;
 }
 
 void
@@ -1127,9 +1101,9 @@ convert_valid_to_rdma_read_failure(
   struct vysmaw_message *message, unsigned buffer_index,
   enum ibv_wc_status status)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_BUFFERS);
-  message_release_buffer(message, buffer_index);
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
   g_strlcpy(message->data[buffer_index].rdma_read_status,
             ibv_wc_status_str(status),
             sizeof(message->data[buffer_index].rdma_read_status));
+  message->data[buffer_index].values = NULL;
 }

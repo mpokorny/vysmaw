@@ -81,15 +81,15 @@ struct rdma_req {
   enum rdma_req_result result;
   enum ibv_wc_status status;
   vysmaw_handle handle;
-  unsigned buffer_index;
-  unsigned *num_buffers_pending;
+  unsigned spectrum_index;
+  unsigned *num_spectra_pending;
   struct vysmaw_message *message;
 };
 
 static struct rdma_req *new_rdma_req(
   vysmaw_handle handle, const struct server_connection_context *conn_ctx,
   const struct vys_signal_msg_payload *payload,
-  unsigned spectrum_index, unsigned *num_buffers_pending,
+  unsigned spectrum_index, unsigned *num_spectra_pending,
   const struct vys_spectrum_info *spectrum_info)
   __attribute__((nonnull,returns_nonnull,malloc));
 static void cancel_rdma_req(struct rdma_req *req)
@@ -241,12 +241,12 @@ static struct rdma_req *
 new_rdma_req(vysmaw_handle handle,
              const struct server_connection_context *conn_ctx,
              const struct vys_signal_msg_payload *payload,
-             unsigned spectrum_index, unsigned *num_buffers_pending,
+             unsigned spectrum_index, unsigned *num_spectra_pending,
              const struct vys_spectrum_info *spectrum_info)
 {
   struct rdma_req *result = g_slice_new(struct rdma_req);
-  result->buffer_index = spectrum_index;
-  result->num_buffers_pending = num_buffers_pending;
+  result->spectrum_index = spectrum_index;
+  result->num_spectra_pending = num_spectra_pending;
   memcpy(&(result->spectrum_info), spectrum_info,
          sizeof(result->spectrum_info));
   result->mr_id = payload->mr_id;
@@ -271,17 +271,17 @@ static void
 cancel_rdma_req(struct rdma_req *req)
 {
   if (req->message != NULL)
-    message_release_buffer(req->message, req->buffer_index);
+    req->message->data[req->spectrum_index].values = NULL;
   fulfill_rdma_req(req);
 }
 
 static void
 fulfill_rdma_req(struct rdma_req *req)
 {
-  if (--(*req->num_buffers_pending) == 0) {
+  if (--(*req->num_spectra_pending) == 0) {
     if (G_LIKELY(req->message != NULL))
       post_msg(req->handle, req->message);
-    g_slice_free(unsigned, req->num_buffers_pending);
+    g_slice_free(unsigned, req->num_spectra_pending);
   }
   g_slice_free(struct rdma_req, req);
 }
@@ -423,8 +423,8 @@ on_signal_message(struct spectrum_reader_context_ *context,
 
   if (G_LIKELY(rc == 0 && reqs != NULL)) {
     struct vys_spectrum_info *info = payload->infos;
-    unsigned *num_buffers_pending = g_slice_new(unsigned);
-    *num_buffers_pending = payload->num_spectra;
+    unsigned *num_spectra_pending = g_slice_new(unsigned);
+    *num_spectra_pending = payload->num_spectra;
     for (unsigned i = 0; i < payload->num_spectra; ++i)
       g_queue_push_tail(
         reqs,
@@ -433,7 +433,7 @@ on_signal_message(struct spectrum_reader_context_ *context,
           conn_ctx,
           payload,
           i,
-          num_buffers_pending,
+          num_spectra_pending,
           info++));
     if (conn_ctx->established)
       rc = post_server_reads(context, conn_ctx, error_record);
@@ -483,9 +483,9 @@ on_data_path_message(struct spectrum_reader_context_ *context,
       rc = to_quit_state(context, msg, error_record);
     } else {
       if (context->quit_msg == msg) {
-        if (handle->num_data_buffers_unavailable > 0)
-          post_data_buffer_starvation(handle);
-        if (handle->num_buffers_mismatched_version > 0)
+        if (handle->num_spectrum_buffers_unavailable > 0)
+          post_spectrum_buffer_starvation(handle);
+        if (handle->num_spectra_mismatched_version > 0)
           post_version_mismatch(handle);
         context->end_msg = data_path_message_new(
           context->shared->handle->signal_msg_num_spectra);
@@ -610,37 +610,55 @@ post_server_reads(struct spectrum_reader_context_ *context,
          && !g_queue_is_empty(conn_ctx->reqs)
          && conn_ctx->num_posted_wr < conn_ctx->max_posted_wr) {
     struct rdma_req *req = g_queue_pop_head(conn_ctx->reqs);
-    if (req->buffer_index == 0) {
-      req->message = buffers_message_new(
+    if (req->spectrum_index == 0) {
+      req->message = spectra_message_new(
         context->shared->handle, conn_ctx->id, context->mrs,
-        &req->data_info, *req->num_buffers_pending,
+        &req->data_info, *req->num_spectra_pending,
         &conn_ctx->prev_pool, error_record);
       conn_ctx->prev_message = req->message;
     } else {
+      // note that, if a message is not allocated when spectrum_index == 0, all
+      // the rdma requests that would have been a part of that message will be
+      // canceled; this is a design decision, intended to prioritize clearing
+      // out requests when free memory is in short supply, which could be
+      // revisited
       g_assert(conn_ctx->prev_message != NULL);
       req->message = conn_ctx->prev_message;
     }
-    struct vysmaw_buffer *vb = &req->message->data[req->buffer_index];
-    vb->timestamp = req->data_info.timestamp;
-    if (G_UNLIKELY((mr == NULL || conn_ctx->prev_pool != pool_id)
-                   && vb->buffer != NULL)) {
-      pool_id = conn_ctx->prev_pool;
-      mr = g_hash_table_lookup(context->mrs, pool_id);
-      if (G_UNLIKELY(mr == NULL)) {
-        struct spectrum_buffer_pool *sb_pool =
-          get_buffer_pool(req->message);
-        rc = register_one_spectrum_buffer_pool(
-          sb_pool, conn_ctx->id, context->mrs, error_record);
+    if (G_LIKELY(req->message != NULL)) {
+      if (G_UNLIKELY((mr == NULL || conn_ctx->prev_pool != pool_id))) {
+        pool_id = conn_ctx->prev_pool;
         mr = g_hash_table_lookup(context->mrs, pool_id);
-        g_assert(mr != NULL);
+        if (G_UNLIKELY(mr == NULL)) {
+          struct spectrum_buffer_pool *sb_pool =
+            get_buffer_pool(req->message);
+          rc = register_one_spectrum_buffer_pool(
+            sb_pool, conn_ctx->id, context->mrs, error_record);
+          mr = g_hash_table_lookup(context->mrs, pool_id);
+          g_assert(mr != NULL);
+        }
       }
-    }
-    if (G_LIKELY(vb->buffer != NULL)) {
-      if (G_LIKELY(rc == 0))
-        rc = rdma_post_read(
-          conn_ctx->id, req, vb->buffer,
-          req->message->content.buffers.buffer_size, mr, 0,
+      struct vysmaw_spectrum *vs = &req->message->data[req->spectrum_index];
+      vs->timestamp = req->data_info.timestamp;
+      vs->failed_verification = false;
+      vs->rdma_read_status[0] = '\0';
+      if (G_LIKELY(rc == 0)) {
+        vs->values =
+          req->message->content.spectra.buffer
+          + req->spectrum_index
+          * req->message->content.spectra.spectrum_buffer_size;
+        struct ibv_sge sge[2] = {
+          {(uint64_t)(vs->header.padding),
+           sizeof(vs->header.padding),
+           req->message->content.spectra.mr->lkey},
+          {(uint64_t)(vs->values),
+           req->message->content.spectra.spectrum_buffer_size,
+           mr->lkey}
+        };
+        rc = rdma_post_readv(
+          conn_ctx->id, req, sge, sizeof(sge) / sizeof(sge[0]), 0, 
           req->spectrum_info.data_addr, conn_ctx->rkeys[req->mr_id]);
+      }
       if (G_LIKELY(rc == 0)) {
         ++(conn_ctx->num_posted_wr);
       } else {
@@ -892,7 +910,7 @@ poll_completions(struct spectrum_reader_context_ *context,
       struct rdma_req *req = (struct rdma_req *)conn_ctx->wcs[i].wr_id;
       req->status = conn_ctx->wcs[i].status;
       if (G_LIKELY(req->status == IBV_WC_SUCCESS)) {
-        if (*req->message->data[req->buffer_index].id_num
+        if (req->message->data[req->spectrum_index].header.id_num
             == req->spectrum_info.id_num)
           req->result = RDMA_REQ_SUCCESS;
         else
@@ -979,11 +997,11 @@ on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
     struct rdma_req *req = reqs->data;
     switch (req->result) {
     case RDMA_REQ_ID_VERIFICATION_FAILURE:
-      convert_valid_to_id_failure(req->message, req->buffer_index);
+      convert_valid_to_id_failure(req->message, req->spectrum_index);
       break;
     case RDMA_REQ_READ_FAILURE:
       convert_valid_to_rdma_read_failure(
-        req->message, req->buffer_index, req->status);
+        req->message, req->spectrum_index, req->status);
       break;
     default:
       break;

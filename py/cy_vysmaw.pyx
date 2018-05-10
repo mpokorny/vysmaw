@@ -473,12 +473,12 @@ cdef class Message:
     cdef Message wrap(vysmaw_message *msg):
         assert msg is not NULL
         msgtype = msg[0].typ
-        if msgtype == VYSMAW_MESSAGE_BUFFERS:
-            result = BuffersMessage()
+        if msgtype == VYSMAW_MESSAGE_SPECTRA:
+            result = SpectraMessage()
         elif msgtype == VYSMAW_MESSAGE_QUEUE_ALERT:
             result = QueueAlertMessage()
-        elif msgtype == VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
-            result = DataBufferStarvationMessage()
+        elif msgtype == VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION:
+            result = SpectrumBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
             result = SignalBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
@@ -498,28 +498,28 @@ cdef class Message:
             self._c_message = NULL
         return
 
-cdef class BuffersMessage(Message):
+cdef class SpectraMessage(Message):
 
     def __cinit__(self):
         return
 
     def __str__(self):
-        return show_properties(self, BuffersMessage)
+        return show_properties(self, SpectraMessage)
 
     @property
     def info(self):
-        return DataInfo.wrap(&(self._c_message[0].content.buffers.info))
+        return DataInfo.wrap(&(self._c_message[0].content.spectra.info))
 
     @property
-    def buffer_size(self):
-        return self._c_message[0].content.buffers.buffer_size
+    def spectrum_buffer_size(self):
+        return self._c_message[0].content.spectra.spectrum_buffer_size
 
     @property
-    def num_buffers(self):
-        return self._c_message[0].content.buffers.num_buffers
+    def num_spectra(self):
+        return self._c_message[0].content.spectra.num_spectra
 
-    def buffer(self, unsigned n):
-        return Buffer.get(self._c_message, n)
+    def spectrum(self, unsigned n):
+        return Spectrum.get(self._c_message, n)
 
 cdef class QueueAlertMessage(Message):
 
@@ -530,14 +530,14 @@ cdef class QueueAlertMessage(Message):
     def queue_depth(self):
         return self._c_message[0].content.queue_depth
 
-cdef class DataBufferStarvationMessage(Message):
+cdef class SpectrumBufferStarvationMessage(Message):
 
     def __str__(self):
-        return show_properties(self, DataBufferStarvationMessage)
+        return show_properties(self, SpectrumBufferStarvationMessage)
 
     @property
-    def num_data_buffers_unavailable(self):
-        return self._c_message[0].content.num_data_buffers_unavailable
+    def num_spectrum_buffers_unavailable(self):
+        return self._c_message[0].content.num_spectrum_buffers_unavailable
 
 cdef class SignalBufferStarvationMessage(Message):
 
@@ -582,18 +582,17 @@ cdef class EndMessage(Message):
         cdef vysmaw_result *vr = &self._c_message[0].content.result
         return Result.wrap(vr)
 
-cdef class Buffer:
+cdef class Spectrum:
 
     def __cinit__(self):
         return
 
     @staticmethod
-    cdef Buffer get(vysmaw_message* msg, unsigned n):
-        result = Buffer()
-        result._c_buffer = &msg[0].data[n]
+    cdef Spectrum get(vysmaw_message* msg, unsigned n):
+        result = Spectrum()
+        result._c_spectrum = &msg[0].data[n]
         result._length = \
-            (msg[0].content.buffers.buffer_size - VYS_SPECTRUM_OFFSET) \
-            // sizeof(float complex)
+            msg[0].content.spectra.spectrum_buffer_size // sizeof(float complex)
         return result
 
 
@@ -610,7 +609,7 @@ cdef class Buffer:
         return (<bytes>self._c_buffer[0].rdma_read_status).decode('ascii')
 
     @property
-    def spectrum(self):
+    def values(self):
         cdef float complex[:] result = \
-                <float complex[:self._length]>self._c_buffer[0].spectrum
+            <float complex[:self._length]>self._c_spectrum[0].values
         return result

@@ -22,7 +22,7 @@ from libcpp cimport bool
 
 cdef extern from "vysmaw.h":
 
-    int VYS_SPECTRUM_OFFSET = 32
+    DEF VYS_SPECTRUM_OFFSET = 32
 
     DEF VYS_MULTICAST_ADDRESS_SIZE = 32
 
@@ -101,34 +101,38 @@ cdef extern from "vysmaw.h":
     ctypedef _vysmaw_handle * vysmaw_handle
 
     enum vysmaw_message_type:
-        VYSMAW_MESSAGE_BUFFERS,
+        VYSMAW_MESSAGE_SPECTRA,
         VYSMAW_MESSAGE_QUEUE_ALERT,
-        VYSMAW_MESSAGE_DATA_BUFFER_STARVATION,
+        VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
         VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
         VYSMAW_MESSAGE_VERSION_MISMATCH,
         VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
         VYSMAW_MESSAGE_END
 
-    struct vysmaw_buffer:
-        uint64_t timestamp
-        bool id_failure
-        char rdma_read_status[VYSMAW_RECEIVE_STATUS_LENGTH]
-        void *buffer
-        uint32_t *id_num
-        float complex *spectrum
+    union spectrum_header:
+        uint32_t id_num
+        char padding[VYS_SPECTRUM_OFFSET]
 
-    struct message_buffers:
+    struct vysmaw_spectrum:
+        uint64_t timestamp
+        bool failed_verification
+        char rdma_read_status[VYSMAW_RECEIVE_STATUS_LENGTH]
+        spectrum_header header
+        float complex *values
+
+    struct message_spectra:
         vysmaw_data_info info
-        stddef.size_t buffer_size
-        unsigned num_buffers
+        stddef.size_t spectrum_buffer_size
+        unsigned num_spectra
+        void *buffer
 
     union message_content:
-        message_buffers buffers
+        message_spectra spectra
         unsigned queue_depth
-        unsigned num_data_buffers_unavailable
+        unsigned num_spectrum_buffers_unavailable
         unsigned num_signal_buffers_unavailable
-        unsigned num_buffers_mismatched_version
+        unsigned num_spectra_mismatched_version
         char signal_receive_status[VYSMAW_RECEIVE_STATUS_LENGTH]
         unsigned received_message_version
         vysmaw_result result
@@ -138,7 +142,7 @@ cdef extern from "vysmaw.h":
         vysmaw_message_type typ
         vysmaw_handle handle
         message_content content
-        vysmaw_buffer data[0]
+        vysmaw_spectrum data[0]
 
     struct _vysmaw_message_queue:
         pass

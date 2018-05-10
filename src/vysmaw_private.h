@@ -171,9 +171,9 @@ struct _vysmaw_handle {
     spectrum_buffer_pool_collection pool_collection;
     struct spectrum_buffer_pool *pool;
   };
-  unsigned num_data_buffers_unavailable;
+  unsigned num_spectrum_buffers_unavailable;
   unsigned num_signal_buffers_unavailable;
-  unsigned num_buffers_mismatched_version;
+  unsigned num_spectra_mismatched_version;
   unsigned mismatched_version;
 
   /* message consumer */
@@ -318,7 +318,7 @@ extern void start_service_in_order(vysmaw_handle handle, service_type_t service)
 extern struct vysmaw_message *message_new(
   vysmaw_handle handle, enum vysmaw_message_type typ)
   __attribute__((malloc,nonnull,returns_nonnull));
-extern struct vysmaw_message *data_buffer_starvation_message_new(
+extern struct vysmaw_message *spectrum_buffer_starvation_message_new(
   vysmaw_handle handle, unsigned num_unavailable)
   __attribute__((nonnull,returns_nonnull,malloc));
 extern struct vysmaw_message *signal_buffer_starvation_message_new(
@@ -337,11 +337,11 @@ extern struct vysmaw_message *signal_receive_failure_message_new(
   vysmaw_handle handle, enum ibv_wc_status status)
   __attribute__((nonnull,returns_nonnull,malloc));
 extern struct vysmaw_message *version_mismatch_message_new(
-  vysmaw_handle handle, unsigned num_buffers, unsigned mismatched_version)
+  vysmaw_handle handle, unsigned num_spectra, unsigned mismatched_version)
   __attribute__((nonnull,returns_nonnull,malloc));
 extern void post_msg(vysmaw_handle handle, struct vysmaw_message *message)
   __attribute__((nonnull));
-extern void post_data_buffer_starvation(vysmaw_handle handle)
+extern void post_spectrum_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void post_signal_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
@@ -354,9 +354,6 @@ extern void post_signal_receive_queue_underflow(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void message_release_all_buffers(struct vysmaw_message *message)
   __attribute__((nonnull));
-extern void message_release_buffer(
-  struct vysmaw_message *message, unsigned buffer_index)
-  __attribute__((nonnull));
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
   __attribute__((nonnull));
 
@@ -366,9 +363,9 @@ extern struct data_path_message *data_path_message_new(
 extern void data_path_message_free(struct data_path_message *msg)
   __attribute__((nonnull));
 
-extern struct vysmaw_message *buffers_message_new(
+extern struct vysmaw_message *spectra_message_new(
   vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
-  const struct vysmaw_data_info *info, unsigned num_buffers, pool_id_t *pool_id,
+  const struct vysmaw_data_info *info, unsigned num_spectra, pool_id_t *pool_id,
   struct vys_error_record **error_record)
   __attribute__((nonnull,malloc));
 
@@ -386,7 +383,7 @@ extern void message_queues_push_unlocked(
   vysmaw_handle handle, struct vysmaw_message *msg)
   __attribute__((nonnull));
 
-extern void mark_data_buffer_starvation(vysmaw_handle handle)
+extern void mark_spectrum_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void mark_signal_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
@@ -399,7 +396,7 @@ extern void mark_version_mismatch(
 extern void mark_signal_receive_queue_underflow(vysmaw_handle handle)
   __attribute__((nonnull));
 
-static inline size_t buffer_size(const struct vysmaw_data_info *info)
+static inline size_t spectrum_buffer_size(const struct vysmaw_data_info *info)
 {
   return vys_spectrum_buffer_size(
     info->num_channels, info->num_bins, info->bin_stride);

@@ -68,9 +68,9 @@ vysmaw_message_unref(struct vysmaw_message *message)
 {
   if (g_atomic_int_dec_and_test(&message->refcount)) {
     vysmaw_message_free_resources(message);
-    if (message->typ == VYSMAW_MESSAGE_BUFFERS)
+    if (message->typ == VYSMAW_MESSAGE_SPECTRA)
       g_slice_free1(
-        SIZEOF_VYSMAW_MESSAGE(message->content.buffers.num_buffers), message);
+        SIZEOF_VYSMAW_MESSAGE(message->content.spectra.num_spectra), message);
     else
       g_slice_free(struct vysmaw_message, message);
   }
@@ -93,8 +93,21 @@ vysmaw_start(
   result->in_shutdown = false;
   result->result = NULL;
   memcpy((void *)&result->config, config, sizeof(*config));
+
+  /* transform vysmaw_consumer to struct consumer */
+  result->consumer = g_new(struct consumer, 1);
+  init_consumer(consumer->filter, consumer->filter_data,
+                &consumer->queue, result->consumer);
+
+
   if (result->config.error_record == NULL) {
+    /* service threads initialization */
+    MUTEX_INIT(result->gate.mtx);
+    COND_INIT(result->gate.cond);
+    init_service_threads(result);
+
     *(unsigned *)&result->config.max_spectrum_buffer_size =
+      result->signal_msg_num_spectra *
       MAX(result->config.max_spectrum_buffer_size,
           VYS_BUFFER_POOL_MIN_BUFFER_SIZE);
     if (result->config.single_spectrum_buffer_pool) {
@@ -113,19 +126,6 @@ vysmaw_start(
       result->remove_idle_pools_fn = remove_idle_pools_from_collection;
       REC_MUTEX_INIT(result->pool_collection_mtx);
     }
-  }
-
-  /* transform vysmaw_consumer to struct consumer */
-  result->consumer = g_new(struct consumer, 1);
-  init_consumer(consumer->filter, consumer->filter_data,
-                &consumer->queue, result->consumer);
-
-
-  if (result->config.error_record == NULL) {
-    /* service threads initialization */
-    MUTEX_INIT(result->gate.mtx);
-    COND_INIT(result->gate.cond);
-    init_service_threads(result);
   }
   if (result->config.error_record != NULL) {
     result->in_shutdown = true;

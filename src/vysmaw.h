@@ -230,9 +230,9 @@ typedef struct _vysmaw_handle *vysmaw_handle;
  * pulled from a queue, vysmaw_message_unref() is called promptly thereafter.
  */
 enum vysmaw_message_type {
-  VYSMAW_MESSAGE_BUFFERS,
+  VYSMAW_MESSAGE_SPECTRA,
   VYSMAW_MESSAGE_QUEUE_ALERT, // message queue level alert
-  VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, // data buffers unavailable
+  VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION, // data spectra unavailable
   VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, // signal buffers unavailable
   VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
   // message
@@ -244,13 +244,15 @@ enum vysmaw_message_type {
 
 #define RECEIVE_STATUS_LENGTH 64
 
-struct vysmaw_buffer {
+struct vysmaw_spectrum {
   uint64_t timestamp;
-  bool id_failure;
+  bool failed_verification;
   char rdma_read_status[RECEIVE_STATUS_LENGTH];
-  void *buffer;
-  uint32_t *id_num;
-  _Complex float *spectrum;
+  union {
+    uint32_t id_num;
+    char padding[VYS_SPECTRUM_OFFSET];
+  } header;
+  _Complex float *values;
 };
 
 struct vysmaw_message {
@@ -258,27 +260,29 @@ struct vysmaw_message {
   enum vysmaw_message_type typ;
   vysmaw_handle handle;
   union {
-    /* VYSMAW_MESSAGE_BUFFERS */
+    /* VYSMAW_MESSAGE_SPECTRA */
     struct {
       // don't use timestamp in the following info field, use timestamp fields
-      // in array of struct vysmaw_buffer elements at the end of the
+      // in array of struct vysmaw_spectrum elements at the end of the
       // vysmaw_message
       struct vysmaw_data_info info;
-      size_t buffer_size;
-      unsigned num_buffers;
-    } buffers;
+      size_t spectrum_buffer_size;
+      unsigned num_spectra;
+      struct ibv_mr *mr;
+      void *buffer;
+    } spectra;
 
     /* VYSMAW_MESSAGE_QUEUE_ALERT */
     unsigned queue_depth;
 
-    /* VYSMAW_MESSAGE_DATA_BUFFER_STARVATION */
-    unsigned num_data_buffers_unavailable;
+    /* VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION */
+    unsigned num_spectrum_buffers_unavailable;
 
     /* VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION */
     unsigned num_signal_buffers_unavailable;
 
     /* VYSMAW_MESSAGE_VERSION_MISMATCH */
-    unsigned num_buffers_mismatched_version;
+    unsigned num_spectra_mismatched_version;
 
     /* VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE */
     char signal_receive_status[RECEIVE_STATUS_LENGTH];
@@ -290,11 +294,11 @@ struct vysmaw_message {
     struct vysmaw_result result;
   } content;
 
-  struct vysmaw_buffer data[];
+  struct vysmaw_spectrum data[];
 };
 
 #define SIZEOF_VYSMAW_MESSAGE(n) (\
-    sizeof(struct vysmaw_message) + (n) * sizeof(struct vysmaw_buffer))
+    sizeof(struct vysmaw_message) + (n) * sizeof(struct vysmaw_spectrum))
 
 /* Spectrum filter predicate (callback)
  *
