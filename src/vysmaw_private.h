@@ -171,6 +171,9 @@ struct _vysmaw_handle {
     spectrum_buffer_pool_collection pool_collection;
     struct spectrum_buffer_pool *pool;
   };
+
+  struct vys_buffer_pool *header_pool;
+
   unsigned num_spectrum_buffers_unavailable;
   unsigned num_signal_buffers_unavailable;
   unsigned num_spectra_mismatched_version;

@@ -244,14 +244,16 @@ enum vysmaw_message_type {
 
 #define RECEIVE_STATUS_LENGTH 64
 
+union vysmaw_spectrum_header {
+  uint32_t id_num;
+  char padding[VYS_SPECTRUM_OFFSET];
+};
+
 struct vysmaw_spectrum {
   uint64_t timestamp;
   bool failed_verification;
   char rdma_read_status[RECEIVE_STATUS_LENGTH];
-  union {
-    uint32_t id_num;
-    char padding[VYS_SPECTRUM_OFFSET];
-  } header;
+  union vysmaw_spectrum_header *header;
   _Complex float *values;
 };
 
@@ -268,8 +270,8 @@ struct vysmaw_message {
       struct vysmaw_data_info info;
       size_t spectrum_buffer_size;
       unsigned num_spectra;
-      struct ibv_mr *mr;
-      void *buffer;
+      void *header_buffer;
+      void *data_buffer;
     } spectra;
 
     /* VYSMAW_MESSAGE_QUEUE_ALERT */

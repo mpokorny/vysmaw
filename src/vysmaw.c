@@ -110,10 +110,10 @@ vysmaw_start(
       result->signal_msg_num_spectra *
       MAX(result->config.max_spectrum_buffer_size,
           VYS_BUFFER_POOL_MIN_BUFFER_SIZE);
+    size_t num_buffers =
+      result->config.spectrum_buffer_pool_size
+      / result->config.max_spectrum_buffer_size;
     if (result->config.single_spectrum_buffer_pool) {
-      size_t num_buffers =
-        result->config.spectrum_buffer_pool_size
-        / result->config.max_spectrum_buffer_size;
       result->pool = spectrum_buffer_pool_new(
         result->config.max_spectrum_buffer_size, num_buffers);
       result->new_valid_buffer_fn = new_valid_buffer_from_pool;
@@ -126,6 +126,11 @@ vysmaw_start(
       result->remove_idle_pools_fn = remove_idle_pools_from_collection;
       REC_MUTEX_INIT(result->pool_collection_mtx);
     }
+
+    result->header_pool =
+      vys_buffer_pool_new(
+        num_buffers,
+        result->signal_msg_num_spectra * sizeof(union vysmaw_spectrum_header));
   }
   if (result->config.error_record != NULL) {
     result->in_shutdown = true;

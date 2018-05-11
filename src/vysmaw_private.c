@@ -303,6 +303,9 @@ handle_unref(vysmaw_handle handle)
       spectrum_buffer_pool_collection_free(handle->pool_collection);
     }
 
+    if (handle->header_pool != NULL)
+      vys_buffer_pool_free(handle->header_pool);
+
     MUTEX_CLEAR(handle->mtx);
     g_free(handle);
   }
@@ -916,24 +919,26 @@ spectra_message_new(
   result->content.spectra.info = *info;
   result->content.spectra.spectrum_buffer_size = buff_size;
   result->content.spectra.num_spectra = num_spectra;
-  result->content.spectra.buffer = handle->new_valid_buffer_fn(
+  result->content.spectra.data_buffer = handle->new_valid_buffer_fn(
     handle, id, mrs, num_spectra * buff_size, pool_id, error_record);
-  if (G_LIKELY(result->content.spectra.buffer != NULL)) {
-    result->content.spectra.mr =
-      rdma_reg_msgs(id, result->data, num_spectra * sizeof(result->data[0]));
-    if (G_LIKELY(result->content.spectra.mr != NULL)) {
+  if (G_LIKELY(result->content.spectra.data_buffer != NULL)) {
+    result->content.spectra.header_buffer =
+      vys_buffer_pool_pop(handle->header_pool);
+    if (G_LIKELY(result->content.spectra.header_buffer != NULL)) {
       // note that we don't initialize the result->content.data array
       if (G_UNLIKELY(handle->num_spectrum_buffers_unavailable > 0))
         post_spectrum_buffer_starvation(handle);
       if (G_UNLIKELY(handle->num_spectra_mismatched_version > 0))
         post_version_mismatch(handle);
     } else {
-      message_release_all_buffers(result);
       mark_spectrum_buffer_starvation(handle); 
+      vysmaw_message_unref(result);
+      result = NULL;
     }
   } else {
-    result->content.spectra.mr = NULL;
     mark_spectrum_buffer_starvation(handle); 
+    vysmaw_message_unref(result);
+    result = NULL;
   }
   return result;
 }
@@ -987,8 +992,12 @@ message_release_all_buffers(struct vysmaw_message *message)
     struct spectrum_buffer_pool *pool =
       message->handle->lookup_buffer_pool_fn(message);
     if (G_LIKELY(pool != NULL)) {
-      if (G_LIKELY(message->content.spectra.buffer != NULL))
-        spectrum_buffer_pool_push(pool, message->content.spectra.buffer);
+      if (G_LIKELY(message->content.spectra.data_buffer != NULL))
+        spectrum_buffer_pool_push(pool, message->content.spectra.data_buffer);
+      if (G_LIKELY(message->content.spectra.header_buffer != NULL))
+        vys_buffer_pool_push(
+          message->handle->header_pool,
+          message->content.spectra.header_buffer);
     } else {
       struct vysmaw_result *rc = g_new(struct vysmaw_result, 1);
       rc->code = VYSMAW_ERROR_BUFFPOOL;
@@ -1010,11 +1019,6 @@ void
 vysmaw_message_free_resources(struct vysmaw_message *message)
 {
   message_release_all_buffers(message);
-  if (message->typ == VYSMAW_MESSAGE_SPECTRA
-      && message->content.spectra.mr != NULL) {
-    int rc = rdma_dereg_mr(message->content.spectra.mr);
-    g_assert(rc == 0);
-  }
   vysmaw_message_free_syserr_desc(message);
   handle_unref(message->handle);
 }
@@ -1022,9 +1026,9 @@ vysmaw_message_free_resources(struct vysmaw_message *message)
 int
 dereg_mr(struct ibv_mr *mr, struct vys_error_record **error_record)
 {
-  int rc = rdma_dereg_mr(mr);
+  int rc = ibv_dereg_mr(mr);
   if (G_UNLIKELY(rc != 0))
-    VERB_ERR(error_record, errno, "rdma_dereg_mr");
+    VERB_ERR(error_record, errno, "ibv_dereg_mr");
   return rc;
 }
 
@@ -1034,13 +1038,17 @@ register_one_spectrum_buffer_pool(
   GHashTable *mrs, struct vys_error_record **error_record)
 {
   int result;
-  struct ibv_mr *mr = rdma_reg_msgs(
-    id, sb_pool->pool->pool, sb_pool->pool->pool_size);
+  struct ibv_mr *mr =
+    ibv_reg_mr(
+      id->pd,
+      sb_pool->pool->pool,
+      sb_pool->pool->pool_size,
+      IBV_ACCESS_LOCAL_WRITE);
   if (G_LIKELY(mr != NULL)) {
     g_hash_table_insert(mrs, spectrum_buffer_pool_ref(sb_pool), mr);
     result = 0;
   } else {
-    VERB_ERR(error_record, errno, "rdma_reg_msgs");
+    VERB_ERR(error_record, errno, "ibv_reg_mr");
     result = -1;
   }
   return result;

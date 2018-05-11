@@ -46,6 +46,7 @@ struct spectrum_reader_context_ {
   GArray *restrict pollfds;
   GArray *restrict new_pollfds;
   struct rdma_event_channel *event_channel;
+  struct ibv_mr *header_pool_mr;
   GHashTable *mrs;
   GHashTable *connections;
   GSequence *fd_connections;
@@ -603,6 +604,19 @@ post_server_reads(struct spectrum_reader_context_ *context,
                   struct server_connection_context *conn_ctx,
                   struct vys_error_record **error_record)
 {
+  if (G_UNLIKELY(context->header_pool_mr == NULL)) {
+    context->header_pool_mr =
+      ibv_reg_mr(
+        conn_ctx->id->pd,
+        context->shared->handle->header_pool->pool,
+        context->shared->handle->header_pool->pool_size,
+        IBV_ACCESS_LOCAL_WRITE);
+    if (G_UNLIKELY(context->header_pool_mr == NULL)) {
+      VERB_ERR(error_record, errno, "ibv_reg_mr");
+      return -1;
+    }
+  }
+
   int rc = 0;
   struct ibv_mr *mr = NULL;
   pool_id_t pool_id = NULL;
@@ -638,19 +652,23 @@ post_server_reads(struct spectrum_reader_context_ *context,
           g_assert(mr != NULL);
         }
       }
-      struct vysmaw_spectrum *vs = &req->message->data[req->spectrum_index];
-      vs->timestamp = req->data_info.timestamp;
-      vs->failed_verification = false;
-      vs->rdma_read_status[0] = '\0';
       if (G_LIKELY(rc == 0)) {
+        struct vysmaw_spectrum *vs = &req->message->data[req->spectrum_index];
+        vs->timestamp = req->data_info.timestamp;
+        vs->failed_verification = false;
+        vs->rdma_read_status[0] = '\0';
         vs->values =
-          req->message->content.spectra.buffer
+          req->message->content.spectra.data_buffer
           + req->spectrum_index
           * req->message->content.spectra.spectrum_buffer_size;
+        vs->header =
+          req->message->content.spectra.header_buffer
+          + req->spectrum_index
+          * sizeof(union vysmaw_spectrum_header);
         struct ibv_sge sge[2] = {
-          {(uint64_t)(vs->header.padding),
-           sizeof(vs->header.padding),
-           req->message->content.spectra.mr->lkey},
+          {(uint64_t)(vs->header),
+           sizeof(union vysmaw_spectrum_header),
+           context->header_pool_mr->lkey},
           {(uint64_t)(vs->values),
            req->message->content.spectra.spectrum_buffer_size,
            mr->lkey}
@@ -778,13 +796,20 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
   // TODO: exit can hang here!
   //rdma_destroy_qp(conn_ctx->id);
 
-  if (context->mrs != NULL && g_hash_table_size(context->connections) == 0) {
-    gboolean dereg(gpointer unused, struct ibv_mr *mr,
-                   struct vys_error_record **errs) {
-      dereg_mr(mr, errs);
-      return TRUE;
+  // deregister memory regions when there are no more connections
+  if (g_hash_table_size(context->connections) == 0) {
+    if (context->mrs != NULL) {
+      gboolean dereg(gpointer unused, struct ibv_mr *mr,
+                     struct vys_error_record **errs) {
+        dereg_mr(mr, errs);
+        return TRUE;
+      }
+      g_hash_table_foreach_remove(context->mrs, (GHRFunc)dereg, &er);
     }
-    g_hash_table_foreach_remove(context->mrs, (GHRFunc)dereg, &er);
+    if (context->header_pool_mr != NULL) {
+      dereg_mr(context->header_pool_mr, &er);
+      context->header_pool_mr = NULL;
+    }
   }
 
   int rc = rdma_destroy_id(conn_ctx->id);
@@ -910,7 +935,7 @@ poll_completions(struct spectrum_reader_context_ *context,
       struct rdma_req *req = (struct rdma_req *)conn_ctx->wcs[i].wr_id;
       req->status = conn_ctx->wcs[i].status;
       if (G_LIKELY(req->status == IBV_WC_SUCCESS)) {
-        if (req->message->data[req->spectrum_index].header.id_num
+        if (req->message->data[req->spectrum_index].header->id_num
             == req->spectrum_info.id_num)
           req->result = RDMA_REQ_SUCCESS;
         else
