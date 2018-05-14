@@ -50,6 +50,7 @@ struct spectrum_reader_context_ {
   GHashTable *mrs;
   GHashTable *connections;
   GSequence *fd_connections;
+  GSList *free_rdma_req_blocks;
 };
 
 struct server_connection_context {
@@ -101,13 +102,18 @@ struct rdma_req_block {
       - offsetof(struct rdma_req_block, reqs)))
 
 static struct rdma_req_block *new_rdma_req_block(
-  vysmaw_handle handle, const struct server_connection_context *conn_ctx,
+  struct spectrum_reader_context_ *context,
+  const struct server_connection_context *conn_ctx,
   const struct vys_signal_msg_payload *payload)
   __attribute__((nonnull,returns_nonnull,malloc));
-static void free_rdma_req_block(struct rdma_req_block *block);
-static void cancel_rdma_req(struct rdma_req *req)
+static void free_rdma_req_block(
+  struct spectrum_reader_context_ *context, struct rdma_req_block *block)
   __attribute__((nonnull));
-static void fulfill_rdma_req(struct rdma_req *req)
+static void cancel_rdma_req(
+  struct spectrum_reader_context_ *context, struct rdma_req *req)
+  __attribute__((nonnull));
+static void fulfill_rdma_req(
+  struct spectrum_reader_context_ *context, struct rdma_req *req)
   __attribute__((nonnull));
 static int compare_server_comp_ch_fd(
   const struct server_connection_context *c1,
@@ -252,12 +258,21 @@ static int loopback_msg(
 
 static struct rdma_req_block *
 new_rdma_req_block(
-  vysmaw_handle handle,
+  struct spectrum_reader_context_ *context,
   const struct server_connection_context *conn_ctx,
   const struct vys_signal_msg_payload *payload)
 {
-  struct rdma_req_block *result =
-    g_slice_alloc(SIZEOF_RDMA_REQ_BLOCK(payload->num_spectra));
+  struct rdma_req_block *result;
+  if (context->free_rdma_req_blocks == NULL) {
+    result = g_slice_alloc(
+      SIZEOF_RDMA_REQ_BLOCK(context->shared->handle->signal_msg_num_spectra));
+  } else {
+    result = context->free_rdma_req_blocks->data;
+    context->free_rdma_req_blocks =
+      g_slist_delete_link(
+        context->free_rdma_req_blocks,
+        context->free_rdma_req_blocks);
+  }
 
   result->data_info.num_channels = payload->num_channels;
   result->data_info.num_bins = payload->num_bins;
@@ -272,7 +287,7 @@ new_rdma_req_block(
   memcpy(result->data_info.config_id, payload->config_id,
          sizeof(result->data_info.config_id));
 
-  result->handle = handle;
+  result->handle = context->shared->handle;
   result->message = NULL;
   result->mr_id = payload->mr_id;
 
@@ -291,28 +306,30 @@ new_rdma_req_block(
 }
 
 static void
-free_rdma_req_block(struct rdma_req_block *block)
+free_rdma_req_block(
+  struct spectrum_reader_context_ *context, struct rdma_req_block *block)
 {
-  g_slice_free1(SIZEOF_RDMA_REQ_BLOCK(block->num_req), block);
+  context->free_rdma_req_blocks =
+    g_slist_prepend(context->free_rdma_req_blocks, block);
 }
 
 static void
-cancel_rdma_req(struct rdma_req *req)
+cancel_rdma_req(struct spectrum_reader_context_ *context, struct rdma_req *req)
 {
   struct rdma_req_block *blk = RDMA_REQ_BLOCK_P(req);
   if (blk->message != NULL)
     blk->message->data[req->index].values = NULL;
-  fulfill_rdma_req(req);
+  fulfill_rdma_req(context, req);
 }
 
 static void
-fulfill_rdma_req(struct rdma_req *req)
+fulfill_rdma_req(struct spectrum_reader_context_ *context, struct rdma_req *req)
 {
   struct rdma_req_block *blk = RDMA_REQ_BLOCK_P(req);
   if (--(blk->num_req_pending) == 0) {
     if (G_LIKELY(blk->message != NULL))
       post_msg(blk->handle, blk->message);
-    free_rdma_req_block(blk);
+    free_rdma_req_block(context, blk);
   }
 }
 
@@ -454,7 +471,7 @@ on_signal_message(struct spectrum_reader_context_ *context,
 
   if (G_LIKELY(rc == 0 && reqs != NULL)) {
     struct rdma_req_block *blk =
-      new_rdma_req_block(context->shared->handle, conn_ctx, payload);
+      new_rdma_req_block(context, conn_ctx, payload);
     g_queue_push_tail(reqs, blk);
     if (conn_ctx->established)
       rc = post_server_reads(context, conn_ctx, error_record);
@@ -661,7 +678,7 @@ post_server_reads(struct spectrum_reader_context_ *context,
         for (unsigned i = 0; i < req->index; ++i)
           rblk->message->data[i].values = NULL;
       } else {
-        cancel_rdma_req(req);
+        cancel_rdma_req(context, req);
         canceled = true;
       }
     }
@@ -703,7 +720,7 @@ post_server_reads(struct spectrum_reader_context_ *context,
       if (G_LIKELY(rc == 0)) {
         ++(conn_ctx->num_posted_wr);
       } else {
-        cancel_rdma_req(req);
+        cancel_rdma_req(context, req);
         canceled = true;
         VERB_ERR(error_record, errno, "rdma_post_read");
       }
@@ -769,9 +786,9 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
       struct rdma_req_block *rblk = g_queue_pop_head(conn_ctx->reqs);
       if (rblk->message != NULL) {
         for (unsigned i = rblk->next_req; i < rblk->num_req; ++i)
-          cancel_rdma_req(&rblk->reqs[i]);
+          cancel_rdma_req(context, &rblk->reqs[i]);
       } else {
-        free_rdma_req_block(rblk);
+        free_rdma_req_block(context, rblk);
       }
     }
 
@@ -1062,7 +1079,7 @@ on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
     default:
       break;
     }
-    fulfill_rdma_req(req);
+    fulfill_rdma_req(context, req);
     reqs = g_slist_delete_link(reqs, reqs);
   }
 
@@ -1492,6 +1509,16 @@ cleanup_and_return:
   post_msg(shared->handle, msg);
   handle_unref(shared->handle); // end message has been posted
   data_path_message_free(context.end_msg);
+
+  while (context.free_rdma_req_blocks != NULL) {
+    g_slice_free1(
+      SIZEOF_RDMA_REQ_BLOCK(context.shared->handle->signal_msg_num_spectra),
+      context.free_rdma_req_blocks->data);
+    context.free_rdma_req_blocks =
+      g_slist_delete_link(
+        context.free_rdma_req_blocks,
+        context.free_rdma_req_blocks);
+  }
 
   if (context.shared->signal_msg_buffers != NULL)
     vys_buffer_pool_free(context.shared->signal_msg_buffers);
