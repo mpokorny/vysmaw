@@ -363,7 +363,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 
   /* posted wr limits will not be updated further, set min_ack */
   context->min_ack =
-    context->min_posted_wr / config->signal_receive_min_ack_part;
+    MAX(context->min_posted_wr / config->signal_receive_min_ack_part, 1);
 
   /* get MTU */
   struct ibv_port_attr port_attr;

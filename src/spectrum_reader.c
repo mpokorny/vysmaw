@@ -377,8 +377,9 @@ set_max_posted_wr(struct spectrum_reader_context_ *context,
 {
   conn_ctx->max_posted_wr = max_posted_wr;
   conn_ctx->min_ack =
-    max_posted_wr
-    / context->shared->handle->config.rdma_read_min_ack_part;
+    MAX(
+      max_posted_wr / context->shared->handle->config.rdma_read_min_ack_part,
+      1);
 }
 
 static struct server_connection_context *
