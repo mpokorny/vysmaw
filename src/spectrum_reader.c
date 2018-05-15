@@ -490,30 +490,28 @@ on_data_path_message(struct spectrum_reader_context_ *context,
   switch (msg->typ) {
   case DATA_PATH_SIGNAL_MSG:
     if (G_LIKELY(context->state == STATE_RUN))
-      rc = on_signal_message(context, msg->signal_msg, error_record);
-    vys_buffer_pool_push(context->shared->signal_msg_buffers,
-                         msg->signal_msg);
-    data_path_message_free(msg);
+      rc = on_signal_message(context, &msg->signal_msg, error_record);
+    data_path_message_free(handle, msg);
     break;
 
   case DATA_PATH_RECEIVE_FAIL:
     mark_signal_receive_failure(handle, msg->wc_status);
-    data_path_message_free(msg);
+    data_path_message_free(handle, msg);
     break;
 
   case DATA_PATH_BUFFER_STARVATION:
     mark_signal_buffer_starvation(handle);
-    data_path_message_free(msg);
+    data_path_message_free(handle, msg);
     break;
 
   case DATA_PATH_VERSION_MISMATCH:
     mark_version_mismatch(handle, msg->received_message_version);
-    data_path_message_free(msg);
+    data_path_message_free(handle, msg);
     break;
 
   case DATA_PATH_RECEIVE_UNDERFLOW:
     mark_signal_receive_queue_underflow(handle);
-    data_path_message_free(msg);
+    data_path_message_free(handle, msg);
     break;
 
   case DATA_PATH_QUIT:
@@ -525,13 +523,13 @@ on_data_path_message(struct spectrum_reader_context_ *context,
           post_spectrum_buffer_starvation(handle);
         if (handle->num_spectra_mismatched_version > 0)
           post_version_mismatch(handle);
-        context->end_msg = data_path_message_new(
-          context->shared->handle->signal_msg_num_spectra);
+        context->end_msg = data_path_message_new(handle);
         context->end_msg->typ = DATA_PATH_END;
+        context->end_msg->error_record = NULL;
         rc = loopback_msg(context, context->end_msg, error_record);
         context->quit_msg = NULL;
       }
-      data_path_message_free(msg);
+      data_path_message_free(handle, msg);
     }
     break;
 
@@ -1231,8 +1229,7 @@ to_quit_state(struct spectrum_reader_context_ *context,
       }
     }
     if (quit_msg == NULL) {
-      quit_msg =
-        data_path_message_new(context->shared->handle->signal_msg_num_spectra);
+      quit_msg = data_path_message_new(context->shared->handle);
       quit_msg->typ = DATA_PATH_QUIT;
     }
     rc = loopback_msg(context, quit_msg, error_record);
@@ -1508,7 +1505,7 @@ cleanup_and_return:
   /* post result message consumer queue */
   post_msg(shared->handle, msg);
   handle_unref(shared->handle); // end message has been posted
-  data_path_message_free(context.end_msg);
+  data_path_message_free(shared->handle, context.end_msg);
 
   while (context.free_rdma_req_blocks != NULL) {
     g_slice_free1(
@@ -1520,8 +1517,8 @@ cleanup_and_return:
         context.free_rdma_req_blocks);
   }
 
-  if (context.shared->signal_msg_buffers != NULL)
-    vys_buffer_pool_free(context.shared->signal_msg_buffers);
+  if (context.shared->handle->data_path_msg_pool != NULL) 
+    vys_buffer_pool_free(context.shared->handle->data_path_msg_pool);
 
   g_array_free(context.pollfds, TRUE);
   g_array_free(context.new_pollfds, TRUE);

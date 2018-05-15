@@ -28,7 +28,7 @@ select_spectra(struct data_path_message *msg, struct consumer *consumer)
 {
   g_assert(msg->typ == DATA_PATH_SIGNAL_MSG);
 
-  const struct vys_signal_msg_payload *payload = &msg->signal_msg->payload;
+  const struct vys_signal_msg_payload *payload = &msg->signal_msg.payload;
 
   g_array_set_size(consumer->pass_filter_array, payload->num_spectra);
   bool *pass_filter = (bool *)consumer->pass_filter_array->data;
@@ -84,12 +84,12 @@ spectrum_selector(struct spectrum_selector_context *context)
          * are configured */
         GTimer *t = g_hash_table_lookup(
           prev_eagerly_forwarded,
-          &msg->signal_msg->payload.sockaddr);
+          &msg->signal_msg.payload.sockaddr);
         if (t == NULL) {
           t = g_timer_new();
           g_hash_table_insert(
             prev_eagerly_forwarded,
-            new_sockaddr_key(&msg->signal_msg->payload.sockaddr),
+            new_sockaddr_key(&msg->signal_msg.payload.sockaddr),
             t);
           selected = true;
         } else {
@@ -99,13 +99,10 @@ spectrum_selector(struct spectrum_selector_context *context)
           }
         }
       }
-      if (selected) {
+      if (selected)
         vys_async_queue_push(context->read_request_queue, msg);
-      } else {
-        vys_buffer_pool_push(context->signal_msg_buffers,
-                             msg->signal_msg);
-        data_path_message_free(msg);
-      }
+      else
+        data_path_message_free(context->handle, msg);
       break;
     }
     case DATA_PATH_QUIT:

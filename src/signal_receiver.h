@@ -26,8 +26,6 @@ struct signal_receiver_context {
 
   GAsyncQueue *signal_msg_queue;
 
-  struct vys_buffer_pool *signal_msg_buffers;
-
   int loop_fd;
 };
 

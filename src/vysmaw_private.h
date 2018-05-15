@@ -173,6 +173,7 @@ struct _vysmaw_handle {
   };
 
   struct vys_buffer_pool *header_pool;
+  struct vys_buffer_pool *data_path_msg_pool;
 
   unsigned num_spectrum_buffers_unavailable;
   unsigned num_signal_buffers_unavailable;
@@ -203,9 +204,12 @@ struct data_path_message {
     enum ibv_wc_status wc_status;
     struct vys_error_record *error_record;
     unsigned received_message_version;
-    struct vys_signal_msg *signal_msg;
+    struct vys_signal_msg signal_msg;
   };
 };
+
+#define SIZEOF_DATA_PATH_MESSAGE(n) (\
+    sizeof(struct data_path_message) + (n) * sizeof(struct vys_spectrum_info))
 
 extern char *config_vysmaw_base(void)
   __attribute__((malloc,returns_nonnull));
@@ -302,17 +306,14 @@ extern void init_consumer(
   vysmaw_message_queue *queue, struct consumer *consumer)
   __attribute__((nonnull));
 extern void init_signal_receiver(
-  vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-  struct vys_buffer_pool **signal_msg_buffers, int loop_fd)
+  vysmaw_handle handle, GAsyncQueue *signal_msg_queue, int loop_fd)
   __attribute__((nonnull));
 extern void init_spectrum_selector(
   vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-  struct vys_async_queue *read_request_queue,
-  struct vys_buffer_pool *signal_msg_buffers)
+  struct vys_async_queue *read_request_queue)
   __attribute__((nonnull));
 extern void init_spectrum_reader(
-  vysmaw_handle handle, struct vys_async_queue *read_request_queue,
-  struct vys_buffer_pool *signal_msg_buffers, int loop_fd)
+  vysmaw_handle handle, struct vys_async_queue *read_request_queue, int loop_fd)
   __attribute__((nonnull));
 extern int init_service_threads(vysmaw_handle handle)
   __attribute__((nonnull));
@@ -360,10 +361,10 @@ extern void message_release_all_buffers(struct vysmaw_message *message)
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
   __attribute__((nonnull));
 
-extern struct data_path_message *data_path_message_new(
-  unsigned max_spectra_per_signal)
+extern struct data_path_message *data_path_message_new(vysmaw_handle handle)
   __attribute__((malloc,returns_nonnull));
-extern void data_path_message_free(struct data_path_message *msg)
+extern void data_path_message_free(
+  vysmaw_handle handle, struct data_path_message *msg)
   __attribute__((nonnull));
 
 extern struct vysmaw_message *spectra_message_new(
