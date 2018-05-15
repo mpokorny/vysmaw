@@ -880,6 +880,8 @@ on_cm_event(struct spectrum_reader_context_ *context,
   struct rdma_cm_event *event = NULL;
   int rc = rdma_get_cm_event(context->event_channel, &event);
   if (G_UNLIKELY(rc != 0)) {
+    if (G_UNLIKELY(errno == EAGAIN || errno == EWOULDBLOCK))
+      return 0;
     VERB_ERR(error_record, errno, "rdma_get_cm_event");
     return rc;
   }
@@ -1026,12 +1028,9 @@ get_completed_requests(struct spectrum_reader_context_ *context, int fd,
 
   struct ibv_cq *ev_cq;
   void *cq_ctx = NULL;
-  int rc =
-    ibv_get_cq_event((*conn_ctx)->id->send_cq_channel, &ev_cq, &cq_ctx);
-  if (G_UNLIKELY(rc != 0)) {
-    VERB_ERR(error_record, errno, "ibv_get_cq_event");
-    return rc;
-  }
+  int rc = ibv_get_cq_event((*conn_ctx)->id->send_cq_channel, &ev_cq, &cq_ctx);
+  if (G_UNLIKELY(rc != 0))
+    return 0; // EAGAIN, effectively
 
   (*conn_ctx)->num_not_ack++;
   ack_completions(*conn_ctx, (*conn_ctx)->min_ack);
@@ -1056,7 +1055,10 @@ on_read_completion(struct spectrum_reader_context_ *context, unsigned pfd,
   struct server_connection_context *conn_ctx;
   int rc = get_completed_requests(context, pollfd->fd, &conn_ctx, &reqs,
                                   error_record);
-  if (G_UNLIKELY(rc != 0)) return rc;
+  if (G_UNLIKELY(rc != 0))
+    return rc;
+  if (G_UNLIKELY(reqs == NULL))
+    return 0;
 
   g_timer_start(conn_ctx->last_access);
 

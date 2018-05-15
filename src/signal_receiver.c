@@ -690,10 +690,8 @@ on_receive_completion(struct signal_receiver_context_ *context,
   struct ibv_cq *ev_cq;
   void *ev_ctx;
   int rc = ibv_get_cq_event(context->comp_channel, &ev_cq, &ev_ctx);
-  if (G_UNLIKELY(rc != 0)) {
-    VERB_ERR(error_record, errno, "ibv_get_cq_event");
-    return rc;
-  }
+  if (G_UNLIKELY(rc != 0))
+    return 0; // EAGAIN, effectively
   g_assert(ev_cq == context->cq);
 
   /* acknowledge completion (maybe) */
