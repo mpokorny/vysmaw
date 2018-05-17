@@ -28,7 +28,7 @@ select_spectra(struct data_path_message *msg, struct consumer *consumer)
 {
   g_assert(msg->typ == DATA_PATH_SIGNAL_MSG);
 
-  const struct vys_signal_msg_payload *payload = &msg->signal_msg.payload;
+  struct vys_signal_msg_payload *payload = &msg->signal_msg.payload;
 
   g_array_set_size(consumer->pass_filter_array, payload->num_spectra);
   bool *pass_filter = (bool *)consumer->pass_filter_array->data;
@@ -44,11 +44,13 @@ select_spectra(struct data_path_message *msg, struct consumer *consumer)
     consumer->user_data,
     pass_filter);
 
-  const bool *pass_filter_end = pass_filter + payload->num_spectra;
   bool result = false;
-  while (!result && pass_filter != pass_filter_end)
-    result = *pass_filter++;
-
+  for (unsigned i = 0; i < payload->num_spectra; ++i) {
+    if (!pass_filter[i])
+      payload->infos[i].data_addr = 0;
+    else
+      result = true;
+  }
   return result;
 }
 

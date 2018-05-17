@@ -105,7 +105,7 @@ static struct rdma_req_block *new_rdma_req_block(
   struct spectrum_reader_context_ *context,
   const struct server_connection_context *conn_ctx,
   const struct vys_signal_msg_payload *payload)
-  __attribute__((nonnull,returns_nonnull,malloc));
+  __attribute__((nonnull,malloc));
 static void free_rdma_req_block(
   struct spectrum_reader_context_ *context, struct rdma_req_block *block)
   __attribute__((nonnull));
@@ -291,17 +291,24 @@ new_rdma_req_block(
   result->message = NULL;
   result->mr_id = payload->mr_id;
 
-  result->next_req = 0;
-  result->num_req = payload->num_spectra;
-  result->num_req_pending = payload->num_spectra;
-
+  unsigned num_req = 0;
   const struct vys_spectrum_info *info = payload->infos;
   struct rdma_req *req = result->reqs;
-  for (unsigned i = 0; i < payload->num_spectra; ++i, ++req, ++info) {
-    req->index = i;
-    memcpy(&(req->spectrum_info), info, sizeof(req->spectrum_info));
+  for (unsigned i = 0; i < payload->num_spectra; ++i, ++info) {
+    if (info->data_addr != 0) {
+      memcpy(&(req->spectrum_info), info, sizeof(req->spectrum_info));
+      req->index = num_req++;
+      ++req;
+    }
   }
-
+  if (G_LIKELY(num_req > 0)) {
+    result->next_req = 0;
+    result->num_req = num_req;
+    result->num_req_pending = num_req;
+  } else {
+    free_rdma_req_block(context, result);
+    result = NULL;
+  }
   return result;
 }
 
@@ -472,9 +479,12 @@ on_signal_message(struct spectrum_reader_context_ *context,
   if (G_LIKELY(rc == 0 && reqs != NULL)) {
     struct rdma_req_block *blk =
       new_rdma_req_block(context, conn_ctx, payload);
-    g_queue_push_tail(reqs, blk);
-    if (conn_ctx->established)
-      rc = post_server_reads(context, conn_ctx, error_record);
+    if (G_LIKELY(blk != NULL)) {
+      /* context->rdma_req_backlog += blk->num_req; */
+      g_queue_push_tail(reqs, blk);
+      if (conn_ctx->established)
+        rc = post_server_reads(context, conn_ctx, error_record);
+    }
   }
 
   return rc;
