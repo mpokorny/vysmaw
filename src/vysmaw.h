@@ -87,7 +87,7 @@ struct vysmaw_configuration {
    * the vysmaw application through the consumer callbacks while the vysmaw
    * library maintains "signal_message_receive_min_posted" work requests for
    * receiving signal messages. The value of this parameter need not be an
-   * integer, but it's minimum value is 1. */
+   * integer, but its minimum value is 1. */
   double signal_message_pool_overhead_factor;
 
   /* Number of work requests on the signal message receive queue at which a
