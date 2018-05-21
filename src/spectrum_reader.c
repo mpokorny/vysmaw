@@ -51,6 +51,7 @@ struct spectrum_reader_context_ {
   GHashTable *connections;
   GSequence *fd_connections;
   GSList *free_rdma_req_blocks;
+  unsigned rdma_req_backlog;
 };
 
 struct server_connection_context {
@@ -480,7 +481,7 @@ on_signal_message(struct spectrum_reader_context_ *context,
     struct rdma_req_block *blk =
       new_rdma_req_block(context, conn_ctx, payload);
     if (G_LIKELY(blk != NULL)) {
-      /* context->rdma_req_backlog += blk->num_req; */
+      context->rdma_req_backlog += blk->num_req;
       g_queue_push_tail(reqs, blk);
       if (conn_ctx->established)
         rc = post_server_reads(context, conn_ctx, error_record);
@@ -676,6 +677,7 @@ post_server_reads(struct spectrum_reader_context_ *context,
       g_queue_pop_head(conn_ctx->reqs);
     else
       ++(rblk->next_req);
+    --(context->rdma_req_backlog);
     if (rblk->message == NULL) {
       rblk->message =
         spectra_message_new(
@@ -792,6 +794,7 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
   if (!conn_ctx->disconnecting) {
     while (!g_queue_is_empty(conn_ctx->reqs)) {
       struct rdma_req_block *rblk = g_queue_pop_head(conn_ctx->reqs);
+      context->rdma_req_backlog -= rblk->num_req - rblk->next_req;
       if (rblk->message != NULL) {
         for (unsigned i = rblk->next_req; i < rblk->num_req; ++i)
           cancel_rdma_req(context, &rblk->reqs[i]);
@@ -1256,11 +1259,14 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
                      struct vys_error_record **error_record)
 {
   int result = 0;
+  GTimer *req_backlog_timer = g_timer_new();
+  unsigned long acc_req_backlog = 0;
+  unsigned num_req_backlog_samples = 0;
   bool quit = false;
   while (!quit) {
     int rc = 0;
     int nfd = poll((struct pollfd *)(context->pollfds->data),
-                   context->pollfds->len, -1);
+                   context->pollfds->len, 1);
     if (G_LIKELY(nfd > 0)) {
       rc = on_poll_events(context, error_record);
     } else if (G_UNLIKELY(nfd < 0 && errno != EINTR)) {
@@ -1275,6 +1281,20 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
     quit = (context->state == STATE_DONE
             && (context->connections == NULL
                 || g_hash_table_size(context->connections) == 0));
+
+    // keep rdma request backlog statistics; not currently used for any purpose
+    // but debugging, but it might be useful, so leaving the code in place
+    acc_req_backlog += context->rdma_req_backlog;
+    ++num_req_backlog_samples;
+    gdouble elapsed = g_timer_elapsed(req_backlog_timer, NULL);
+    if (elapsed >= 1.0 /* TODO: make configurable */) {
+      g_timer_start(req_backlog_timer);
+      /* printf( */
+      /*   "rdma backlog %g\n", */
+      /*   (double)acc_req_backlog / num_req_backlog_samples); */
+      acc_req_backlog = 0;
+      num_req_backlog_samples = 0;
+    }
   }
   return result;
 }
