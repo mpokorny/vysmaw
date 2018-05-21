@@ -1164,39 +1164,39 @@ on_poll_events(struct spectrum_reader_context_ *context,
   if (tm_pollfd->revents & POLLIN)
     rc1 = on_inactivity_timer_event(context, error_record);
 
-  /* read request events */
+  /* read completion events */
   int rc2 = 0;
+  for (unsigned i = NUM_FIXED_FDS; i < context->pollfds->len; ++i) {
+    struct pollfd *ev_pollfd =
+      &g_array_index(context->pollfds, struct pollfd, i);
+    int rc3 = 0;
+    if (ev_pollfd->revents & POLLIN) {
+      rc3 = on_read_completion(context, i, error_record);
+    } else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
+      MSG_ERROR(error_record, -1, "%s",
+                "connection event channel ERR or HUP");
+      rc3 = -1;
+    }
+    if (G_UNLIKELY(rc2 == 0 && rc3 != 0)) rc2 = rc3;
+  }
+
+  /* read request events */
+  int rc4 = 0;
   struct pollfd *rr_pollfd = &g_array_index(context->pollfds, struct pollfd,
                                             READ_REQUEST_QUEUE_FD_INDEX);
   if (rr_pollfd->revents & POLLIN) {
     struct data_path_message *msg =
       vys_async_queue_pop(context->shared->read_request_queue);
     if (msg != NULL)
-      rc2 = on_data_path_message(context, msg, error_record);
+      rc4 = on_data_path_message(context, msg, error_record);
   }
 
   /* buffer pool idle timer events */
-  int rc3 = 0;
+  int rc5 = 0;
   struct pollfd *bp_pollfd = &g_array_index(context->pollfds, struct pollfd,
                                             BUFFER_POOL_IDLE_TIMER_FD_INDEX);
   if (bp_pollfd->revents & POLLIN)
-    rc3 = on_buffer_pool_idle_timer_event(context, error_record);
-
-  /* read completion events */
-  int rc4 = 0;
-  for (unsigned i = NUM_FIXED_FDS; i < context->pollfds->len; ++i) {
-    struct pollfd *ev_pollfd =
-      &g_array_index(context->pollfds, struct pollfd, i);
-    int rc5 = 0;
-    if (ev_pollfd->revents & POLLIN) {
-      rc5 = on_read_completion(context, i, error_record);
-    } else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
-      MSG_ERROR(error_record, -1, "%s",
-                "connection event channel ERR or HUP");
-      rc5 = -1;
-    }
-    if (G_UNLIKELY(rc4 == 0 && rc5 != 0)) rc4 = rc5;
-  }
+    rc5 = on_buffer_pool_idle_timer_event(context, error_record);
 
   /* cm events */
   int rc6 = 0;
@@ -1220,8 +1220,8 @@ on_poll_events(struct spectrum_reader_context_ *context,
   int rc;
   if (G_UNLIKELY(rc1 != 0)) rc = rc1;
   else if (G_UNLIKELY(rc2 != 0)) rc = rc2;
-  else if (G_UNLIKELY(rc3 != 0)) rc = rc3;
   else if (G_UNLIKELY(rc4 != 0)) rc = rc4;
+  else if (G_UNLIKELY(rc5 != 0)) rc = rc5;
   else if (G_UNLIKELY(rc6 != 0)) rc = rc6;
   else rc = 0;
   return rc;
