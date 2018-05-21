@@ -58,7 +58,8 @@ struct signal_receiver_context_ {
   unsigned min_posted_wr;
   unsigned min_ack;
   unsigned num_not_ack;
-  struct recv_wr *rem_wrs;
+  struct recv_wr *rem_wrs_head;
+  struct recv_wr *rem_wrs_tail;
   unsigned len_rem_wrs;
 };
 
@@ -69,10 +70,11 @@ struct recv_wr {
 };
 
 static struct recv_wr *recv_wr_new(
-  uint64_t addr, uint32_t length, uint32_t lkey)
+  struct data_path_message *msg, uint32_t length, uint32_t lkey)
   __attribute__((returns_nonnull,malloc));
-static struct recv_wr *recv_wr_prepend_new(
-  struct recv_wr *wrs, uint64_t addr, uint32_t length, uint32_t lkey)
+static struct recv_wr *recv_wr_append_new(
+  struct recv_wr *tail, struct data_path_message *msg, uint32_t length,
+  uint32_t lkey)
   __attribute__((returns_nonnull,malloc));
 static void recv_wr_free(struct recv_wr *wrs);
 static struct recv_wr *recv_wr_next(struct recv_wr *wr)
@@ -141,25 +143,26 @@ static int stop_shutdown_timer(
   __attribute__((nonnull));
 
 static struct recv_wr *
-recv_wr_new(uint64_t addr, uint32_t length, uint32_t lkey)
+recv_wr_new(struct data_path_message *msg, uint32_t length, uint32_t lkey)
 {
   struct recv_wr *result = g_slice_new(struct recv_wr);
   result->ibv_recv_wr.sg_list = &result->ibv_sge;
   result->ibv_recv_wr.num_sge = 1;
   result->ibv_recv_wr.next = NULL;
-  result->ibv_recv_wr.wr_id = addr;
-  result->ibv_sge.addr = addr;
+  result->ibv_recv_wr.wr_id = (uint64_t)msg;
+  result->ibv_sge.addr = (uint64_t)&msg->signal_msg;
   result->ibv_sge.length = length;
   result->ibv_sge.lkey = lkey;
   return result;
 }
 
 static struct recv_wr *
-recv_wr_prepend_new(struct recv_wr *wrs, uint64_t addr, uint32_t length,
-                    uint32_t lkey)
+recv_wr_append_new(struct recv_wr *tail, struct data_path_message *msg,
+                   uint32_t length, uint32_t lkey)
 {
-  struct recv_wr *result = recv_wr_new(addr, length, lkey);
-  result->ibv_recv_wr.next = &wrs->ibv_recv_wr;
+  struct recv_wr *result = recv_wr_new(msg, length, lkey);
+  if (tail != NULL)
+    tail->ibv_recv_wr.next = &result->ibv_recv_wr;
   return result;
 }
 
@@ -298,9 +301,11 @@ start_signal_receive(struct signal_receiver_context_ *context,
   if (G_UNLIKELY(rc != 0))
     return -1;
 
+  /* vysmaw_handle for convenience */
+  vysmaw_handle handle = context->shared->handle;
+
   /* config pointer for convenience */
-  const struct vysmaw_configuration *config =
-    &context->shared->handle->config;
+  const struct vysmaw_configuration *config = &handle->config;
 
   /* set posted wr limits */
   struct ibv_device_attr dev_attr;
@@ -363,7 +368,7 @@ start_signal_receive(struct signal_receiver_context_ *context,
 
   /* posted wr limits will not be updated further, set min_ack */
   context->min_ack =
-    context->min_posted_wr / config->signal_receive_min_ack_part;
+    MAX(context->min_posted_wr / config->signal_receive_min_ack_part, 1);
 
   /* get MTU */
   struct ibv_port_attr port_attr;
@@ -375,25 +380,24 @@ start_signal_receive(struct signal_receiver_context_ *context,
   unsigned mtu = 1u << (port_attr.active_mtu + 7);
 
   /* set size of signal buffers to be maximum possible given mtu */
-  context->shared->signal_msg_num_spectra =
-    MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
-  size_t sizeof_signal_msg =
-    SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra);
+  handle->signal_msg_num_spectra = MAX_VYS_SIGNAL_MSG_LENGTH(mtu);
+  size_t sizeof_data_path_msg =
+    SIZEOF_DATA_PATH_MESSAGE(handle->signal_msg_num_spectra);
 
   /* create signal message buffer pool...num_signal_msg_buffers must be
    * updated, as min_posted_wr may have been reduced. */
   num_signal_msg_buffers =
     context->min_posted_wr * config->signal_message_pool_overhead_factor;
-  context->shared->signal_msg_buffers =
-    vys_buffer_pool_new(num_signal_msg_buffers, sizeof_signal_msg);
+  handle->data_path_msg_pool =
+    vys_buffer_pool_new(num_signal_msg_buffers, sizeof_data_path_msg);
 
   context->wcs = g_new(struct ibv_wc, context->max_posted_wr);
 
   /* register memory to receive signal messages */
   context->mr = rdma_reg_msgs(
     context->id,
-    context->shared->signal_msg_buffers->pool,
-    context->shared->signal_msg_buffers->pool_size);
+    handle->data_path_msg_pool->pool,
+    handle->data_path_msg_pool->pool_size);
   if (G_UNLIKELY(context->mr == NULL)) {
     VERB_ERR(error_record, errno, "rdma_reg_msgs");
     return -1;
@@ -473,9 +477,10 @@ stop_signal_receive(struct signal_receiver_context_ *context,
       rdma_destroy_qp(context->id);
   }
 
-  if (context->rem_wrs != NULL) {
-    recv_wr_free(context->rem_wrs);
-    context->rem_wrs = NULL;
+  if (context->rem_wrs_head != NULL) {
+    recv_wr_free(context->rem_wrs_head);
+    context->rem_wrs_head = NULL;
+    context->rem_wrs_tail = NULL;
   }
 
   if (context->cq != NULL) {
@@ -524,14 +529,18 @@ static bool
 new_wr(struct signal_receiver_context_ *context)
 {
   bool result;
-  struct vys_signal_msg *buff =
-    vys_buffer_pool_pop(context->shared->signal_msg_buffers);
-  if (G_LIKELY(buff != NULL)) {
-    context->rem_wrs = recv_wr_prepend_new(
-      context->rem_wrs,
-      (uint64_t)buff,
-      SIZEOF_VYS_SIGNAL_MSG(context->shared->signal_msg_num_spectra),
-      context->mr->lkey);
+  struct data_path_message *msg =
+    data_path_message_new(context->shared->handle);
+  if (G_LIKELY(msg != NULL)) {
+    msg->typ = DATA_PATH_SIGNAL_MSG;
+    context->rem_wrs_tail =
+      recv_wr_append_new(
+        context->rem_wrs_tail,
+        msg,
+        SIZEOF_VYS_SIGNAL_MSG(context->shared->handle->signal_msg_num_spectra),
+        context->mr->lkey);
+    if (context->rem_wrs_head == NULL)
+      context->rem_wrs_head = context->rem_wrs_tail;
     context->len_rem_wrs++;
     result = true;
   } else {
@@ -565,30 +574,19 @@ poll_completions(struct signal_receiver_context_ *context,
     if (G_LIKELY(context->state == STATE_RUN)) {
       /* for each completion event, process the event */
       for (int i = 0; i < nc; ++i) {
-        struct vys_signal_msg *s_msg =
-          (struct vys_signal_msg *)context->wcs[i].wr_id;
-        struct data_path_message *dp_msg = data_path_message_new(
-          context->shared->signal_msg_num_spectra);
+        struct data_path_message *dp_msg =
+          (struct data_path_message *)context->wcs[i].wr_id;
         if (G_LIKELY(context->wcs[i].status == IBV_WC_SUCCESS)) {
           /* got a signal message */
-          if (G_LIKELY(s_msg->payload.vys_version == VYS_VERSION)) {
-            dp_msg->typ = DATA_PATH_SIGNAL_MSG;
-            dp_msg->signal_msg = s_msg;
-          } else {
+          if (G_UNLIKELY(
+                dp_msg->signal_msg.payload.vys_version != VYS_VERSION)) {
             /* protocol version mismatch */
             dp_msg->typ = DATA_PATH_VERSION_MISMATCH;
             dp_msg->received_message_version =
-              s_msg->payload.vys_version;
-            /* put signal message buffer back into pool */
-            vys_buffer_pool_push(
-              context->shared->signal_msg_buffers, s_msg);
+              dp_msg->signal_msg.payload.vys_version;
           }
         } else {
-          /* failed receive, put signal message buffer back into
-           * pool */
-          vys_buffer_pool_push(
-            context->shared->signal_msg_buffers, s_msg);
-          /* notify downstream of receive failure */
+          /* failed receive, notify downstream of receive failure */
           dp_msg->typ = DATA_PATH_RECEIVE_FAIL;
           dp_msg->wc_status = context->wcs[i].status;
         }
@@ -597,10 +595,9 @@ poll_completions(struct signal_receiver_context_ *context,
       }
     } else {
       for (int i = 0; i < nc; ++i) {
-        struct vys_signal_msg *s_msg =
-          (struct vys_signal_msg *)context->wcs[i].wr_id;
-        vys_buffer_pool_push(context->shared->signal_msg_buffers,
-                             s_msg);
+        struct data_path_message *dp_msg =
+          (struct data_path_message *)context->wcs[i].wr_id;
+        data_path_message_free(context->shared->handle, dp_msg);
       }
     }
   }
@@ -621,7 +618,7 @@ create_new_wrs(struct signal_receiver_context_ *context)
     }
     if (total_wrs < context->min_posted_wr) {
       struct data_path_message *dp_msg =
-        data_path_message_new(context->shared->signal_msg_num_spectra);
+        data_path_message_new(context->shared->handle);
       dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
       g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
     }
@@ -634,19 +631,19 @@ post_wrs(struct signal_receiver_context_ *context,
 {
   int rc = 0;
   if (G_LIKELY(context->state == STATE_RUN)) {
-    if (G_LIKELY(context->rem_wrs != NULL)) {
-      struct recv_wr *wrs = context->rem_wrs;
+    if (G_LIKELY(context->rem_wrs_head != NULL)) {
+      struct recv_wr *wrs = context->rem_wrs_head;
       /* post wrs */
-      context->rem_wrs = NULL;
+      context->rem_wrs_head = NULL;
       rc = ibv_post_recv(
         context->id->qp,
         &wrs->ibv_recv_wr,
-        (struct ibv_recv_wr **)&context->rem_wrs);
+        (struct ibv_recv_wr **)&context->rem_wrs_head);
       if (G_LIKELY(rc == 0 || rc == ENOMEM)) {
         rc = 0;
         struct recv_wr *last_wr = NULL;
         struct recv_wr *next_wr = wrs;
-        while (next_wr != context->rem_wrs) {
+        while (next_wr != context->rem_wrs_head) {
           context->num_posted_wr++;
           context->len_rem_wrs--;
           last_wr = next_wr;
@@ -656,6 +653,8 @@ post_wrs(struct signal_receiver_context_ *context,
           last_wr->ibv_recv_wr.next = NULL;
           recv_wr_free(wrs);
         }
+        if (context->rem_wrs_head == NULL)
+          context->rem_wrs_tail = NULL;
       } else {
         VERB_ERR(error_record, rc, "ibv_post_recv");
       }
@@ -671,14 +670,14 @@ post_wrs(struct signal_receiver_context_ *context,
       /* transitioned from not-underflow to underflow...send message */
       context->in_underflow = true;
       struct data_path_message *dp_msg =
-        data_path_message_new(
-          context->shared->signal_msg_num_spectra);
+        data_path_message_new(context->shared->handle);
       dp_msg->typ = DATA_PATH_RECEIVE_UNDERFLOW;
       g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
     }
-  } else if (context->rem_wrs != NULL) {
-    recv_wr_free(context->rem_wrs);
-    context->rem_wrs = NULL;
+  } else if (context->rem_wrs_head != NULL) {
+    recv_wr_free(context->rem_wrs_head);
+    context->rem_wrs_head = NULL;
+    context->rem_wrs_tail = NULL;
   }
   return rc;
 }
@@ -691,10 +690,8 @@ on_receive_completion(struct signal_receiver_context_ *context,
   struct ibv_cq *ev_cq;
   void *ev_ctx;
   int rc = ibv_get_cq_event(context->comp_channel, &ev_cq, &ev_ctx);
-  if (G_UNLIKELY(rc != 0)) {
-    VERB_ERR(error_record, errno, "ibv_get_cq_event");
-    return rc;
-  }
+  if (G_UNLIKELY(rc != 0))
+    return 0; // EAGAIN, effectively
   g_assert(ev_cq == context->cq);
 
   /* acknowledge completion (maybe) */
@@ -725,8 +722,7 @@ to_quit_state(struct signal_receiver_context_ *context,
 {
   g_assert(context->state != STATE_DONE);
   if (quit_msg == NULL) {
-    quit_msg =
-      data_path_message_new(context->shared->signal_msg_num_spectra);
+    quit_msg = data_path_message_new(context->shared->handle);
     quit_msg->typ = DATA_PATH_QUIT;
   }
   g_async_queue_push(context->shared->signal_msg_queue, quit_msg);

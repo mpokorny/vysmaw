@@ -270,45 +270,21 @@ cdef class Configuration:
     def rdma_read_min_ack_part(self, unsigned value):
         self._c_configuration.rdma_read_min_ack_part = value
 
-    cdef tuple start(self, unsigned num_filters,
-                     vysmaw_spectrum_filter *filters,
-                     void **user_data):
-        if filters is NULL or num_filters == 0:
-            raise ValueError("At least one filter is required to start vysmaw")
-        consumers = [Consumer() for i in range(num_filters)]
-        cdef vysmaw_consumer **cp_array = <vysmaw_consumer **>malloc(
-            num_filters * sizeof(vysmaw_consumer *))
-        cdef void *udata
-        cdef Consumer c
-        for i in range(num_filters):
-            if user_data is not NULL:
-                udata = user_data[i]
-            else:
-                udata = NULL
-            c = consumers[i]
-            c.set_filter(filters[i], udata)
-            cp_array[i] = c._c_consumer
-        handle = Handle.wrap(vysmaw_start(
-            self._c_configuration, num_filters, cp_array))
-        free(cp_array)
-        return (handle, consumers)
+    cdef tuple start(self, vysmaw_spectrum_filter filtr, void *user_data):
+        if filtr is NULL:
+            raise ValueError("Non-null filter required to start vysmaw")
+        cdef Consumer c = Consumer()
+        c.set_filter(filtr, user_data)
+        handle = Handle.wrap(vysmaw_start(self._c_configuration, c._c_consumer))
+        return (handle, c)
 
-    def start_py(self, filters):
+    def start_py(self, filtr):
         __logger.warning("'start_py' function is for testing only, "
                          "and should not be used in production code")
-        n = len(filters)
-        consumers = [Consumer() for i in range(n)]
-        for i in range(n):
-            consumers[i].set_py_filter(filters[i])
-        cdef vysmaw_consumer **cp_array = <vysmaw_consumer **>malloc(
-            n * sizeof(vysmaw_consumer *))
-        cdef Consumer c
-        for i in range(n):
-            c = consumers[i]
-            cp_array[i] = c._c_consumer
-        handle = Handle.wrap(vysmaw_start(self._c_configuration, n, cp_array))
-        free(cp_array)
-        return (handle, consumers)
+        cdef Consumer c = Consumer()
+        c.set_py_filter(filtr)
+        handle = Handle.wrap(vysmaw_start(self._c_configuration, c._c_consumer))
+        return (handle, c)
 
 cdef class Handle:
 
@@ -497,20 +473,16 @@ cdef class Message:
     cdef Message wrap(vysmaw_message *msg):
         assert msg is not NULL
         msgtype = msg[0].typ
-        if msgtype == VYSMAW_MESSAGE_VALID_BUFFER:
-            result = ValidBufferMessage()
-        elif msgtype == VYSMAW_MESSAGE_ID_FAILURE:
-            result = IdFailureMessage()
+        if msgtype == VYSMAW_MESSAGE_SPECTRA:
+            result = SpectraMessage()
         elif msgtype == VYSMAW_MESSAGE_QUEUE_ALERT:
             result = QueueAlertMessage()
-        elif msgtype == VYSMAW_MESSAGE_DATA_BUFFER_STARVATION:
-            result = DataBufferStarvationMessage()
+        elif msgtype == VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION:
+            result = SpectrumBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
             result = SignalBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
             result = SignalReceiveFailureMessage()
-        elif msgtype == VYSMAW_MESSAGE_RDMA_READ_FAILURE:
-            result = RDMAReceiveFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_VERSION_MISMATCH:
             result = VersionMismatchMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW:
@@ -526,34 +498,28 @@ cdef class Message:
             self._c_message = NULL
         return
 
-cdef class ValidBufferMessage(Message):
+cdef class SpectraMessage(Message):
 
     def __cinit__(self):
         return
 
     def __str__(self):
-        return show_properties(self, ValidBufferMessage)
+        return show_properties(self, SpectraMessage)
 
     @property
     def info(self):
-        return DataInfo.wrap(&(self._c_message[0].content.valid_buffer.info))
+        return DataInfo.wrap(&(self._c_message[0].content.spectra.info))
 
     @property
-    def spectrum(self):
-        n = int((self._c_message[0].content.valid_buffer.buffer_size
-                 - VYS_SPECTRUM_OFFSET) / sizeof(float complex))
-        cdef float complex[:] result = \
-            <float complex[:n]>self._c_message[0].content.valid_buffer.spectrum
-        return result
-
-cdef class IdFailureMessage(Message):
-
-    def __str__(self):
-        return show_properties(self, IdFailureMessage)
+    def spectrum_buffer_size(self):
+        return self._c_message[0].content.spectra.spectrum_buffer_size
 
     @property
-    def info(self):
-        return DataInfo.wrap(&(self._c_message[0].content.id_failure))
+    def num_spectra(self):
+        return self._c_message[0].content.spectra.num_spectra
+
+    def spectrum(self, unsigned n):
+        return Spectrum.get(self._c_message, n)
 
 cdef class QueueAlertMessage(Message):
 
@@ -564,14 +530,14 @@ cdef class QueueAlertMessage(Message):
     def queue_depth(self):
         return self._c_message[0].content.queue_depth
 
-cdef class DataBufferStarvationMessage(Message):
+cdef class SpectrumBufferStarvationMessage(Message):
 
     def __str__(self):
-        return show_properties(self, DataBufferStarvationMessage)
+        return show_properties(self, SpectrumBufferStarvationMessage)
 
     @property
-    def num_data_buffers_unavailable(self):
-        return self._c_message[0].content.num_data_buffers_unavailable
+    def num_spectrum_buffers_unavailable(self):
+        return self._c_message[0].content.num_spectrum_buffers_unavailable
 
 cdef class SignalBufferStarvationMessage(Message):
 
@@ -591,15 +557,6 @@ cdef class SignalReceiveFailureMessage(Message):
     def signal_receive_status(self):
         return (<bytes>self._c_message[0].content.signal_receive_status).\
             decode('ascii')
-
-cdef class RDMAReceiveFailureMessage(Message):
-
-    def __str__(self):
-        return show_properties(self, RDMAReceiveFailureMessage)
-
-    @property
-    def rdma_read_status(self):
-        return (<bytes>self._c_message[0].content.rdma_read_status)
 
 cdef class VersionMismatchMessage(Message):
 
@@ -624,3 +581,35 @@ cdef class EndMessage(Message):
     def result(self):
         cdef vysmaw_result *vr = &self._c_message[0].content.result
         return Result.wrap(vr)
+
+cdef class Spectrum:
+
+    def __cinit__(self):
+        return
+
+    @staticmethod
+    cdef Spectrum get(vysmaw_message* msg, unsigned n):
+        result = Spectrum()
+        result._c_spectrum = &msg[0].data[n]
+        result._length = \
+            msg[0].content.spectra.spectrum_buffer_size // sizeof(float complex)
+        return result
+
+
+    @property
+    def timestamp(self):
+        return self._c_buffer[0].timestamp
+
+    @property
+    def id_failure(self):
+        return self._c_buffer[0].id_failure
+
+    @property
+    def rdma_read_status(self):
+        return (<bytes>self._c_buffer[0].rdma_read_status).decode('ascii')
+
+    @property
+    def values(self):
+        cdef float complex[:] result = \
+            <float complex[:self._length]>self._c_spectrum[0].values
+        return result

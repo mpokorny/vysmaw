@@ -22,9 +22,8 @@ from libc.stdint cimport *
 cdef class Configuration:
     cdef vysmaw_configuration *_c_configuration
 
-    cdef tuple start(self, unsigned num_filters,
-                     vysmaw_spectrum_filter *filters,
-                     void **user_data)
+    cdef tuple start(self, vysmaw_spectrum_filter filtr,
+                     void *user_data)
 
 cdef class Handle:
     cdef vysmaw_handle _c_handle
@@ -67,3 +66,11 @@ cdef class Message:
     cdef Message wrap(vysmaw_message *msg)
 
     cpdef unref(self)
+
+cdef class Spectrum:
+    cdef vysmaw_spectrum *_c_spectrum
+
+    cdef unsigned _length
+
+    @staticmethod
+    cdef Spectrum get(vysmaw_message *msg, unsigned n)

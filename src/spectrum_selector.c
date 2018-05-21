@@ -20,45 +20,36 @@
 
 #define MIN_EAGER_CONNECT_IDLE_SEC 0.1
 
-static bool select_spectra(
-  struct data_path_message *msg, struct consumer *consumers,
-  unsigned num_consumers)
+static bool select_spectra(struct data_path_message *msg, struct consumer *consumer)
   __attribute__((nonnull));
 
 static bool
-select_spectra(struct data_path_message *msg, struct consumer *consumers,
-               unsigned num_consumers)
+select_spectra(struct data_path_message *msg, struct consumer *consumer)
 {
   g_assert(msg->typ == DATA_PATH_SIGNAL_MSG);
 
-  const struct vys_signal_msg_payload *payload = &msg->signal_msg->payload;
+  struct vys_signal_msg_payload *payload = &msg->signal_msg.payload;
+
+  g_array_set_size(consumer->pass_filter_array, payload->num_spectra);
+  bool *pass_filter = (bool *)consumer->pass_filter_array->data;
+  consumer->spectrum_filter_fn(
+    payload->config_id,
+    payload->stations,
+    payload->baseband_index,
+    payload->baseband_id,
+    payload->spectral_window_index,
+    payload->polarization_product_id,
+    payload->infos,
+    payload->num_spectra,
+    consumer->user_data,
+    pass_filter);
 
   bool result = false;
-  for (unsigned i = 0; i < payload->num_spectra; ++i)
-    msg->consumers[i] = NULL;
-
-  struct consumer *consumer = consumers;
-  while (num_consumers-- > 0) {
-    g_array_set_size(consumer->pass_filter_array, payload->num_spectra);
-    bool *pass_filter = (bool *)consumer->pass_filter_array->data;
-    consumer->spectrum_filter_fn(
-      payload->config_id,
-      payload->stations,
-      payload->baseband_index,
-      payload->baseband_id,
-      payload->spectral_window_index,
-      payload->polarization_product_id,
-      payload->infos,
-      payload->num_spectra,
-      consumer->user_data,
-      pass_filter);
-    for (unsigned j = 0; j < payload->num_spectra; ++j)
-      if (*pass_filter++) {
-        result = true;
-        msg->consumers[j] =
-          g_slist_prepend(msg->consumers[j], consumer);
-      }
-    consumer++;
+  for (unsigned i = 0; i < payload->num_spectra; ++i) {
+    if (!pass_filter[i])
+      payload->infos[i].data_addr = 0;
+    else
+      result = true;
   }
   return result;
 }
@@ -89,22 +80,18 @@ spectrum_selector(struct spectrum_selector_context *context)
     switch (msg->typ) {
     case DATA_PATH_SIGNAL_MSG: {
       bool selected =
-        !quitting
-        && select_spectra(
-          msg,
-          context->handle->consumers,
-          context->handle->num_consumers);
+        !quitting && select_spectra(msg, context->handle->consumer);
       if (!selected && context->handle->config.eager_connect) {
         /* may want to forward the signal message if eager connections
          * are configured */
         GTimer *t = g_hash_table_lookup(
           prev_eagerly_forwarded,
-          &msg->signal_msg->payload.sockaddr);
+          &msg->signal_msg.payload.sockaddr);
         if (t == NULL) {
           t = g_timer_new();
           g_hash_table_insert(
             prev_eagerly_forwarded,
-            new_sockaddr_key(&msg->signal_msg->payload.sockaddr),
+            new_sockaddr_key(&msg->signal_msg.payload.sockaddr),
             t);
           selected = true;
         } else {
@@ -114,13 +101,10 @@ spectrum_selector(struct spectrum_selector_context *context)
           }
         }
       }
-      if (selected) {
+      if (selected)
         vys_async_queue_push(context->read_request_queue, msg);
-      } else {
-        vys_buffer_pool_push(context->signal_msg_buffers,
-                             msg->signal_msg);
-        data_path_message_free(msg);
-      }
+      else
+        data_path_message_free(context->handle, msg);
       break;
     }
     case DATA_PATH_QUIT:

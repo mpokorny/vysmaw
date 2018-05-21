@@ -19,11 +19,14 @@
 #define VYS_ASYNC_QUEUE_H_
 
 #include <glib.h>
+#include <pthread.h>
 
 struct vys_async_queue {
   int refcount;
   int fds[2];
-  GAsyncQueue *q;
+  pthread_spinlock_t lock;
+  GDestroyNotify destroy;
+  GQueue *q;
 };
 
 extern struct vys_async_queue *vys_async_queue_new()

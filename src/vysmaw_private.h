@@ -27,6 +27,7 @@
 #include <infiniband/verbs.h>
 #include <rdma/rdma_verbs.h>
 #include <poll.h>
+#include <pthread.h>
 
 #if GLIB_CHECK_VERSION(2,32,0)
 # define THREAD_INIT while (false)
@@ -101,7 +102,9 @@
 #define RDMA_READ_MIN_ACK_PART_KEY "rdma_read_min_ack_part"
 
 struct _vysmaw_message_queue {
-  GAsyncQueue *q;
+  int refcount;
+  pthread_spinlock_t lock;
+  GQueue *q;
   unsigned depth;
   unsigned num_queued_in_alert;
 };
@@ -127,7 +130,7 @@ typedef void (*remove_idle_pools)(
   struct vys_error_record **error_record);
 
 struct consumer {
-  struct _vysmaw_message_queue queue;
+  struct _vysmaw_message_queue *queue;
   vysmaw_spectrum_filter spectrum_filter_fn;
   GArray *pass_filter_array;
   void *user_data;
@@ -157,6 +160,8 @@ struct _vysmaw_handle {
   struct vysmaw_result *result; // for passing errors from main thread to
   // workers
 
+  unsigned signal_msg_num_spectra;
+
   /* buffer pool (collection) */
   new_valid_buffer new_valid_buffer_fn;
   lookup_buffer_pool lookup_buffer_pool_fn;
@@ -166,14 +171,17 @@ struct _vysmaw_handle {
     spectrum_buffer_pool_collection pool_collection;
     struct spectrum_buffer_pool *pool;
   };
-  unsigned num_data_buffers_unavailable;
+
+  struct vys_buffer_pool *header_pool;
+  struct vys_buffer_pool *data_path_msg_pool;
+
+  unsigned num_spectrum_buffers_unavailable;
   unsigned num_signal_buffers_unavailable;
-  unsigned num_buffers_mismatched_version;
+  unsigned num_spectra_mismatched_version;
   unsigned mismatched_version;
 
-  /* message consumers */
-  unsigned num_consumers;
-  struct consumer *consumers;
+  /* message consumer */
+  struct consumer *consumer;
 
   /* service threads */
   struct service_gate gate;
@@ -192,17 +200,16 @@ struct data_path_message {
     DATA_PATH_QUIT,
     DATA_PATH_END
   } typ;
-  size_t message_size;
   union {
     enum ibv_wc_status wc_status;
     struct vys_error_record *error_record;
     unsigned received_message_version;
-    struct {
-      struct vys_signal_msg *signal_msg;
-      GSList *consumers[];
-    };
+    struct vys_signal_msg signal_msg;
   };
 };
+
+#define SIZEOF_DATA_PATH_MESSAGE(n) (\
+    sizeof(struct data_path_message) + (n) * sizeof(struct vys_spectrum_info))
 
 extern char *config_vysmaw_base(void)
   __attribute__((malloc,returns_nonnull));
@@ -214,6 +221,8 @@ extern vysmaw_handle handle_ref(vysmaw_handle handle)
   __attribute__((nonnull,returns_nonnull));
 extern void handle_unref(vysmaw_handle handle)
   __attribute__((nonnull));
+extern vysmaw_message_queue message_queue_new()
+  __attribute((returns_nonnull));
 extern vysmaw_message_queue message_queue_ref(vysmaw_message_queue queue)
   __attribute__((nonnull,returns_nonnull));
 extern void message_queue_unref(vysmaw_message_queue queue)
@@ -297,20 +306,14 @@ extern void init_consumer(
   vysmaw_message_queue *queue, struct consumer *consumer)
   __attribute__((nonnull));
 extern void init_signal_receiver(
-  vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-  struct vys_buffer_pool **signal_msg_buffers,
-  unsigned *signal_msg_num_spectra, int loop_fd)
+  vysmaw_handle handle, GAsyncQueue *signal_msg_queue, int loop_fd)
   __attribute__((nonnull));
 extern void init_spectrum_selector(
   vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-  struct vys_async_queue *read_request_queue,
-  struct vys_buffer_pool *signal_msg_buffers,
-  unsigned signal_msg_num_spectra)
+  struct vys_async_queue *read_request_queue)
   __attribute__((nonnull));
 extern void init_spectrum_reader(
-  vysmaw_handle handle, struct vys_async_queue *read_request_queue,
-  struct vys_buffer_pool *signal_msg_buffers, unsigned signal_msg_num_spectra,
-  int loop_fd)
+  vysmaw_handle handle, struct vys_async_queue *read_request_queue, int loop_fd)
   __attribute__((nonnull));
 extern int init_service_threads(vysmaw_handle handle)
   __attribute__((nonnull));
@@ -319,7 +322,7 @@ extern void start_service_in_order(vysmaw_handle handle, service_type_t service)
 extern struct vysmaw_message *message_new(
   vysmaw_handle handle, enum vysmaw_message_type typ)
   __attribute__((malloc,nonnull,returns_nonnull));
-extern struct vysmaw_message *data_buffer_starvation_message_new(
+extern struct vysmaw_message *spectrum_buffer_starvation_message_new(
   vysmaw_handle handle, unsigned num_unavailable)
   __attribute__((nonnull,returns_nonnull,malloc));
 extern struct vysmaw_message *signal_buffer_starvation_message_new(
@@ -328,9 +331,6 @@ extern struct vysmaw_message *signal_buffer_starvation_message_new(
 extern struct vysmaw_message *signal_receive_queue_underflow_message_new(
   vysmaw_handle handle)
   __attribute__((nonnull,returns_nonnull));
-extern struct vysmaw_message *id_failure_message_new(
-  vysmaw_handle handle, const struct vysmaw_data_info *info)
-  __attribute__((malloc,returns_nonnull,nonnull));
 extern struct vysmaw_message *end_message_new(
   vysmaw_handle handle, struct vysmaw_result *rc)
   __attribute__((malloc,returns_nonnull,nonnull));
@@ -341,11 +341,11 @@ extern struct vysmaw_message *signal_receive_failure_message_new(
   vysmaw_handle handle, enum ibv_wc_status status)
   __attribute__((nonnull,returns_nonnull,malloc));
 extern struct vysmaw_message *version_mismatch_message_new(
-  vysmaw_handle handle, unsigned num_buffers, unsigned mismatched_version)
+  vysmaw_handle handle, unsigned num_spectra, unsigned mismatched_version)
   __attribute__((nonnull,returns_nonnull,malloc));
 extern void post_msg(vysmaw_handle handle, struct vysmaw_message *message)
   __attribute__((nonnull));
-extern void post_data_buffer_starvation(vysmaw_handle handle)
+extern void post_spectrum_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void post_signal_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
@@ -356,29 +356,38 @@ extern void post_version_mismatch(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void post_signal_receive_queue_underflow(vysmaw_handle handle)
   __attribute__((nonnull));
+extern void message_release_all_buffers(struct vysmaw_message *message)
+  __attribute__((nonnull));
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
   __attribute__((nonnull));
 
-extern struct data_path_message *data_path_message_new(
-  unsigned max_spectra_per_signal)
+extern struct data_path_message *data_path_message_new(vysmaw_handle handle)
   __attribute__((malloc,returns_nonnull));
-extern void data_path_message_free(struct data_path_message *msg)
+extern void data_path_message_free(
+  vysmaw_handle handle, struct data_path_message *msg)
   __attribute__((nonnull));
 
-extern struct vysmaw_message *valid_buffer_message_new(
+extern struct vysmaw_message *spectra_message_new(
   vysmaw_handle handle, struct rdma_cm_id *id, GHashTable *mrs,
-  const struct vysmaw_data_info *info, pool_id_t *pool_id,
+  const struct vysmaw_data_info *info, unsigned num_spectra, pool_id_t *pool_id,
   struct vys_error_record **error_record)
   __attribute__((nonnull,malloc));
 
-extern void message_queues_push_unlocked(
-  struct vysmaw_message *msg, GSList *consumers)
-  __attribute__((nonnull(1)));
-extern void message_queues_push(
-  struct vysmaw_message *msg, GSList *consumers)
-  __attribute__((nonnull(1)));
+static inline void message_queue_lock(vysmaw_message_queue queue)
+{
+  pthread_spin_lock(&queue->lock);
+}
 
-extern void mark_data_buffer_starvation(vysmaw_handle handle)
+static inline void message_queue_unlock(vysmaw_message_queue queue)
+{
+  pthread_spin_unlock(&queue->lock);
+}
+
+extern void message_queues_push_unlocked(
+  vysmaw_handle handle, struct vysmaw_message *msg)
+  __attribute__((nonnull));
+
+extern void mark_spectrum_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void mark_signal_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
@@ -391,7 +400,7 @@ extern void mark_version_mismatch(
 extern void mark_signal_receive_queue_underflow(vysmaw_handle handle)
   __attribute__((nonnull));
 
-static inline size_t buffer_size(const struct vysmaw_data_info *info)
+static inline size_t spectrum_buffer_size(const struct vysmaw_data_info *info)
 {
   return vys_spectrum_buffer_size(
     info->num_channels, info->num_bins, info->bin_stride);
@@ -421,10 +430,12 @@ extern void free_sockaddr_key(
   struct sockaddr_in *sockaddr)
   __attribute__((nonnull));
 
-extern void convert_valid_to_id_failure(struct vysmaw_message *message)
+extern void convert_valid_to_id_failure(
+  struct vysmaw_message *message, unsigned buffer_index)
   __attribute__((nonnull));
 extern void convert_valid_to_rdma_read_failure(
-  struct vysmaw_message *message, enum ibv_wc_status status)
+  struct vysmaw_message *message, unsigned buffer_index,
+  enum ibv_wc_status status)
   __attribute__((nonnull));
 
 #endif /* VYSMAW_PRIVATE_H_ */

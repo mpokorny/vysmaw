@@ -60,24 +60,15 @@ def interrupt(sig, frame):
     return
 signal.signal(signal.SIGINT, interrupt)
 
-# Allocate client resources
-cdef vysmaw_spectrum_filter *f = \
-    <vysmaw_spectrum_filter *>malloc(sizeof(vysmaw_spectrum_filter))
-f[0] = cb
-cdef void **u = <void **>malloc(sizeof(void *))
-u[0] = &num_cbs
-
 # start vysmaw client
-handle, consumers = config.start(1, f, u)
-
-free(f)
-free(u)
+cdef tuple hc = config.start(cb, &num_cbs)
+handle = hc[0]
+cdef Consumer consumer = hc[1]
 
 # For maximum efficiency, one should work directly with unwrapped messages to
 # avoid allocating a Python object for every message. Doing so requires direct
 # access to the queue referenced by the consumer.
-cdef Consumer c0 = consumers[0]
-cdef vysmaw_message_queue queue = c0.queue()
+cdef vysmaw_message_queue queue = consumer.queue()
 
 # Messages should always be retrieved from the consumer queue until an
 # EndMessage appears. A NULL-valued msg can appear here due to using a timeout
@@ -85,8 +76,8 @@ cdef vysmaw_message_queue queue = c0.queue()
 cdef vysmaw_message *msg = NULL
 while msg is NULL or msg[0].typ is not VYSMAW_MESSAGE_END:
     if msg is not NULL:
-        if msg[0].typ is VYSMAW_MESSAGE_VALID_BUFFER:
-            num_spectra += 1
+        if msg[0].typ is VYSMAW_MESSAGE_SPECTRA:
+            num_spectra += msg[0].content.spectra.num_spectra
         # for other message types, which should be received much less frequently
         # than the "valid buffer" messages, it could be convenient at this stage
         # to wrap them in Python objects, like so: py_msg = Message.wrap(msg)

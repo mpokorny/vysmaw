@@ -230,14 +230,12 @@ typedef struct _vysmaw_handle *vysmaw_handle;
  * pulled from a queue, vysmaw_message_unref() is called promptly thereafter.
  */
 enum vysmaw_message_type {
-  VYSMAW_MESSAGE_VALID_BUFFER,
-  VYSMAW_MESSAGE_ID_FAILURE, // failed to verify id number
+  VYSMAW_MESSAGE_SPECTRA,
   VYSMAW_MESSAGE_QUEUE_ALERT, // message queue level alert
-  VYSMAW_MESSAGE_DATA_BUFFER_STARVATION, // data buffers unavailable
+  VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION, // data spectra unavailable
   VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, // signal buffers unavailable
   VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
   // message
-  VYSMAW_MESSAGE_RDMA_READ_FAILURE, // failure of rdma read of spectral data
   VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
   VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, // underflow on signal
   // receive queue
@@ -246,40 +244,50 @@ enum vysmaw_message_type {
 
 #define RECEIVE_STATUS_LENGTH 64
 
+union vysmaw_spectrum_header {
+  uint32_t id_num;
+  char padding[VYS_SPECTRUM_OFFSET];
+};
+
+struct vysmaw_spectrum {
+  uint64_t timestamp;
+  bool failed_verification;
+  char rdma_read_status[RECEIVE_STATUS_LENGTH];
+  union vysmaw_spectrum_header *header;
+  _Complex float *values;
+};
+
 struct vysmaw_message {
   int refcount;
   enum vysmaw_message_type typ;
   vysmaw_handle handle;
   union {
-    /* VYSMAW_MESSAGE_VALID_BUFFER */
+    /* VYSMAW_MESSAGE_SPECTRA */
     struct {
+      // don't use timestamp in the following info field, use timestamp fields
+      // in array of struct vysmaw_spectrum elements at the end of the
+      // vysmaw_message
       struct vysmaw_data_info info;
-      size_t buffer_size;
-      void *buffer;
-      uint32_t *id_num;
-      _Complex float *spectrum;
-    } valid_buffer;
-
-    /* VYSMAW_MESSAGE_ID_FAILURE */
-    struct vysmaw_data_info id_failure;
+      size_t spectrum_buffer_size;
+      unsigned num_spectra;
+      void *header_buffer;
+      void *data_buffer;
+    } spectra;
 
     /* VYSMAW_MESSAGE_QUEUE_ALERT */
     unsigned queue_depth;
 
-    /* VYSMAW_MESSAGE_DATA_BUFFER_STARVATION */
-    unsigned num_data_buffers_unavailable;
+    /* VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION */
+    unsigned num_spectrum_buffers_unavailable;
 
     /* VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION */
     unsigned num_signal_buffers_unavailable;
 
     /* VYSMAW_MESSAGE_VERSION_MISMATCH */
-    unsigned num_buffers_mismatched_version;
+    unsigned num_spectra_mismatched_version;
 
     /* VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE */
     char signal_receive_status[RECEIVE_STATUS_LENGTH];
-
-    /* VYSMAW_MESSAGE_RDMA_READ_FAILURE */
-    char rdma_read_status[RECEIVE_STATUS_LENGTH];
 
     /* VYSMAW_MESSAGE_VERSION_MISMATCH */
     unsigned received_message_version;
@@ -287,7 +295,12 @@ struct vysmaw_message {
     /* VYSMAW_MESSAGE_END */
     struct vysmaw_result result;
   } content;
+
+  struct vysmaw_spectrum data[];
 };
+
+#define SIZEOF_VYSMAW_MESSAGE(n) (\
+    sizeof(struct vysmaw_message) + (n) * sizeof(struct vysmaw_spectrum))
 
 /* Spectrum filter predicate (callback)
  *
@@ -360,24 +373,11 @@ extern void vysmaw_message_unref(struct vysmaw_message *message)
  * received. Calling vysmaw_message_unref() on the VYSMAW_MESSAGE_END message
  * will release all remaining queue resources. The 'user_data' pointer will be
  * passed as an argument in all calls to the 'spectrum_filter' function.
- *
- * This function allows a single client to set up multiple filters and queues.
- * It is advisable for the distribution of messages from a single queue to
- * multiple threads, if desired, to be done by the client, and not by setting up
- * multiple queues with the same filter predicate, in order to prevent the
- * evaluation of the predicate multiple times for each argument query.
- */
-extern vysmaw_handle vysmaw_start_(const struct vysmaw_configuration *config,
-                                   unsigned num_consumers,
-                                   struct vysmaw_consumer *consumers)
-  __attribute__((nonnull(1,3),malloc,returns_nonnull));
-
-/* Start vysmaw threads; as above, but more friendly for cython usage.
  */
 extern vysmaw_handle vysmaw_start(const struct vysmaw_configuration *config,
-                                  unsigned num_consumers,
-                                  struct vysmaw_consumer **consumers)
-  __attribute__((nonnull(1,3),malloc,returns_nonnull));
+                                  struct vysmaw_consumer *consumer)
+  __attribute__((nonnull,malloc,returns_nonnull));
+
 
 /* Shut down vysmaw threads.
  *

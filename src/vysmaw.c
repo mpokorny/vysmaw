@@ -22,47 +22,44 @@
 struct vysmaw_message *
 vysmaw_message_queue_pop(vysmaw_message_queue queue)
 {
-  g_async_queue_lock(queue->q);
-  struct vysmaw_message *result = g_async_queue_pop_unlocked(queue->q);
-  queue->depth--;
-  g_async_queue_unlock(queue->q);
-  message_queue_unref(queue); // release message's queue reference
+  struct vysmaw_message *result = NULL;
+  while (result == NULL) {
+    message_queue_lock(queue);
+    result = g_queue_pop_tail(queue->q);
+    if (result != NULL)
+      queue->depth--;
+    message_queue_unlock(queue);
+  }
   return result;
 }
 
 struct vysmaw_message *
 vysmaw_message_queue_timeout_pop(vysmaw_message_queue queue, uint64_t timeout)
 {
+  // timeout in microseconds
   struct vysmaw_message *result;
-  g_async_queue_lock(queue->q);
-#if GLIB_CHECK_VERSION(2,32,0)
-  result = g_async_queue_timeout_pop_unlocked(queue->q, timeout);
-#else
-  GTimeVal end;
-  g_get_current_time(&end);
-  g_time_val_add(&end, timeout);
-  result = g_async_queue_timed_pop_unlocked(queue->q, &end);
-#endif
-  if (result != NULL)
-    queue->depth--;
-  g_assert(queue->depth >= 0);
-  g_async_queue_unlock(queue->q);
-  /* release message's queue reference */
-  if (result != NULL) message_queue_unref(queue);
+  gint64 end = g_get_monotonic_time() + timeout;
+  result = NULL;
+  while (result == NULL && g_get_monotonic_time() < end) {
+    message_queue_lock(queue);
+    result = g_queue_pop_tail(queue->q);
+    if (result != NULL)
+      queue->depth--;
+    g_assert(queue->depth >= 0);
+    message_queue_unlock(queue);
+  }
   return result;
 }
 
 struct vysmaw_message *
 vysmaw_message_queue_try_pop(vysmaw_message_queue queue)
 {
-  g_async_queue_lock(queue->q);
-  struct vysmaw_message *result = g_async_queue_try_pop_unlocked(queue->q);
+  message_queue_lock(queue);
+  struct vysmaw_message *result = g_queue_pop_tail(queue->q);
   if (result != NULL)
     queue->depth--;
   g_assert(queue->depth >= 0);
-  g_async_queue_unlock(queue->q);
-  /* release message's queue reference */
-  if (result != NULL) message_queue_unref(queue);
+  message_queue_unlock(queue);
   return result;
 }
 
@@ -71,28 +68,18 @@ vysmaw_message_unref(struct vysmaw_message *message)
 {
   if (g_atomic_int_dec_and_test(&message->refcount)) {
     vysmaw_message_free_resources(message);
-    g_slice_free(struct vysmaw_message, message);
+    if (message->typ == VYSMAW_MESSAGE_SPECTRA)
+      g_slice_free1(
+        SIZEOF_VYSMAW_MESSAGE(message->content.spectra.num_spectra), message);
+    else
+      g_slice_free(struct vysmaw_message, message);
   }
 }
 
 vysmaw_handle
-vysmaw_start_(const struct vysmaw_configuration *config,
-              unsigned num_consumers, struct vysmaw_consumer *consumers)
-{
-  GPtrArray *cps = g_ptr_array_new();
-  for (unsigned i = num_consumers; i > 0; --i) {
-    g_ptr_array_add(cps, consumers);
-    ++consumers;
-  }
-  vysmaw_handle result = vysmaw_start(
-    config, num_consumers, (struct vysmaw_consumer **)cps->pdata);
-  g_ptr_array_free(cps, TRUE);
-  return result;
-}
-
-vysmaw_handle
-vysmaw_start(const struct vysmaw_configuration *config,
-             unsigned num_consumers, struct vysmaw_consumer **consumers)
+vysmaw_start(
+  const struct vysmaw_configuration *config,
+  struct vysmaw_consumer *consumer)
 {
   THREAD_INIT;
 
@@ -100,20 +87,33 @@ vysmaw_start(const struct vysmaw_configuration *config,
   vysmaw_handle result = g_new0(struct _vysmaw_handle, 1);
   /* result is initialized with a reference count of 2: one for the caller,
    * and another for the end message that we guarantee will be posted for
-   * every consumer */
+   * the consumer */
   result->refcount = 2;
   MUTEX_INIT(result->mtx);
   result->in_shutdown = false;
   result->result = NULL;
   memcpy((void *)&result->config, config, sizeof(*config));
+
+  /* transform vysmaw_consumer to struct consumer */
+  result->consumer = g_new(struct consumer, 1);
+  init_consumer(consumer->filter, consumer->filter_data,
+                &consumer->queue, result->consumer);
+
+
   if (result->config.error_record == NULL) {
+    /* service threads initialization */
+    MUTEX_INIT(result->gate.mtx);
+    COND_INIT(result->gate.cond);
+    init_service_threads(result);
+
     *(unsigned *)&result->config.max_spectrum_buffer_size =
+      result->signal_msg_num_spectra *
       MAX(result->config.max_spectrum_buffer_size,
           VYS_BUFFER_POOL_MIN_BUFFER_SIZE);
+    size_t num_buffers =
+      result->config.spectrum_buffer_pool_size
+      / result->config.max_spectrum_buffer_size;
     if (result->config.single_spectrum_buffer_pool) {
-      size_t num_buffers =
-        result->config.spectrum_buffer_pool_size
-        / result->config.max_spectrum_buffer_size;
       result->pool = spectrum_buffer_pool_new(
         result->config.max_spectrum_buffer_size, num_buffers);
       result->new_valid_buffer_fn = new_valid_buffer_from_pool;
@@ -126,21 +126,11 @@ vysmaw_start(const struct vysmaw_configuration *config,
       result->remove_idle_pools_fn = remove_idle_pools_from_collection;
       REC_MUTEX_INIT(result->pool_collection_mtx);
     }
-  }
 
-  /* per consumer initialization */
-  result->consumers = g_new(struct consumer, num_consumers);
-  result->num_consumers = num_consumers;
-  for (unsigned i = 0; i < num_consumers; ++i)
-    init_consumer(consumers[i]->filter, consumers[i]->filter_data,
-                  &consumers[i]->queue, &result->consumers[i]);
-
-
-  if (result->config.error_record == NULL) {
-    /* service threads initialization */
-    MUTEX_INIT(result->gate.mtx);
-    COND_INIT(result->gate.cond);
-    init_service_threads(result);
+    result->header_pool =
+      vys_buffer_pool_new(
+        num_buffers,
+        result->signal_msg_num_spectra * sizeof(union vysmaw_spectrum_header));
   }
   if (result->config.error_record != NULL) {
     result->in_shutdown = true;

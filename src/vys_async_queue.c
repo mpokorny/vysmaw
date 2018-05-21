@@ -56,8 +56,11 @@ struct vys_async_queue *
 vys_async_queue_new()
 {
   struct vys_async_queue *result = new_no_queue();
-  if (G_LIKELY(result != NULL))
-    result->q = g_async_queue_new();
+  if (G_LIKELY(result != NULL)) {
+    result->q = g_queue_new();
+    result->destroy = NULL;
+    pthread_spin_init(&result->lock, PTHREAD_PROCESS_PRIVATE);
+  }
   return result;
 }
 
@@ -65,8 +68,11 @@ struct vys_async_queue *
 vys_async_queue_new_full(GDestroyNotify destroy)
 {
   struct vys_async_queue *result = new_no_queue();
-  if (G_LIKELY(result != NULL))
-    result->q = g_async_queue_new_full(destroy);
+  if (G_LIKELY(result != NULL)) {
+    result->q = g_queue_new();
+    result->destroy = destroy;
+    pthread_spin_init(&result->lock, PTHREAD_PROCESS_PRIVATE);
+  }
   return result;
 }
 
@@ -81,7 +87,14 @@ void
 vys_async_queue_unref(struct vys_async_queue *queue)
 {
   if (g_atomic_int_dec_and_test(&queue->refcount)) {
-    g_async_queue_unref(queue->q);
+    if (queue->destroy != NULL) {
+      void gf(gpointer data, gpointer unused) {
+        queue->destroy(data);
+      }
+      g_queue_foreach(queue->q, gf, NULL);
+    }
+    g_queue_free(queue->q);
+    pthread_spin_destroy(&queue->lock);
     int rc1 = close(queue->fds[0]);
     int errno1 = errno;
     int rc = close(queue->fds[1]);
@@ -94,7 +107,9 @@ vys_async_queue_unref(struct vys_async_queue *queue)
 void
 vys_async_queue_push(struct vys_async_queue *queue, void *item)
 {
-  g_async_queue_push(queue->q, item);
+  pthread_spin_lock(&queue->lock);
+  g_queue_push_head(queue->q, item);
+  pthread_spin_unlock(&queue->lock);
   char u;
   size_t w = 0;
   do {
@@ -118,13 +133,18 @@ vys_async_queue_pop(struct vys_async_queue *queue)
   } while (r != sizeof(u) && (errno == 0 || errno == EINTR || errno == EAGAIN));
   if (G_UNLIKELY(errno != 0))
     g_error("vys_async_queue_pop read failed: %s", strerror(errno));
-  return g_async_queue_pop(queue->q);
+  pthread_spin_lock(&queue->lock);
+  void *result = g_queue_pop_tail(queue->q);
+  pthread_spin_unlock(&queue->lock);
+  return result;
 }
 
 void *
 vys_async_queue_try_pop(struct vys_async_queue *queue)
 {
-  void *result = g_async_queue_try_pop(queue->q);
+  pthread_spin_lock(&queue->lock);
+  void *result = g_queue_pop_tail(queue->q);
+  pthread_spin_unlock(&queue->lock);
   if (result != NULL) {
     char u;
     size_t r = 0;
@@ -148,7 +168,10 @@ vys_async_queue_empty(struct vys_async_queue *queue)
 {
   /* note that the result of this function is unreliable if there is more than
    * one reader */
-  return g_async_queue_length(queue->q) > 0;
+  pthread_spin_lock(&queue->lock);
+  int result = g_queue_get_length(queue->q) > 0;
+  pthread_spin_unlock(&queue->lock);
+  return result;
 }
 
 int

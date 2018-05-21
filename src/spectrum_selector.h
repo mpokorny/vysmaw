@@ -28,7 +28,6 @@ struct spectrum_selector_context {
   GAsyncQueue *signal_msg_queue;
   struct vys_async_queue *read_request_queue;
   struct vys_buffer_pool *signal_msg_buffers;
-  unsigned signal_msg_num_spectra;
 };
 
 void *spectrum_selector(struct spectrum_selector_context *context);

@@ -62,8 +62,6 @@ static gdouble parse_double(
   GKeyFile *kf, const gchar *key,
   struct vysmaw_configuration *config)
   __attribute__((nonnull));
-static GSList *all_consumers(vysmaw_handle handle)
-  __attribute__((nonnull,returns_nonnull,malloc));
 
 static gchar *
 default_config_vysmaw()
@@ -294,13 +292,9 @@ handle_unref(vysmaw_handle handle)
     MUTEX_CLEAR(handle->gate.mtx);
     COND_CLEAR(handle->gate.cond);
 
-    struct consumer *c = handle->consumers;
-    for (unsigned i = 0; i < handle->num_consumers; ++i) {
-      message_queue_unref(&c->queue);
-      g_array_free(c->pass_filter_array, TRUE);
-      ++c;
-    }
-    g_free(handle->consumers);
+    message_queue_unref(handle->consumer->queue);
+    g_array_free(handle->consumer->pass_filter_array, TRUE);
+    g_free(handle->consumer);
 
     if (handle->config.single_spectrum_buffer_pool) {
       REC_MUTEX_CLEAR(handle->pool_collection_mtx);
@@ -309,29 +303,25 @@ handle_unref(vysmaw_handle handle)
       spectrum_buffer_pool_collection_free(handle->pool_collection);
     }
 
+    if (handle->header_pool != NULL)
+      vys_buffer_pool_free(handle->header_pool);
+
     MUTEX_CLEAR(handle->mtx);
     g_free(handle);
   }
 }
 
-static GSList *
-all_consumers(vysmaw_handle handle)
-{
-  MUTEX_LOCK(handle->mtx);
-  GSList *result = NULL;
-  struct consumer *consumer = handle->consumers;
-  for (unsigned i = handle->num_consumers; i > 0; --i) {
-    result = g_slist_prepend(result, consumer);
-    ++consumer;
-  }
-  MUTEX_UNLOCK(handle->mtx);
-  return result;
-}
-
 struct vysmaw_message *
 message_new(vysmaw_handle handle, enum vysmaw_message_type typ)
 {
-  struct vysmaw_message *result = g_slice_new(struct vysmaw_message);
+  struct vysmaw_message *result;
+  if (typ == VYSMAW_MESSAGE_SPECTRA) {
+    result = g_slice_alloc(
+      SIZEOF_VYSMAW_MESSAGE(handle->signal_msg_num_spectra));
+    result->content.spectra.num_spectra = handle->signal_msg_num_spectra;
+  } else {
+    result = g_slice_new(struct vysmaw_message);
+  }
   result->refcount = 1;
   result->handle = handle_ref(handle);
   result->typ = typ;
@@ -339,13 +329,13 @@ message_new(vysmaw_handle handle, enum vysmaw_message_type typ)
 }
 
 struct vysmaw_message *
-data_buffer_starvation_message_new(vysmaw_handle handle,
-                                   unsigned num_unavailable)
+spectrum_buffer_starvation_message_new(vysmaw_handle handle,
+                                       unsigned num_unavailable)
 {
   struct vysmaw_message *result =
-    message_new(handle, VYSMAW_MESSAGE_DATA_BUFFER_STARVATION);
-  result->content.num_data_buffers_unavailable =
-    handle->num_data_buffers_unavailable;
+    message_new(handle, VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION);
+  result->content.num_spectrum_buffers_unavailable =
+    handle->num_spectrum_buffers_unavailable;
   return result;
 }
 
@@ -363,16 +353,6 @@ signal_buffer_starvation_message_new(vysmaw_handle handle,
     message_new(handle, VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION);
   result->content.num_signal_buffers_unavailable =
     handle->num_signal_buffers_unavailable;
-  return result;
-}
-
-struct vysmaw_message *
-id_failure_message_new(vysmaw_handle handle,
-                       const struct vysmaw_data_info *info)
-{
-  struct vysmaw_message *result =
-    message_new(handle, VYSMAW_MESSAGE_ID_FAILURE);
-  result->content.id_failure = *info;
   return result;
 }
 
@@ -407,12 +387,12 @@ signal_receive_failure_message_new(vysmaw_handle handle,
 }
 
 struct vysmaw_message *
-version_mismatch_message_new(vysmaw_handle handle, unsigned num_buffers,
+version_mismatch_message_new(vysmaw_handle handle, unsigned num_spectra,
                              unsigned mismatched_version)
 {
   struct vysmaw_message *result =
     message_new(handle, VYSMAW_MESSAGE_VERSION_MISMATCH);
-  result->content.num_buffers_mismatched_version = num_buffers;
+  result->content.num_spectra_mismatched_version = num_spectra;
   result->content.received_message_version = mismatched_version;
   return result;
 }
@@ -420,19 +400,33 @@ version_mismatch_message_new(vysmaw_handle handle, unsigned num_buffers,
 void
 post_msg(vysmaw_handle handle, struct vysmaw_message *msg)
 {
-  GSList *consumers = all_consumers(handle);
-  message_queues_push(msg, consumers);
-  g_slist_free(consumers);
+  vysmaw_message_queue mq = handle->consumer->queue;
+  message_queue_lock(mq);
+  message_queue_push_one_unlocked(message_ref(msg), mq);
+  if (G_UNLIKELY(
+        mq->depth >= msg->handle->config.message_queue_alert_depth)) {
+    mq->num_queued_in_alert =
+      (mq->num_queued_in_alert + 1)
+      % msg->handle->config.message_queue_alert_interval;
+    if (G_UNLIKELY(mq->num_queued_in_alert == 0))
+      message_queue_push_one_unlocked(
+        queue_alert_message_new(msg->handle, mq->depth),
+        mq);
+  } else {
+    mq->num_queued_in_alert = -1;
+  }
+  message_queue_unlock(mq);
+  vysmaw_message_unref(msg);
 }
 
 void
-post_data_buffer_starvation(vysmaw_handle handle)
+post_spectrum_buffer_starvation(vysmaw_handle handle)
 {
   struct vysmaw_message *msg =
-    data_buffer_starvation_message_new(
-      handle, handle->num_data_buffers_unavailable);
+    spectrum_buffer_starvation_message_new(
+      handle, handle->num_spectrum_buffers_unavailable);
   post_msg(handle, msg);
-  handle->num_data_buffers_unavailable = 0;
+  handle->num_spectrum_buffers_unavailable = 0;
 }
 
 void
@@ -458,10 +452,10 @@ post_version_mismatch(vysmaw_handle handle)
 {
   struct vysmaw_message *msg =
     version_mismatch_message_new(
-      handle, handle->num_buffers_mismatched_version,
+      handle, handle->num_spectra_mismatched_version,
       handle->mismatched_version);
   post_msg(handle, msg);
-  handle->num_buffers_mismatched_version = 0;
+  handle->num_spectra_mismatched_version = 0;
 }
 
 void
@@ -473,16 +467,32 @@ post_signal_receive_queue_underflow(vysmaw_handle handle)
 }
 
 vysmaw_message_queue
+message_queue_new()
+{
+  vysmaw_message_queue result = g_new(struct _vysmaw_message_queue, 1);
+  pthread_spin_init(&result->lock, PTHREAD_PROCESS_PRIVATE);
+  result->refcount = 1;
+  result->q = g_queue_new();
+  result->depth = 0;
+  result->num_queued_in_alert = -1;
+  return result;
+}
+
+vysmaw_message_queue
 message_queue_ref(vysmaw_message_queue queue)
 {
-  g_async_queue_ref(queue->q);
+  g_atomic_int_inc(&queue->refcount);
   return queue;
 }
 
 void
 message_queue_unref(vysmaw_message_queue queue)
 {
-  g_async_queue_unref(queue->q);
+  if (g_atomic_int_dec_and_test(&queue->refcount)) {
+    g_queue_free(queue->q);
+    pthread_spin_destroy(&queue->lock);
+    g_free(queue);
+  }
 }
 
 struct spectrum_buffer_pool *
@@ -659,11 +669,8 @@ void
 message_queue_push_one_unlocked(struct vysmaw_message *msg,
                                 vysmaw_message_queue queue)
 {
-  /* messages on the queue maintain a reference to the queue to facilitate
-   * automatic queue reclamation */
-  message_queue_ref(queue);
   queue->depth++;
-  g_async_queue_push_unlocked(queue->q, msg);
+  g_queue_push_head(queue->q, msg);
 }
 
 void
@@ -694,17 +701,17 @@ get_buffer_pool(struct vysmaw_message *message)
 struct spectrum_buffer_pool *
 lookup_buffer_pool_from_collection(struct vysmaw_message *message)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
   return spectrum_buffer_pool_collection_lookup(
     message->handle->pool_collection, &message->handle->pool_collection_mtx,
-    buffer_size(&message->content.valid_buffer.info));
+    spectrum_buffer_size(&message->content.spectra.info));
 }
 
 struct spectrum_buffer_pool *
 lookup_buffer_pool_from_pool(struct vysmaw_message *message)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
-  size_t buff_size = buffer_size(&message->content.valid_buffer.info);
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
+  size_t buff_size = spectrum_buffer_size(&message->content.spectra.info);
   return ((buff_size <= message->handle->pool->pool->buffer_size)
           ? message->handle->pool
           : NULL);
@@ -745,19 +752,16 @@ void
 init_consumer(vysmaw_spectrum_filter filter, void *user_data,
               vysmaw_message_queue *queue, struct consumer *consumer)
 {
-  consumer->queue.q = g_async_queue_new();
-  consumer->queue.depth = 0;
-  consumer->queue.num_queued_in_alert = -1;
+  consumer->queue = message_queue_new();
   consumer->spectrum_filter_fn = filter;
   consumer->pass_filter_array = g_array_new(FALSE, FALSE, sizeof(bool));
   consumer->user_data = user_data;
-  *queue = &consumer->queue;
+  *queue = message_queue_ref(consumer->queue);
 }
 
 void
 init_signal_receiver(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-                     struct vys_buffer_pool **signal_msg_buffers,
-                     unsigned *signal_msg_num_spectra, int loop_fd)
+                     int loop_fd)
 {
   struct signal_receiver_context *context =
     g_new0(struct signal_receiver_context, 1);
@@ -768,23 +772,17 @@ init_signal_receiver(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
     THREAD_NEW("signal_receiver", (GThreadFunc)signal_receiver, context);
   while (!handle->gate.signal_receiver_ready)
     COND_WAIT(handle->gate.cond, handle->gate.mtx);
-  *signal_msg_buffers = context->signal_msg_buffers;
-  *signal_msg_num_spectra = context->signal_msg_num_spectra;
 }
 
 void
 init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
-                       struct vys_async_queue *read_request_queue,
-                       struct vys_buffer_pool *signal_msg_buffers,
-                       unsigned signal_msg_num_spectra)
+                       struct vys_async_queue *read_request_queue)
 {
   struct spectrum_selector_context *context =
     g_new(struct spectrum_selector_context, 1);
   context->handle = handle;
   context->signal_msg_queue = g_async_queue_ref(signal_msg_queue);
   context->read_request_queue = vys_async_queue_ref(read_request_queue);
-  context->signal_msg_buffers = signal_msg_buffers;
-  context->signal_msg_num_spectra = signal_msg_num_spectra;
   handle->spectrum_selector_thread =
     THREAD_NEW("spectrum_selector", (GThreadFunc)spectrum_selector,
                context);
@@ -793,15 +791,12 @@ init_spectrum_selector(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
 void
 init_spectrum_reader(vysmaw_handle handle,
                      struct vys_async_queue *read_request_queue,
-                     struct vys_buffer_pool *signal_msg_buffers,
-                     unsigned signal_msg_num_spectra, int loop_fd)
+                     int loop_fd)
 {
   struct spectrum_reader_context *context =
     g_new(struct spectrum_reader_context, 1);
   context->handle = handle;
   context->loop_fd = loop_fd;
-  context->signal_msg_buffers = signal_msg_buffers;
-  context->signal_msg_num_spectra = signal_msg_num_spectra;
   context->read_request_queue = vys_async_queue_ref(read_request_queue);
   handle->spectrum_reader_thread =
     THREAD_NEW("spectrum_reader", (GThreadFunc)spectrum_reader,
@@ -831,18 +826,13 @@ init_service_threads(vysmaw_handle handle)
     return rc;
   }
 
-  struct vys_buffer_pool *signal_msg_buffers;
-  unsigned signal_msg_num_spectra;
   GAsyncQueue *signal_msg_queue = g_async_queue_new();
-  init_signal_receiver(handle, signal_msg_queue, &signal_msg_buffers,
-                       &signal_msg_num_spectra, loop_fds[0]);
+  init_signal_receiver(handle, signal_msg_queue, loop_fds[0]);
 
   struct vys_async_queue *read_request_queue = vys_async_queue_new();
-  init_spectrum_selector(handle, signal_msg_queue, read_request_queue,
-                         signal_msg_buffers, signal_msg_num_spectra);
+  init_spectrum_selector(handle, signal_msg_queue, read_request_queue);
 
-  init_spectrum_reader(handle, read_request_queue, signal_msg_buffers,
-                       signal_msg_num_spectra, loop_fds[1]);
+  init_spectrum_reader(handle, read_request_queue, loop_fds[1]);
 
   MUTEX_UNLOCK(handle->gate.mtx);
 
@@ -895,95 +885,62 @@ message_ref(struct vysmaw_message *message)
 }
 
 struct data_path_message *
-data_path_message_new(unsigned max_spectra_per_signal)
+data_path_message_new(vysmaw_handle handle)
 {
-  size_t message_size =
-    sizeof(struct data_path_message)
-    + max_spectra_per_signal * sizeof(GSList *);
-  struct data_path_message *result = g_slice_alloc0(message_size);
-  result->message_size = message_size;
-  return result;
+  return vys_buffer_pool_pop(handle->data_path_msg_pool);
 }
 
 void
-data_path_message_free(struct data_path_message *msg)
+data_path_message_free(vysmaw_handle handle, struct data_path_message *msg)
 {
-  if (msg->typ == DATA_PATH_SIGNAL_MSG) {
-    size_t consumer_offset = offsetof(struct data_path_message, consumers);
-    GSList **l = (GSList **)((void *)msg + consumer_offset);
-    while (consumer_offset < msg->message_size) {
-      if (*l != NULL) g_slist_free(*l);
-      ++l;
-      consumer_offset += sizeof(GSList *);
-    }
-  } else if (msg->typ == DATA_PATH_END) {
+  if (msg->typ == DATA_PATH_END)
     vys_error_record_free(msg->error_record);
-  }
-  g_slice_free1(msg->message_size, msg);
+  vys_buffer_pool_push(handle->data_path_msg_pool, msg);
 }
 
 struct vysmaw_message *
-valid_buffer_message_new(
+spectra_message_new(
   vysmaw_handle handle, struct rdma_cm_id *id,
   GHashTable *mrs, const struct vysmaw_data_info *info,
-  pool_id_t *pool_id, struct vys_error_record **error_record)
+  unsigned num_spectra, pool_id_t *pool_id,
+  struct vys_error_record **error_record)
 {
-  size_t buff_size = buffer_size(info);
-  void *buffer = handle->new_valid_buffer_fn(
-    handle, id, mrs, buff_size, pool_id, error_record);
-  struct vysmaw_message *result = NULL;
-  if (G_LIKELY(buffer != NULL)) {
-    if (G_UNLIKELY(handle->num_data_buffers_unavailable > 0))
-      post_data_buffer_starvation(handle);
-    if (G_UNLIKELY(handle->num_buffers_mismatched_version > 0))
-      post_version_mismatch(handle);
-    result = message_new(handle, VYSMAW_MESSAGE_VALID_BUFFER);
-    result->content.valid_buffer.info = *info;
-    result->content.valid_buffer.buffer_size = buff_size;
-    result->content.valid_buffer.buffer = buffer;
-    result->content.valid_buffer.id_num = buffer;
-    result->content.valid_buffer.spectrum = buffer + VYS_SPECTRUM_OFFSET;
+  size_t buff_size = spectrum_buffer_size(info);
+  struct vysmaw_message *result = message_new(handle, VYSMAW_MESSAGE_SPECTRA);
+  result->content.spectra.info = *info;
+  result->content.spectra.spectrum_buffer_size = buff_size;
+  result->content.spectra.num_spectra = num_spectra;
+  result->content.spectra.data_buffer = handle->new_valid_buffer_fn(
+    handle, id, mrs, num_spectra * buff_size, pool_id, error_record);
+  if (G_LIKELY(result->content.spectra.data_buffer != NULL)) {
+    result->content.spectra.header_buffer =
+      vys_buffer_pool_pop(handle->header_pool);
+    if (G_LIKELY(result->content.spectra.header_buffer != NULL)) {
+      // note that we don't initialize the result->content.data array
+      if (G_UNLIKELY(handle->num_spectrum_buffers_unavailable > 0))
+        post_spectrum_buffer_starvation(handle);
+      if (G_UNLIKELY(handle->num_spectra_mismatched_version > 0))
+        post_version_mismatch(handle);
+    } else {
+      mark_spectrum_buffer_starvation(handle); 
+      vysmaw_message_unref(result);
+      result = NULL;
+    }
   } else {
-    mark_data_buffer_starvation(handle);
+    mark_spectrum_buffer_starvation(handle); 
+    vysmaw_message_unref(result);
+    result = NULL;
   }
   return result;
 }
 
 void
-message_queues_push(struct vysmaw_message *msg, GSList *consumers)
+mark_spectrum_buffer_starvation(vysmaw_handle handle)
 {
-  MUTEX_LOCK(msg->handle->mtx);
-  while (consumers != NULL) {
-    struct consumer *c = consumers->data;
-    struct _vysmaw_message_queue *mq = &c->queue;
-    g_async_queue_lock(mq->q);
-    message_queue_push_one_unlocked(message_ref(msg), mq);
-    if (G_UNLIKELY(
-          mq->depth >= msg->handle->config.message_queue_alert_depth)) {
-      mq->num_queued_in_alert =
-        (mq->num_queued_in_alert + 1)
-        % msg->handle->config.message_queue_alert_interval;
-      if (G_UNLIKELY(mq->num_queued_in_alert == 0))
-        message_queue_push_one_unlocked(
-          queue_alert_message_new(msg->handle, mq->depth),
-          mq);
-    } else {
-      mq->num_queued_in_alert = -1;
-    }
-    g_async_queue_unlock(mq->q);
-    consumers = g_slist_next(consumers);
-  }
-  MUTEX_UNLOCK(msg->handle->mtx);
-  vysmaw_message_unref(msg);
-}
-
-void
-mark_data_buffer_starvation(vysmaw_handle handle)
-{
-  handle->num_data_buffers_unavailable++;
-  if (handle->num_data_buffers_unavailable
+  handle->num_spectrum_buffers_unavailable++;
+  if (handle->num_spectrum_buffers_unavailable
       >= handle->config.max_starvation_latency)
-    post_data_buffer_starvation(handle);
+    post_spectrum_buffer_starvation(handle);
 }
 
 void
@@ -1005,10 +962,10 @@ void
 mark_version_mismatch(vysmaw_handle handle, unsigned received_message_version)
 {
   if (received_message_version != handle->mismatched_version
-      && handle->num_buffers_mismatched_version > 0)
+      && handle->num_spectra_mismatched_version > 0)
     post_version_mismatch(handle);
-  handle->num_buffers_mismatched_version++;
-  if (handle->num_buffers_mismatched_version
+  handle->num_spectra_mismatched_version++;
+  if (handle->num_spectra_mismatched_version
       >= handle->config.max_version_mismatch_latency)
     post_version_mismatch(handle);
 }
@@ -1019,16 +976,19 @@ mark_signal_receive_queue_underflow(vysmaw_handle handle)
   post_signal_receive_queue_underflow(handle);
 }
 
-static void
-vysmaw_message_release_buffer(struct vysmaw_message *message)
+void
+message_release_all_buffers(struct vysmaw_message *message)
 {
-  if (message->typ == VYSMAW_MESSAGE_VALID_BUFFER
-      && message->content.valid_buffer.buffer != NULL) {
+  if (message->typ == VYSMAW_MESSAGE_SPECTRA) {
     struct spectrum_buffer_pool *pool =
       message->handle->lookup_buffer_pool_fn(message);
     if (G_LIKELY(pool != NULL)) {
-      spectrum_buffer_pool_push(
-        pool, message->content.valid_buffer.buffer);
+      if (G_LIKELY(message->content.spectra.data_buffer != NULL))
+        spectrum_buffer_pool_push(pool, message->content.spectra.data_buffer);
+      if (G_LIKELY(message->content.spectra.header_buffer != NULL))
+        vys_buffer_pool_push(
+          message->handle->header_pool,
+          message->content.spectra.header_buffer);
     } else {
       struct vysmaw_result *rc = g_new(struct vysmaw_result, 1);
       rc->code = VYSMAW_ERROR_BUFFPOOL;
@@ -1049,7 +1009,7 @@ vysmaw_message_free_syserr_desc(struct vysmaw_message *message)
 void
 vysmaw_message_free_resources(struct vysmaw_message *message)
 {
-  vysmaw_message_release_buffer(message);
+  message_release_all_buffers(message);
   vysmaw_message_free_syserr_desc(message);
   handle_unref(message->handle);
 }
@@ -1057,9 +1017,9 @@ vysmaw_message_free_resources(struct vysmaw_message *message)
 int
 dereg_mr(struct ibv_mr *mr, struct vys_error_record **error_record)
 {
-  int rc = rdma_dereg_mr(mr);
+  int rc = ibv_dereg_mr(mr);
   if (G_UNLIKELY(rc != 0))
-    VERB_ERR(error_record, errno, "rdma_dereg_mr");
+    VERB_ERR(error_record, errno, "ibv_dereg_mr");
   return rc;
 }
 
@@ -1069,13 +1029,17 @@ register_one_spectrum_buffer_pool(
   GHashTable *mrs, struct vys_error_record **error_record)
 {
   int result;
-  struct ibv_mr *mr = rdma_reg_msgs(
-    id, sb_pool->pool->pool, sb_pool->pool->pool_size);
+  struct ibv_mr *mr =
+    ibv_reg_mr(
+      id->pd,
+      sb_pool->pool->pool,
+      sb_pool->pool->pool_size,
+      IBV_ACCESS_LOCAL_WRITE);
   if (G_LIKELY(mr != NULL)) {
     g_hash_table_insert(mrs, spectrum_buffer_pool_ref(sb_pool), mr);
     result = 0;
   } else {
-    VERB_ERR(error_record, errno, "rdma_reg_msgs");
+    VERB_ERR(error_record, errno, "ibv_reg_mr");
     result = -1;
   }
   return result;
@@ -1123,25 +1087,22 @@ free_sockaddr_key(struct sockaddr_in *sockaddr)
 }
 
 void
-convert_valid_to_id_failure(struct vysmaw_message *message)
+convert_valid_to_id_failure(
+  struct vysmaw_message *message, unsigned buffer_index)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
-  vysmaw_message_release_buffer(message);
-  message->typ = VYSMAW_MESSAGE_ID_FAILURE;
-  if (offsetof(struct vysmaw_message, content.id_failure) !=
-      offsetof(struct vysmaw_message, content.valid_buffer.info))
-    memmove(&message->content.id_failure,
-            &message->content.valid_buffer.info,
-            sizeof(message->content.valid_buffer.info));
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
+  message->data[buffer_index].failed_verification = true;
+  message->data[buffer_index].values = NULL;
 }
 
 void
-convert_valid_to_rdma_read_failure(struct vysmaw_message *message,
-                                   enum ibv_wc_status status)
+convert_valid_to_rdma_read_failure(
+  struct vysmaw_message *message, unsigned buffer_index,
+  enum ibv_wc_status status)
 {
-  g_assert(message->typ == VYSMAW_MESSAGE_VALID_BUFFER);
-  vysmaw_message_release_buffer(message);
-  message->typ = VYSMAW_MESSAGE_RDMA_READ_FAILURE;
-  g_strlcpy(message->content.rdma_read_status, ibv_wc_status_str(status),
-            sizeof(message->content.rdma_read_status));
+  g_assert(message->typ == VYSMAW_MESSAGE_SPECTRA);
+  g_strlcpy(message->data[buffer_index].rdma_read_status,
+            ibv_wc_status_str(status),
+            sizeof(message->data[buffer_index].rdma_read_status));
+  message->data[buffer_index].values = NULL;
 }
