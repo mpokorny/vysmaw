@@ -26,7 +26,7 @@ if("${isSystemDir}" STREQUAL "-1")
 endif("${isSystemDir}" STREQUAL "-1")
 
 set(CMAKE_C_FLAGS
-  "${CMAKE_C_FLAGS} -Wall -Werror")
+  "${CMAKE_C_FLAGS} -Wall -Werror -ffast-math")
 
 add_executable(vyssim
   vyssim.c)
