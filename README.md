@@ -234,4 +234,6 @@ entirely to C, without entry to the Python interpreter.
 
 [sample4](examples/sample4.cc) is an application written in C++. It can be used
 as a simple, diagnostic vysmaw application, or as the basis for developing a
-more interesting application.
+more interesting application. Starting the program with the `--timing` or `-t`
+option may be useful for performance testing; starting without that option may be
+preferable to review the metadata of the spectra that have been received.
