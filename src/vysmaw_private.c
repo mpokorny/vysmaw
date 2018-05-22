@@ -46,7 +46,7 @@
 #define DEFAULT_SHUTDOWN_CHECK_INTERVAL_MS 1000
 #define DEFAULT_SIGNAL_RECEIVE_MIN_ACK_PART 10
 #define DEFAULT_RDMA_READ_MAX_POSTED 1000
-#define DEFAULT_RDMA_READ_MIN_ACK_PART 10
+#define DEFAULT_RDMA_READ_MIN_ACK 16
 
 static gchar *default_config_vysmaw()
 __attribute__((returns_nonnull,malloc));
@@ -131,8 +131,8 @@ default_config_vysmaw()
                         RDMA_READ_MAX_POSTED_KEY,
                         DEFAULT_RDMA_READ_MAX_POSTED);
   g_key_file_set_uint64(kf, VYSMAW_CONFIG_GROUP_NAME,
-                        RDMA_READ_MIN_ACK_PART_KEY,
-                        DEFAULT_RDMA_READ_MIN_ACK_PART);
+                        RDMA_READ_MIN_ACK_KEY,
+                        DEFAULT_RDMA_READ_MIN_ACK);
   gchar *result = g_key_file_to_data(kf, NULL, NULL);
   g_key_file_free(kf);
   return result;
@@ -260,8 +260,8 @@ init_from_key_file_vysmaw(GKeyFile *kf, struct vysmaw_configuration *config)
     parse_uint64(kf, SIGNAL_RECEIVE_MIN_ACK_PART_KEY, config);
   config->rdma_read_max_posted =
     parse_uint64(kf, RDMA_READ_MAX_POSTED_KEY, config);
-  config->rdma_read_min_ack_part =
-    parse_uint64(kf, RDMA_READ_MIN_ACK_PART_KEY, config);
+  config->rdma_read_min_ack =
+    parse_uint64(kf, RDMA_READ_MIN_ACK_KEY, config);
 }
 
 vysmaw_handle

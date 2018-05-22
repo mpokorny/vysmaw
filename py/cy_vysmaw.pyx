@@ -263,12 +263,12 @@ cdef class Configuration:
         self._c_configuration.rdma_read_max_posted = value
 
     @property
-    def rdma_read_min_ack_part(self):
-        return self._c_configuration.rdma_read_min_ack_part
+    def rdma_read_min_ack(self):
+        return self._c_configuration.rdma_read_min_ack
 
-    @rdma_read_min_ack_part.setter
-    def rdma_read_min_ack_part(self, unsigned value):
-        self._c_configuration.rdma_read_min_ack_part = value
+    @rdma_read_min_ack.setter
+    def rdma_read_min_ack(self, unsigned value):
+        self._c_configuration.rdma_read_min_ack = value
 
     cdef tuple start(self, vysmaw_spectrum_filter filtr, void *user_data):
         if filtr is NULL:

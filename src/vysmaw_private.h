@@ -99,7 +99,7 @@
 #define SHUTDOWN_CHECK_INTERVAL_MS_KEY "shutdown_check_interval_ms"
 #define SIGNAL_RECEIVE_MIN_ACK_PART_KEY "signal_receive_min_ack_part"
 #define RDMA_READ_MAX_POSTED_KEY "rdma_read_max_posted"
-#define RDMA_READ_MIN_ACK_PART_KEY "rdma_read_min_ack_part"
+#define RDMA_READ_MIN_ACK_KEY "rdma_read_min_ack"
 
 struct _vysmaw_message_queue {
   int refcount;

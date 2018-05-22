@@ -167,10 +167,8 @@ struct vysmaw_configuration {
    * automatically reduced by hardware and/or system limitations) */
   unsigned rdma_read_max_posted;
 
-  /* rdma read request completions to acknowledge at a time, expressed as a
-   * part of the maximum number of posted work requests: minimum number
-   * acknowledged will be rdma_read_max_posted / rdma_read_min_ack_part */
-  unsigned rdma_read_min_ack_part;
+  /* rdma read request completions to acknowledge at one time */
+  unsigned rdma_read_min_ack;
 };
 
 struct vysmaw_data_info {

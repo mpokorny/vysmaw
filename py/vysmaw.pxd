@@ -66,7 +66,7 @@ cdef extern from "vysmaw.h":
         unsigned signal_receive_max_posted
         unsigned signal_receive_min_ack_part
         unsigned rdma_read_max_posted
-        unsigned rdma_read_min_ack_part
+        unsigned rdma_read_min_ack
 
     struct vysmaw_data_info:
         char config_id[VYS_CONFIG_ID_SIZE]
