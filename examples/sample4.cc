@@ -134,19 +134,34 @@ main(int argc, char *argv[])
   typedef chrono::duration<long,milli> ms;
   typedef chrono::duration<long,nano> ns;
   ms duration = chrono::duration<long,milli>::max();
+  bool timing_run = false;
 
   // initialize vysmaw configuration
+  stringstream usage;
+  usage << "usage: "
+       << argv[0]
+       << " <--timing | -t>"
+       << " [config] <duration (ms)>"
+       << endl;
   switch (argc) {
+  case 4: {
+    duration = ms(stoul(argv[3]));
+    config.reset(vysmaw_configuration_new(argv[2]));
+    string opt = argv[1];
+    if (opt != "--timing" && opt != "-t") {
+      cerr << usage.str();
+      return -1;
+    }
+    timing_run = true;
+    break;
+  }
   case 3:
     duration = ms(stoul(argv[2]));
   case 2:
     config.reset(vysmaw_configuration_new(argv[1]));
     break;
   default:
-    cerr << "usage: "
-         << argv[0]
-         << " [config] <duration (ms)>"
-         << endl;
+    cerr << usage.str();
     return -1;
   }
 
@@ -218,17 +233,19 @@ main(int argc, char *argv[])
       ++counters[message->typ];
       switch (message->typ) {
       case VYSMAW_MESSAGE_SPECTRA: {
-        // struct vysmaw_data_info *info =
-        //  &message->content.spectra.info;
-        // stations.insert(info->stations[0]);
-        // stations.insert(info->stations[1]);
-        // bb_indexes.insert(info->baseband_index);
-        // bb_ids.insert(info->baseband_id);
-        // spw_indexes.insert(info->spectral_window_index);
-        // pp_ids.insert(info->polarization_product_id);
-        // num_channels.insert(info->num_channels);
-        // num_bins.insert(info->num_bins);
-        // config_ids.insert(info->config_id);
+        if (!timing_run) {
+          struct vysmaw_data_info *info =
+            &message->content.spectra.info;
+          stations.insert(info->stations[0]);
+          stations.insert(info->stations[1]);
+          bb_indexes.insert(info->baseband_index);
+          bb_ids.insert(info->baseband_id);
+          spw_indexes.insert(info->spectral_window_index);
+          pp_ids.insert(info->polarization_product_id);
+          num_channels.insert(info->num_channels);
+          num_bins.insert(info->num_bins);
+          config_ids.insert(info->config_id);
+        }
         for (unsigned i = 0; i < message->content.spectra.num_spectra; ++i) {
           latest_spectrum_ts = message->data[i].timestamp;
           if (message->data[i].failed_verification)
@@ -237,6 +254,7 @@ main(int argc, char *argv[])
             rdma_read_status.insert(message->data[i].rdma_read_status);
           else
             ++num_valid_spectra;
+          // visibilities are at message->data[i].values
         }
         break;
       }
@@ -262,18 +280,22 @@ main(int argc, char *argv[])
 
     // get next message
     message = move(pop(consumer.queue));
-    if (--tcount == 0) {
-      tcount = TCOUNT_MAX;
-      t1 = chrono::system_clock::now();
-      if (t1 - last_report >= report) {
-        auto ts = ns(latest_spectrum_ts);
-        chrono::time_point<std::chrono::system_clock,ns> tp(ts);
-        ns diff(t1 - tp);
-        cout << "timestamp diff "
-             << diff.count() * ((double)ns::period::num / ns::period::den)
-             << endl;
-        last_report = t1;
+    if (timing_run) {
+      if (--tcount == 0) {
+        tcount = TCOUNT_MAX;
+        t1 = chrono::system_clock::now();
+        if (t1 - last_report >= report) {
+          auto ts = ns(latest_spectrum_ts);
+          chrono::time_point<std::chrono::system_clock,ns> tp(ts);
+          ns diff(t1 - tp);
+          cout << "timestamp diff "
+               << diff.count() * ((double)ns::period::num / ns::period::den)
+               << endl;
+          last_report = t1;
+        }
       }
+    } else {
+      t1 = chrono::system_clock::now();
     }
   }
   if (message) ++counters[message->typ];
@@ -317,6 +339,9 @@ main(int argc, char *argv[])
        << endl;
 
   // error summary...only when it's interesting
+  if (num_verification_failures > 0)
+    cout << "num verify errors : "
+         << num_verification_failures << endl;
   if (num_alerts > 0)
     cout << "num queue alerts  : "
          << num_alerts << endl;
@@ -342,25 +367,27 @@ main(int argc, char *argv[])
     cout << endl;
   }
 
-  // data buffer summary
-  cout << "stations          : "
-       << elements(stations) << endl;
-  cout << "baseband indexes  : "
-       << elements(bb_indexes) << endl;
-  cout << "baseband ids      : "
-       << elements(bb_ids) << endl;;
-  cout << "spw indexes       : "
-       << elements(spw_indexes) << endl;
-  cout << "pol prod ids      : "
-       << elements(pp_ids) << endl;
-  cout << "num channels      : "
-       << elements(num_channels) << endl;
-  cout << "num bins          : "
-       << elements(num_bins) << endl;
-  cout << "config ids        :";
-  for (auto&& s : config_ids)
-    cout << endl << " - " << s;
-  cout << endl;
+  if (!timing_run) {
+    // data buffer summary
+    cout << "stations          : "
+         << elements(stations) << endl;
+    cout << "baseband indexes  : "
+         << elements(bb_indexes) << endl;
+    cout << "baseband ids      : "
+         << elements(bb_ids) << endl;;
+    cout << "spw indexes       : "
+         << elements(spw_indexes) << endl;
+    cout << "pol prod ids      : "
+         << elements(pp_ids) << endl;
+    cout << "num channels      : "
+         << elements(num_channels) << endl;
+    cout << "num bins          : "
+         << elements(num_bins) << endl;
+    cout << "config ids        :";
+    for (auto&& s : config_ids)
+      cout << endl << " - " << s;
+    cout << endl;
+  }
 
   // release the last message and shut down the library if it hasn't already
   // been done
