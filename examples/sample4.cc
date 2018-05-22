@@ -88,7 +88,6 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
     {VYSMAW_MESSAGE_SPECTRA, "spectra-message"},
     {VYSMAW_MESSAGE_QUEUE_ALERT, "message-queue-alert"},
     {VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION, "data-buffer-starvation"},
-    {VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, "signal-buffer-starvation"},
     {VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, "signal-receive-failure"},
     {VYSMAW_MESSAGE_VERSION_MISMATCH, "vys-version-mismatch"},
     {VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW, "signal-receive-queue-underflow"},
@@ -103,7 +102,6 @@ show_counters(array<unsigned,VYSMAW_MESSAGE_END + 1> &counters)
     VYSMAW_MESSAGE_SPECTRA,
     VYSMAW_MESSAGE_QUEUE_ALERT,
     VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION,
-    VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION,
     VYSMAW_MESSAGE_SIGNAL_RECEIVE_QUEUE_UNDERFLOW,
     VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE,
     VYSMAW_MESSAGE_VERSION_MISMATCH,
@@ -248,10 +246,6 @@ main(int argc, char *argv[])
       case VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION:
         num_spectrum_buffers_unavailable +=
           message->content.num_spectrum_buffers_unavailable;
-        break;
-      case VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
-        num_signal_buffers_unavailable +=
-          message->content.num_signal_buffers_unavailable;
         break;
       case VYSMAW_MESSAGE_VERSION_MISMATCH:
         num_spectra_mismatched_version +=

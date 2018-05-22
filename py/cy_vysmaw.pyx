@@ -479,8 +479,6 @@ cdef class Message:
             result = QueueAlertMessage()
         elif msgtype == VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION:
             result = SpectrumBufferStarvationMessage()
-        elif msgtype == VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION:
-            result = SignalBufferStarvationMessage()
         elif msgtype == VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE:
             result = SignalReceiveFailureMessage()
         elif msgtype == VYSMAW_MESSAGE_VERSION_MISMATCH:
@@ -538,15 +536,6 @@ cdef class SpectrumBufferStarvationMessage(Message):
     @property
     def num_spectrum_buffers_unavailable(self):
         return self._c_message[0].content.num_spectrum_buffers_unavailable
-
-cdef class SignalBufferStarvationMessage(Message):
-
-    def __str__(self):
-        return show_properties(self, SignalBufferStarvationMessage)
-
-    @property
-    def num_signal_buffers_unavailable(self):
-        return self._c_message[0].content.num_signal_buffers_unavailable
 
 cdef class SignalReceiveFailureMessage(Message):
 

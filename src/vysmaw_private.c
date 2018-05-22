@@ -346,17 +346,6 @@ signal_receive_queue_underflow_message_new(vysmaw_handle handle)
 }
 
 struct vysmaw_message *
-signal_buffer_starvation_message_new(vysmaw_handle handle,
-                                     unsigned num_unavailable)
-{
-  struct vysmaw_message *result =
-    message_new(handle, VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION);
-  result->content.num_signal_buffers_unavailable =
-    handle->num_signal_buffers_unavailable;
-  return result;
-}
-
-struct vysmaw_message *
 end_message_new(vysmaw_handle handle, struct vysmaw_result *rc)
 {
   /* this steals ownership of rc->syserr_desc */
@@ -427,16 +416,6 @@ post_spectrum_buffer_starvation(vysmaw_handle handle)
       handle, handle->num_spectrum_buffers_unavailable);
   post_msg(handle, msg);
   handle->num_spectrum_buffers_unavailable = 0;
-}
-
-void
-post_signal_buffer_starvation(vysmaw_handle handle)
-{
-  struct vysmaw_message *msg =
-    signal_buffer_starvation_message_new(
-      handle, handle->num_signal_buffers_unavailable);
-  post_msg(handle, msg);
-  handle->num_signal_buffers_unavailable = 0;
 }
 
 void
@@ -941,15 +920,6 @@ mark_spectrum_buffer_starvation(vysmaw_handle handle)
   if (handle->num_spectrum_buffers_unavailable
       >= handle->config.max_starvation_latency)
     post_spectrum_buffer_starvation(handle);
-}
-
-void
-mark_signal_buffer_starvation(vysmaw_handle handle)
-{
-  handle->num_signal_buffers_unavailable++;
-  if (handle->num_signal_buffers_unavailable
-      >= handle->config.max_starvation_latency)
-    post_signal_buffer_starvation(handle);
 }
 
 void

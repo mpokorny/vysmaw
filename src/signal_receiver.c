@@ -616,12 +616,6 @@ create_new_wrs(struct signal_receiver_context_ *context)
       buffers_exhausted = !new_wr(context);
       if (!buffers_exhausted) ++total_wrs;
     }
-    if (total_wrs < context->min_posted_wr) {
-      struct data_path_message *dp_msg =
-        data_path_message_new(context->shared->handle);
-      dp_msg->typ = DATA_PATH_BUFFER_STARVATION;
-      g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
-    }
   }
 }
 
@@ -671,8 +665,10 @@ post_wrs(struct signal_receiver_context_ *context,
       context->in_underflow = true;
       struct data_path_message *dp_msg =
         data_path_message_new(context->shared->handle);
-      dp_msg->typ = DATA_PATH_RECEIVE_UNDERFLOW;
-      g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
+      if (G_LIKELY(dp_msg != NULL)) {
+        dp_msg->typ = DATA_PATH_RECEIVE_UNDERFLOW;
+        g_async_queue_push(context->shared->signal_msg_queue, dp_msg);
+      }
     }
   } else if (context->rem_wrs_head != NULL) {
     recv_wr_free(context->rem_wrs_head);

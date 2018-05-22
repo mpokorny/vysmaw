@@ -194,7 +194,6 @@ struct data_path_message {
   enum {
     DATA_PATH_SIGNAL_MSG,
     DATA_PATH_RECEIVE_FAIL,
-    DATA_PATH_BUFFER_STARVATION,
     DATA_PATH_VERSION_MISMATCH,
     DATA_PATH_RECEIVE_UNDERFLOW,
     DATA_PATH_QUIT,
@@ -362,7 +361,7 @@ extern void vysmaw_message_free_resources(struct vysmaw_message *message)
   __attribute__((nonnull));
 
 extern struct data_path_message *data_path_message_new(vysmaw_handle handle)
-  __attribute__((malloc,returns_nonnull));
+  __attribute__((malloc));
 extern void data_path_message_free(
   vysmaw_handle handle, struct data_path_message *msg)
   __attribute__((nonnull));
@@ -388,8 +387,6 @@ extern void message_queues_push_unlocked(
   __attribute__((nonnull));
 
 extern void mark_spectrum_buffer_starvation(vysmaw_handle handle)
-  __attribute__((nonnull));
-extern void mark_signal_buffer_starvation(vysmaw_handle handle)
   __attribute__((nonnull));
 extern void mark_signal_receive_failure(
   vysmaw_handle handle, enum ibv_wc_status status)

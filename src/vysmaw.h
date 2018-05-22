@@ -133,9 +133,7 @@ struct vysmaw_configuration {
   unsigned message_queue_alert_interval;
 
   /* Maximum number of buffer starvation events to wait before sending a
-   * VYSMAW_MESSAGE_[DATA|SIGNAL]_BUFFER_STARVATION message.
-   *
-   * TODO: distinguish latency for data and signal buffers? */
+   * VYSMAW_MESSAGE_DATA_BUFFER_STARVATION message. */
   unsigned max_starvation_latency;
 
   /* Maximum number of vys_version mismatch events to wait before sending a
@@ -233,7 +231,6 @@ enum vysmaw_message_type {
   VYSMAW_MESSAGE_SPECTRA,
   VYSMAW_MESSAGE_QUEUE_ALERT, // message queue level alert
   VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION, // data spectra unavailable
-  VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION, // signal buffers unavailable
   VYSMAW_MESSAGE_SIGNAL_RECEIVE_FAILURE, // failure in receiving signal
   // message
   VYSMAW_MESSAGE_VERSION_MISMATCH, // vys_version field mismatch
@@ -279,9 +276,6 @@ struct vysmaw_message {
 
     /* VYSMAW_MESSAGE_SPECTRUM_BUFFER_STARVATION */
     unsigned num_spectrum_buffers_unavailable;
-
-    /* VYSMAW_MESSAGE_SIGNAL_BUFFER_STARVATION */
-    unsigned num_signal_buffers_unavailable;
 
     /* VYSMAW_MESSAGE_VERSION_MISMATCH */
     unsigned num_spectra_mismatched_version;

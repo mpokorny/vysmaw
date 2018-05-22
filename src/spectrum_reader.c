@@ -510,11 +510,6 @@ on_data_path_message(struct spectrum_reader_context_ *context,
     data_path_message_free(handle, msg);
     break;
 
-  case DATA_PATH_BUFFER_STARVATION:
-    mark_signal_buffer_starvation(handle);
-    data_path_message_free(handle, msg);
-    break;
-
   case DATA_PATH_VERSION_MISMATCH:
     mark_version_mismatch(handle, msg->received_message_version);
     data_path_message_free(handle, msg);
