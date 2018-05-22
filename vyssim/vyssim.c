@@ -170,6 +170,8 @@ struct server_context {
   size_t total_size_per_signal;
 };
 
+#define CONFIG_ID_LENGTH 32
+
 struct vyssim_context {
   char *bind_addr;
   struct sockaddr_in sockaddr;
@@ -178,6 +180,7 @@ struct vyssim_context {
   struct dataset_parameters params;
   struct vys_configuration *vconfig;
   gboolean random_data;
+  char config_id[CONFIG_ID_LENGTH];
 
   MPI_Comm comm;
 
@@ -421,16 +424,13 @@ gen_one_signal_msg(struct vyssim_context *vyssim, guint32 *id_num,
                    guint64 timestamp_us, unsigned ant0, unsigned ant1,
                    unsigned spectral_window_index, unsigned polprods_index)
 {
-  static gchar *config_id = NULL;
-  if (G_UNLIKELY(config_id == NULL))
-    config_id = g_strdup_printf("%s-%i", g_get_prgname(), getpid());
   struct mcast_context *mcast_ctx = &(vyssim->mcast_ctx);
   struct server_context *server_ctx = &(vyssim->server_ctx);
 
   struct vys_signal_msg *result =
     vys_buffer_pool_pop(mcast_ctx->signal_msg_pool);
   struct vys_signal_msg_payload *payload = &(result->payload);
-  vys_signal_msg_payload_init(payload, config_id);
+  vys_signal_msg_payload_init(payload, vyssim->config_id);
   payload->sockaddr = vyssim->sockaddr;
   payload->mr_id = 0;
   payload->num_channels = vyssim->params.num_channels;
@@ -1696,6 +1696,20 @@ main(int argc, char *argv[])
             vyssim.data_buffer_length_sec);
 
   vyssim.vconfig = vys_configuration_new(vys_configuration_path);
+
+  if (rank == 0)
+    g_snprintf(
+      vyssim.config_id,
+      sizeof(vyssim.config_id),
+      "%s-%i",
+      g_get_prgname(),
+      getpid());
+  MPI_Bcast(
+    vyssim.config_id,
+    sizeof(vyssim.config_id),
+    MPI_CHAR,
+    0,
+    vyssim.comm);
 
   rc = run(&vyssim);
   if (rc == 0) rc = EXIT_SUCCESS;
