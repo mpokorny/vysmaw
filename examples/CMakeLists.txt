@@ -12,10 +12,12 @@ link_directories(../py ../src)
 
 add_cython_target(sample1 EMBED_MAIN)
 add_executable(sample1 ${sample1})
+target_link_libraries(sample1 vysmaw)
 python_standalone_executable(sample1)
 
 add_cython_target(sample2 EMBED_MAIN)
 add_executable(sample2 ${sample2})
+target_link_libraries(sample2 vysmaw)
 python_standalone_executable(sample2)
 
 add_cython_target(sample3 EMBED_MAIN)
