@@ -26,8 +26,8 @@ import signal
 import sys
 
 cdef unsigned long num_cbs = 0
-DEF on_period = 1000000uLL
-DEF full_period = 4 * on_period
+cdef unsigned long on_period = 1000000000uLL
+cdef unsigned long full_period = 4 * on_period
 
 # A predicate that selects spectra depending only on their timestamps. The
 # user_data argument is used to count the number of times the callback is
@@ -38,7 +38,7 @@ cdef void cb(const char *config_id, const uint8_t *stns,
              void *user_data, bool *pass_filter) nogil:
     cdef unsigned long *ncb = <unsigned long *>user_data
     for i in range(num_infos):
-        pass_filter[i] = (infos[i].timestamp % full_period) / on_period == 0
+        pass_filter[i] = (infos[i].timestamp % full_period) // on_period == 0
     ncb[0] += 1
     return
 
