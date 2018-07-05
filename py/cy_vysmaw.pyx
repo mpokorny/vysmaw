@@ -21,7 +21,7 @@ from libc.stdint cimport *
 from libc.string cimport *
 from libc.stdlib cimport *
 from cpython.version cimport PY_MAJOR_VERSION
-from cython cimport view
+from cython.view cimport array as cvarray
 import logging
 import inspect
 import traceback
@@ -599,6 +599,10 @@ cdef class Spectrum:
 
     @property
     def values(self):
-        cdef float complex[:] result = \
-            <float complex[:self._length]>self._c_spectrum[0].values
+        cdef float complex[:] result
+        if self._c_spectrum[0].values is not NULL:
+            result = <float complex[:self._length]>self._c_spectrum[0].values
+        else:
+            empty = cvarray(shape=(0), itemsize=sizeof(float complex), format="f")
+            result = empty
         return result
