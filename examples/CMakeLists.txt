@@ -29,3 +29,10 @@ add_executable(sample4 sample4.cc)
 target_link_libraries(sample4 vysmaw)
 target_compile_options(sample4 PRIVATE
   -Wall -Werror)
+
+add_executable(sample5 sample5.cc)
+target_link_libraries(sample5 vysmaw)
+target_compile_options(sample5 PRIVATE
+  -Wall -Werror)
+set_target_properties(sample5 PROPERTIES
+  LINK_FLAGS -static-libstdc++)
