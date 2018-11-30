@@ -449,8 +449,7 @@ find_connection(struct spectrum_reader_context_ *context,
 {
   *conn_ctx = g_hash_table_lookup(context->connections, sockaddr);
   if (*conn_ctx == NULL) {
-    *conn_ctx =
-      initiate_server_connection(context, sockaddr, error_record);
+    *conn_ctx = initiate_server_connection(context, sockaddr, error_record);
     if (G_UNLIKELY(*conn_ctx == NULL))
       return -1;
   }

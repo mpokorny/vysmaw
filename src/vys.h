@@ -36,7 +36,7 @@ extern "C" {
 
 #define VYS_MULTICAST_ADDRESS_SIZE 32
 #define VYS_CONFIG_ID_SIZE 60
-#define VYS_SPECTRUM_OFFSET 32
+#define VYS_SPECTRUM_OFFSET 64
 #define VYS_MAX_BIN_STRIDE_FACTOR 2
 
 struct vys_spectrum_info {

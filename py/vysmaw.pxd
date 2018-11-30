@@ -1,4 +1,4 @@
-# coding: iso-8859-1
+# coding: utf-8
 #
 # Copyright © 2016 Associated Universities, Inc. Washington DC, USA.
 #
@@ -22,7 +22,7 @@ from libcpp cimport bool
 
 cdef extern from "vysmaw.h":
 
-    DEF VYS_SPECTRUM_OFFSET = 32
+    DEF VYS_SPECTRUM_OFFSET = 64
 
     DEF VYS_MULTICAST_ADDRESS_SIZE = 32
 
