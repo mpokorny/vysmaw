@@ -889,6 +889,7 @@ spectra_message_new(
   result->content.spectra.info = *info;
   result->content.spectra.spectrum_buffer_size = buff_size;
   result->content.spectra.num_spectra = num_spectra;
+  result->content.spectra.header_buffer = NULL;
   result->content.spectra.data_buffer = handle->new_valid_buffer_fn(
     handle, id, mrs, num_spectra * buff_size, pool_id, error_record);
   if (G_LIKELY(result->content.spectra.data_buffer != NULL)) {
