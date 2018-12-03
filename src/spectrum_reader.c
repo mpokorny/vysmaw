@@ -994,12 +994,19 @@ poll_completions(struct spectrum_reader_context_ *context,
           req->result = RDMA_REQ_ID_VERIFICATION_FAILURE;
       } else {
         req->result = RDMA_REQ_READ_FAILURE;
-        /* It's perhaps overkill to disconnect always, but upon some
-         * failures the QP transitions to the error state, which then
-         * leads to errors on all subsequent work
-         * requests. Disconnecting should allow a new connection
-         * later. */
-        begin_server_disconnect(context, conn_ctx, error_record);
+        struct ibv_qp_attr attr;
+        struct ibv_qp_init_attr init_attr;
+        int rc =
+          ibv_query_qp(conn_ctx->id->qp, &attr, IBV_QP_STATE, &init_attr);
+        if (G_UNLIKELY(rc != 0)) {
+          VERB_ERR(error_record, errno, "ibv_query_qp");
+          return errno;
+        }
+        /* Upon some failures the QP transitions to the error state, which then
+         * leads to errors on all subsequent work requests. Disconnecting should
+         * allow a new connection later. */
+        if (attr.qp_state == IBV_QPS_ERR)
+          begin_server_disconnect(context, conn_ctx, error_record);
       }
       *reqs = g_slist_prepend(*reqs, req);
     }
