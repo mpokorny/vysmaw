@@ -70,7 +70,8 @@ vysmaw_message_unref(struct vysmaw_message *message)
     vysmaw_message_free_resources(message);
     if (message->typ == VYSMAW_MESSAGE_SPECTRA)
       g_slice_free1(
-        SIZEOF_VYSMAW_MESSAGE(message->content.spectra.num_spectra), message);
+        SIZEOF_VYSMAW_MESSAGE(message->handle->signal_msg_num_spectra),
+        message);
     else
       g_slice_free(struct vysmaw_message, message);
   }
