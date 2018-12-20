@@ -37,6 +37,15 @@
 
 using namespace std;
 
+struct sp {
+  uint64_t timestamp;
+  uint8_t stations[2];
+  uint8_t baseband_index;
+  uint8_t spectral_window_index;
+  uint8_t polarization_product_id;
+  float f[]; // for alignment
+};
+
 namespace std {
 // default_delete specialization for struct vysmaw_message
 template <> struct default_delete<struct vysmaw_message> {
@@ -136,7 +145,7 @@ main(int argc, char *argv[])
   typedef chrono::duration<long,milli> ms;
   ms duration = chrono::duration<long,milli>::max();
   unique_ptr<ofstream> binary_output;
-  decltype(cout.rdbuf()) coutbuf;
+  decltype(cout.rdbuf()) coutbuf = cout.rdbuf();
   ios::sync_with_stdio(false);
 
   // initialize vysmaw configuration
@@ -212,26 +221,35 @@ main(int argc, char *argv[])
             _Complex float* values = message->data[i].values;
             if (values != NULL) {
               ++num_valid_spectra;
+              struct vysmaw_data_info* info = &(message->content.spectra.info);
+              struct sp sp = {
+                .timestamp = message->data[i].timestamp,
+                .stations = {info->stations[0], info->stations[1]},
+                .baseband_index = info->baseband_index,
+                .spectral_window_index = info->spectral_window_index,
+                .polarization_product_id = info->polarization_product_id
+              };
               if (!binary_output) {
-                for (unsigned b = 0;
-                     b < message->content.spectra.info.num_bins;
-                     ++b) {
-                  for (unsigned c = 0;
-                       c < message->content.spectra.info.num_channels;
-                       ++c)
+                for (unsigned b = 0; b < info->num_bins; ++b) {
+                  cout << std::to_string(sp.timestamp)
+                       << " " << std::to_string(sp.stations[0])
+                       << " " << std::to_string(sp.stations[1])
+                       << " " << std::to_string(sp.baseband_index)
+                       << " " << std::to_string(sp.spectral_window_index)
+                       << " " << std::to_string(sp.polarization_product_id)
+                       << " ";
+                  for (unsigned c = 0; c < info->num_channels; ++c)
                     cout << creal(values[c]) << " " << cimag(values[c]) << " ";
                   cout << endl;
-                  values += message->content.spectra.info.bin_stride;
+                  values += info->bin_stride;
                 }
               } else {
-                for (unsigned b = 0;
-                     b < message->content.spectra.info.num_bins;
-                     ++b) {
+                for (unsigned b = 0; b < info->num_bins; ++b) {
+                  cout.write(reinterpret_cast<char *>(&sp), sizeof(sp));
                   cout.write(
                     reinterpret_cast<char *>(values),
-                    message->content.spectra.info.num_channels
-                    * sizeof(values[0]));
-                  values += message->content.spectra.info.bin_stride;
+                    info->num_channels * sizeof(values[0]));
+                  values += info->bin_stride;
                 }
               }
             }
