@@ -237,3 +237,9 @@ as a simple, diagnostic vysmaw application, or as the basis for developing a
 more interesting application. Starting the program with the `--timing` or `-t`
 option may be useful for performance testing; starting without that option may be
 preferable to review the metadata of the spectra that have been received.
+
+### sample5 (C++)
+
+[sample5](examples/sample5.cc) is similar to [sample4](examples/sample4.cc), but
+writes received spectral data (along with metadata) to a binary file, or as text
+to `stdout`. It may be useful for system test and diagnosis purposes.
