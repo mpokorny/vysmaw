@@ -325,8 +325,12 @@ static void
 cancel_rdma_req(struct spectrum_reader_context_ *context, struct rdma_req *req)
 {
   struct rdma_req_block *blk = RDMA_REQ_BLOCK_P(req);
-  if (blk->message != NULL)
+  if (blk->message != NULL) {
     blk->message->data[req->index].values = NULL;
+    blk->message->data[req->index].failed_verification = false;
+    blk->message->data[req->index].rdma_read_status[0] = '\0';
+    blk->message->data[req->index].values = NULL;
+  }
   fulfill_rdma_req(context, req);
 }
 
@@ -676,9 +680,14 @@ post_server_reads(struct spectrum_reader_context_ *context,
           context->shared->handle, conn_ctx->id, context->mrs,
           &rblk->data_info, rblk->num_req, &conn_ctx->prev_pool, error_record);
       if (G_LIKELY(rblk->message != NULL)) {
-        // zero out values pointers for previously canceled requests
-        for (unsigned i = 0; i < req->index; ++i)
+        // zero out values for previously canceled requests arising from failure
+        // to allocate rblk->message
+        for (unsigned i = 0; i < req->index; ++i) {
+          rblk->message->data[i].failed_verification = false;
+          rblk->message->data[i].rdma_read_status[0] = '\0';
+          rblk->message->data[i].header = NULL;
           rblk->message->data[i].values = NULL;
+        }
       } else {
         cancel_rdma_req(context, req);
         canceled = true;
