@@ -71,8 +71,7 @@ spectrum_selector(struct spectrum_selector_context *context)
   bool quitting = false;
   bool quit = false;
 
-  start_service_in_order(context->handle, SPECTRUM_SELECTOR);
-
+  data_path_message_pool_ref(context->handle);
   while (!quit) {
     struct data_path_message *msg =
       g_async_queue_pop(context->signal_msg_queue);
@@ -123,6 +122,7 @@ spectrum_selector(struct spectrum_selector_context *context)
     }
   }
 
+  data_path_message_pool_unref(context->handle);
   g_hash_table_destroy(prev_eagerly_forwarded);
   g_async_queue_unref(context->signal_msg_queue);
   vys_async_queue_unref(context->read_request_queue);

@@ -67,11 +67,13 @@ void
 vysmaw_message_unref(struct vysmaw_message *message)
 {
   if (g_atomic_int_dec_and_test(&message->refcount)) {
+    // get message size before call to vysmaw_message_free_resources(), which
+    // removes reference to handle
+    size_t msg_size =
+      SIZEOF_VYSMAW_MESSAGE(message->handle->signal_msg_num_spectra);
     vysmaw_message_free_resources(message);
     if (message->typ == VYSMAW_MESSAGE_SPECTRA)
-      g_slice_free1(
-        SIZEOF_VYSMAW_MESSAGE(message->handle->signal_msg_num_spectra),
-        message);
+      g_slice_free1(msg_size, message);
     else
       g_slice_free(struct vysmaw_message, message);
   }
@@ -95,44 +97,70 @@ vysmaw_start(
   result->result = NULL;
   memcpy((void *)&result->config, config, sizeof(*config));
 
+  // initialize data_path_msg_pool for failures occurring during startup
+  struct vys_buffer_pool* init_pool =
+    vys_buffer_pool_new(100, SIZEOF_DATA_PATH_MESSAGE(50));
+  if (init_pool == NULL) {
+    g_free(result);
+    return NULL;
+  }
+  result->data_path_msg_pool = init_pool;
+  result->data_path_msg_pool_refcount = 1;
+
   /* transform vysmaw_consumer to struct consumer */
   result->consumer = g_new(struct consumer, 1);
   init_consumer(consumer->filter, consumer->filter_data,
                 &consumer->queue, result->consumer);
 
-
+  bool failed = FALSE;
   if (result->config.error_record == NULL) {
+
     /* service threads initialization */
-    MUTEX_INIT(result->gate.mtx);
-    COND_INIT(result->gate.cond);
     init_service_threads(result);
+    failed = sync_startup_phase(result, false);
 
-    *(unsigned *)&result->config.max_spectrum_buffer_size =
-      result->signal_msg_num_spectra *
-      MAX(result->config.max_spectrum_buffer_size,
-          VYS_BUFFER_POOL_MIN_BUFFER_SIZE);
-    size_t num_buffers =
-      result->config.spectrum_buffer_pool_size
-      / result->config.max_spectrum_buffer_size;
-    if (result->config.single_spectrum_buffer_pool) {
-      result->pool = spectrum_buffer_pool_new(
-        result->config.max_spectrum_buffer_size, num_buffers);
-      result->new_valid_buffer_fn = new_valid_buffer_from_pool;
-      result->lookup_buffer_pool_fn = lookup_buffer_pool_from_pool;
-      result->remove_idle_pools_fn = remove_idle_pools_from_pool;
-    } else {
-      result->pool_collection = spectrum_buffer_pool_collection_new();
-      result->new_valid_buffer_fn = new_valid_buffer_from_collection;
-      result->lookup_buffer_pool_fn = lookup_buffer_pool_from_collection;
-      result->remove_idle_pools_fn = remove_idle_pools_from_collection;
-      REC_MUTEX_INIT(result->pool_collection_mtx);
+    if (!failed) {
+
+      *(unsigned *)&result->config.max_spectrum_buffer_size =
+        result->signal_msg_num_spectra *
+        MAX(result->config.max_spectrum_buffer_size,
+            VYS_BUFFER_POOL_MIN_BUFFER_SIZE);
+      size_t num_buffers =
+        result->config.spectrum_buffer_pool_size
+        / result->config.max_spectrum_buffer_size;
+
+      if (result->config.single_spectrum_buffer_pool) {
+        result->pool = spectrum_buffer_pool_new(
+          result->config.max_spectrum_buffer_size, num_buffers);
+        result->new_valid_buffer_fn = new_valid_buffer_from_pool;
+        result->lookup_buffer_pool_fn = lookup_buffer_pool_from_pool;
+        result->remove_idle_pools_fn = remove_idle_pools_from_pool;
+      } else {
+        result->pool_collection = spectrum_buffer_pool_collection_new();
+        result->new_valid_buffer_fn = new_valid_buffer_from_collection;
+        result->lookup_buffer_pool_fn = lookup_buffer_pool_from_collection;
+        result->remove_idle_pools_fn = remove_idle_pools_from_collection;
+        REC_MUTEX_INIT(result->pool_collection_mtx);
+      }
+
+      result->header_pool =
+        vys_buffer_pool_new(
+          num_buffers,
+          result->signal_msg_num_spectra * sizeof(union vysmaw_spectrum_header));
     }
-
-    result->header_pool =
-      vys_buffer_pool_new(
-        num_buffers,
-        result->signal_msg_num_spectra * sizeof(union vysmaw_spectrum_header));
   }
+
+  while (!failed &&
+         g_atomic_int_get(&result->barrier.phase)
+         <= PHASE_SPECTRUM_READER_STARTED)
+    failed = sync_startup_phase(result, false);
+
+  if (!failed)
+    vys_buffer_pool_free(init_pool);
+  else
+    MSG_ERROR((struct vys_error_record**)&result->config.error_record,
+              -1, "Startup failure");
+
   if (result->config.error_record != NULL) {
     result->in_shutdown = true;
     struct vysmaw_result rc = {
@@ -140,10 +168,15 @@ vysmaw_start(
       .syserr_desc = vys_error_record_to_string(
         (struct vys_error_record **)&(result->config.error_record))
     };
+    printf("*** %s ***\n", rc.syserr_desc);
+    /* struct data_path_message *quit_msg = */
+    /*   data_path_message_new(result); */
+    /* quit_msg->typ = DATA_PATH_QUIT; */
+
     struct vysmaw_message *msg = end_message_new(result, &rc);
     post_msg(result, msg);
-    handle_unref(result); // end message has been posted
   }
+  data_path_message_pool_unref(result);
   return result;
 }
 

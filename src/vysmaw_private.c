@@ -275,6 +275,7 @@ void
 handle_unref(vysmaw_handle handle)
 {
   if (g_atomic_int_dec_and_test(&handle->refcount)) {
+
     GThread *self = g_thread_self();
 
     if (handle->signal_receiver_thread != NULL
@@ -289,8 +290,8 @@ handle_unref(vysmaw_handle handle)
         && handle->spectrum_reader_thread != self)
       g_thread_join(handle->spectrum_reader_thread);
 
-    MUTEX_CLEAR(handle->gate.mtx);
-    COND_CLEAR(handle->gate.cond);
+    MUTEX_CLEAR(handle->barrier.mtx);
+    COND_CLEAR(handle->barrier.cond);
 
     message_queue_unref(handle->consumer->queue);
     g_array_free(handle->consumer->pass_filter_array, TRUE);
@@ -302,9 +303,6 @@ handle_unref(vysmaw_handle handle)
     } else {
       spectrum_buffer_pool_collection_free(handle->pool_collection);
     }
-
-    if (handle->header_pool != NULL)
-      vys_buffer_pool_free(handle->header_pool);
 
     MUTEX_CLEAR(handle->mtx);
     g_free(handle);
@@ -749,8 +747,6 @@ init_signal_receiver(vysmaw_handle handle, GAsyncQueue *signal_msg_queue,
   context->signal_msg_queue = g_async_queue_ref(signal_msg_queue);
   handle->signal_receiver_thread =
     THREAD_NEW("signal_receiver", (GThreadFunc)signal_receiver, context);
-  while (!handle->gate.signal_receiver_ready)
-    COND_WAIT(handle->gate.cond, handle->gate.mtx);
 }
 
 void
@@ -785,9 +781,6 @@ init_spectrum_reader(vysmaw_handle handle,
 int
 init_service_threads(vysmaw_handle handle)
 {
-
-  MUTEX_LOCK(handle->gate.mtx);
-
   int loop_fds[2];
   int rc;
 #ifdef _GNU_SOURCE
@@ -805,15 +798,26 @@ init_service_threads(vysmaw_handle handle)
     return rc;
   }
 
+  MUTEX_INIT(handle->barrier.mtx);
+  COND_INIT(handle->barrier.cond);
+  handle->barrier.phase = PHASE_SIGNAL_SIZE_INITIALIZED;
+  handle->barrier.num_pending_arrivals =
+    num_sync_threads[handle->barrier.phase];
+
   GAsyncQueue *signal_msg_queue = g_async_queue_new();
   init_signal_receiver(handle, signal_msg_queue, loop_fds[0]);
 
   struct vys_async_queue *read_request_queue = vys_async_queue_new();
+  if (read_request_queue == NULL) {
+    MSG_ERROR((struct vys_error_record **)(&(handle->config.error_record)),
+              errno,
+              "Failed to create read_request_queue: %s",
+              strerror(errno));
+    return -1;
+  }
   init_spectrum_selector(handle, signal_msg_queue, read_request_queue);
 
   init_spectrum_reader(handle, read_request_queue, loop_fds[1]);
-
-  MUTEX_UNLOCK(handle->gate.mtx);
 
   g_async_queue_unref(signal_msg_queue);
   vys_async_queue_unref(read_request_queue);
@@ -821,39 +825,32 @@ init_service_threads(vysmaw_handle handle)
   return 0;
 }
 
-void
-start_service_in_order(vysmaw_handle handle, service_type_t service)
+bool
+sync_startup_phase(vysmaw_handle handle, bool failed)
 {
-  struct service_gate *gate = &handle->gate;
-
-  MUTEX_LOCK(gate->mtx);
-  switch (service) {
-  case SIGNAL_RECEIVER:
-    gate->signal_receiver_ready = true;
-    break;
-  case SPECTRUM_SELECTOR:
-    gate->spectrum_selector_ready = true;
-    break;
-  case SPECTRUM_READER:
-    gate->spectrum_reader_ready = true;
-    break;
+  struct startup_phase_barrier *barrier = &handle->barrier;
+  MUTEX_LOCK(barrier->mtx);
+  if (barrier->phase != PHASE_FAILED) {
+    startup_phases_t entry_phase = barrier->phase;
+    if (failed) {
+      g_atomic_int_set(&barrier->phase, PHASE_FAILED);
+      COND_BCAST(barrier->cond);
+    }
+    else {
+      --(barrier->num_pending_arrivals);
+      if (barrier->num_pending_arrivals == 0) {
+        g_atomic_int_set(&barrier->phase, barrier->phase + 1);
+        if (barrier->phase < NUM_STARTUP_PHASES)
+          barrier->num_pending_arrivals = num_sync_threads[barrier->phase];
+        COND_BCAST(barrier->cond);
+      }
+      while (barrier->phase == entry_phase)
+        COND_WAIT(barrier->cond, barrier->mtx);
+    }
   }
-  COND_BCAST(gate->cond);
-  MUTEX_UNLOCK(gate->mtx);
-
-#define WAIT_FOR_FLAG(flag)                     \
-  G_STMT_START {                                \
-    MUTEX_LOCK(gate->mtx);                      \
-    while (!gate->flag)                         \
-      COND_WAIT(gate->cond, gate->mtx);         \
-    MUTEX_UNLOCK(gate->mtx);                    \
-  } G_STMT_END
-
-  WAIT_FOR_FLAG(spectrum_reader_ready);
-  WAIT_FOR_FLAG(spectrum_selector_ready);
-  WAIT_FOR_FLAG(signal_receiver_ready);
-
-#undef WAIT_FOR_FLAG
+  bool result = barrier->phase == PHASE_FAILED;
+  MUTEX_UNLOCK(barrier->mtx);
+  return result;
 }
 
 struct vysmaw_message *
@@ -861,6 +858,21 @@ message_ref(struct vysmaw_message *message)
 {
   g_atomic_int_inc(&message->refcount);
   return message;
+}
+
+void
+data_path_message_pool_ref(vysmaw_handle handle)
+{
+  g_atomic_int_inc(&handle->data_path_msg_pool_refcount);
+}
+
+void
+data_path_message_pool_unref(vysmaw_handle handle)
+{
+  if (g_atomic_int_dec_and_test(&handle->data_path_msg_pool_refcount)) {
+    vys_buffer_pool_free(handle->data_path_msg_pool);
+    handle->data_path_msg_pool = NULL;
+  }
 }
 
 struct data_path_message *

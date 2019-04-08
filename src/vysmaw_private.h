@@ -136,19 +136,23 @@ struct consumer {
   void *user_data;
 };
 
-struct service_gate {
-  bool signal_receiver_ready;
-  bool spectrum_selector_ready;
-  bool spectrum_reader_ready;
+typedef enum {
+  PHASE_SIGNAL_SIZE_INITIALIZED = 0,
+  PHASE_MEMORY_ALLOCATED,
+  PHASE_SPECTRUM_READER_STARTED,
+  PHASE_SUCCEEDED,
+  PHASE_FAILED,
+  NUM_STARTUP_PHASES
+} startup_phases_t;
+
+static const unsigned num_sync_threads[NUM_STARTUP_PHASES] = {3, 3, 3, 3, 1};
+
+struct startup_phase_barrier {
+  startup_phases_t phase;
+  unsigned num_pending_arrivals;
   Mutex mtx;
   Cond cond;
 };
-
-typedef enum {
-  SIGNAL_RECEIVER,
-  SPECTRUM_SELECTOR,
-  SPECTRUM_READER
-} service_type_t;
 
 struct _vysmaw_handle {
   int refcount;
@@ -173,7 +177,8 @@ struct _vysmaw_handle {
   };
 
   struct vys_buffer_pool *header_pool;
-  struct vys_buffer_pool *data_path_msg_pool;
+  struct vys_buffer_pool *volatile data_path_msg_pool;
+  int data_path_msg_pool_refcount;
 
   unsigned num_spectrum_buffers_unavailable;
   unsigned num_signal_buffers_unavailable;
@@ -184,7 +189,7 @@ struct _vysmaw_handle {
   struct consumer *consumer;
 
   /* service threads */
-  struct service_gate gate;
+  struct startup_phase_barrier barrier;
   GThread *signal_receiver_thread;
   GThread *spectrum_selector_thread;
   GThread *spectrum_reader_thread;
@@ -316,7 +321,7 @@ extern void init_spectrum_reader(
   __attribute__((nonnull));
 extern int init_service_threads(vysmaw_handle handle)
   __attribute__((nonnull));
-extern void start_service_in_order(vysmaw_handle handle, service_type_t service)
+extern bool sync_startup_phase(vysmaw_handle handle, bool failed)
   __attribute__((nonnull));
 extern struct vysmaw_message *message_new(
   vysmaw_handle handle, enum vysmaw_message_type typ)
@@ -360,6 +365,10 @@ extern void message_release_all_buffers(struct vysmaw_message *message)
 extern void vysmaw_message_free_resources(struct vysmaw_message *message)
   __attribute__((nonnull));
 
+extern void data_path_message_pool_ref(vysmaw_handle handle)
+  __attribute__((nonnull));
+extern void data_path_message_pool_unref(vysmaw_handle handle)
+  __attribute__((nonnull));
 extern struct data_path_message *data_path_message_new(vysmaw_handle handle)
   __attribute__((malloc));
 extern void data_path_message_free(

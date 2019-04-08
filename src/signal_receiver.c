@@ -388,8 +388,21 @@ start_signal_receive(struct signal_receiver_context_ *context,
    * updated, as min_posted_wr may have been reduced. */
   num_signal_msg_buffers =
     context->min_posted_wr * config->signal_message_pool_overhead_factor;
-  handle->data_path_msg_pool =
+  struct vys_buffer_pool *new_pool =
     vys_buffer_pool_new(num_signal_msg_buffers, sizeof_data_path_msg);
+  if (new_pool == NULL) {
+    MSG_ERROR(
+      error_record,
+      -1,
+      "failed to allocate memory for vysmaw internal messages")
+    return -1;
+  }
+  struct vys_buffer_pool *old_pool =
+    handle->data_path_msg_pool;
+  bool exch =
+    g_atomic_pointer_compare_and_exchange(
+      (volatile void*)&handle->data_path_msg_pool, old_pool, new_pool);
+  assert(exch);
 
   context->wcs = g_new(struct ibv_wc, context->max_posted_wr);
 
@@ -719,9 +732,11 @@ to_quit_state(struct signal_receiver_context_ *context,
   g_assert(context->state != STATE_DONE);
   if (quit_msg == NULL) {
     quit_msg = data_path_message_new(context->shared->handle);
-    quit_msg->typ = DATA_PATH_QUIT;
+    if (quit_msg != NULL)
+      quit_msg->typ = DATA_PATH_QUIT;
   }
-  g_async_queue_push(context->shared->signal_msg_queue, quit_msg);
+  if (quit_msg != NULL)
+    g_async_queue_push(context->shared->signal_msg_queue, quit_msg);
   int rc = 0;
   if (context->state != STATE_QUIT)
     rc = leave_multicast(context, error_record);
@@ -787,6 +802,9 @@ on_shutdown_timer_event(struct signal_receiver_context_ *context,
                             &in_shutdown, &result);
     if (G_UNLIKELY(in_shutdown)) {
       rc = to_quit_state(context, NULL, error_record);
+      stop_shutdown_timer(
+        &context->pollfds[SHUTDOWN_TIMER_FD_INDEX],
+        error_record);
       if (result != NULL && result->code != VYSMAW_NO_ERROR) {
         if (result->syserr_desc != NULL) {
           MSG_ERROR(error_record, result->code, "%s",
@@ -949,6 +967,7 @@ signal_receiver(struct signal_receiver_context *shared)
 {
 
   struct vys_error_record *error_record = NULL;
+  bool failed = FALSE;
 
   struct signal_receiver_context_ context;
   memset(&context, 0, sizeof(context));
@@ -956,6 +975,7 @@ signal_receiver(struct signal_receiver_context *shared)
   context.state = STATE_INIT;
   context.in_multicast = false;
   context.in_underflow = true;
+  data_path_message_pool_ref(context.shared->handle);
 
   for (unsigned i = 0; i < NUM_FDS; ++i)
     context.pollfds[i].fd = -1;
@@ -975,11 +995,18 @@ signal_receiver(struct signal_receiver_context *shared)
     goto signal_data_path_end_and_return;
 
   context.state = STATE_RUN;
-  start_service_in_order(shared->handle, SIGNAL_RECEIVER);
-  rc = signal_receiver_loop(&context, &error_record);
+  while (!failed
+         && g_atomic_int_get(&shared->handle->barrier.phase)
+         <= PHASE_SPECTRUM_READER_STARTED)
+    failed = sync_startup_phase(shared->handle, false);
+  if (!failed)
+    rc = signal_receiver_loop(&context, &error_record);
 
 signal_data_path_end_and_return:
-  start_service_in_order(shared->handle, SIGNAL_RECEIVER);
+  while (!failed
+         && g_atomic_int_get(&shared->handle->barrier.phase)
+         <= PHASE_SPECTRUM_READER_STARTED)
+    failed = sync_startup_phase(shared->handle, rc != 0);
 
   /* initialization failures may result in not being in STATE_DONE state */
   if (context.state != STATE_DONE) {
@@ -1000,6 +1027,8 @@ signal_data_path_end_and_return:
   context.end_msg->error_record =
     vys_error_record_concat(error_record, context.end_msg->error_record);
   g_async_queue_push(shared->signal_msg_queue, context.end_msg);
+
+  data_path_message_pool_unref(context.shared->handle);
 
   g_async_queue_unref(shared->signal_msg_queue);
 

@@ -51,6 +51,7 @@ struct spectrum_reader_context_ {
   GHashTable *connections;
   GSequence *fd_connections;
   GSList *free_rdma_req_blocks;
+  long num_free_rdma_req_blocks;
   unsigned rdma_req_backlog;
 };
 
@@ -267,6 +268,7 @@ new_rdma_req_block(
   if (context->free_rdma_req_blocks == NULL) {
     result = g_slice_alloc(
       SIZEOF_RDMA_REQ_BLOCK(context->shared->handle->signal_msg_num_spectra));
+    ++(context->num_free_rdma_req_blocks);
   } else {
     result = context->free_rdma_req_blocks->data;
     context->free_rdma_req_blocks =
@@ -542,6 +544,7 @@ on_data_path_message(struct spectrum_reader_context_ *context,
 
   case DATA_PATH_END:
     context->state = STATE_DONE;
+    stop_read_request_poll(context, error_record);
     break;
 
   default:
@@ -699,10 +702,19 @@ post_server_reads(struct spectrum_reader_context_ *context,
         mr = g_hash_table_lookup(context->mrs, pool_id);
         if (G_UNLIKELY(mr == NULL)) {
           struct spectrum_buffer_pool *sb_pool = get_buffer_pool(rblk->message);
-          rc = register_one_spectrum_buffer_pool(
-            sb_pool, conn_ctx->id, context->mrs, error_record);
-          mr = g_hash_table_lookup(context->mrs, pool_id);
-          g_assert(mr != NULL);
+          if (G_LIKELY(sb_pool != NULL)) {
+            rc = register_one_spectrum_buffer_pool(
+              sb_pool, conn_ctx->id, context->mrs, error_record);
+            mr = g_hash_table_lookup(context->mrs, pool_id);
+            g_assert(mr != NULL);
+          } else {
+            rc = ENOMEM;
+            MSG_ERROR(
+              error_record,
+              ENOMEM,
+              "%s",
+              "failed to get buffer pool memory");
+          }
         }
       }
       if (G_LIKELY(rc == 0)) {
@@ -727,13 +739,14 @@ post_server_reads(struct spectrum_reader_context_ *context,
         rc = rdma_post_readv(
           conn_ctx->id, req, sge, sizeof(sge) / sizeof(sge[0]), 0, 
           req->spectrum_info.data_addr, conn_ctx->rkeys[rblk->mr_id]);
+        if (G_UNLIKELY(rc != 0))
+          VERB_ERR(error_record, errno, "rdma_post_readv");
       }
       if (G_LIKELY(rc == 0)) {
         ++(conn_ctx->num_posted_wr);
       } else {
         cancel_rdma_req(context, req);
         canceled = true;
-        VERB_ERR(error_record, errno, "rdma_post_read");
       }
     }
   }
@@ -1169,7 +1182,7 @@ on_poll_events(struct spectrum_reader_context_ *context,
   int rc1 = 0;
   struct pollfd *tm_pollfd = &g_array_index(context->pollfds, struct pollfd,
                                             INACTIVITY_TIMER_FD_INDEX);
-  if (tm_pollfd->revents & POLLIN)
+  if (tm_pollfd->fd >= 0 && tm_pollfd->revents & POLLIN)
     rc1 = on_inactivity_timer_event(context, error_record);
 
   /* read completion events */
@@ -1178,7 +1191,7 @@ on_poll_events(struct spectrum_reader_context_ *context,
     struct pollfd *ev_pollfd =
       &g_array_index(context->pollfds, struct pollfd, i);
     int rc3 = 0;
-    if (ev_pollfd->revents & POLLIN) {
+    if (ev_pollfd->fd >= 0 && ev_pollfd->revents & POLLIN) {
       rc3 = on_read_completion(context, i, error_record);
     } else if (ev_pollfd->revents & (POLLERR | POLLHUP)) {
       MSG_ERROR(error_record, -1, "%s",
@@ -1192,7 +1205,7 @@ on_poll_events(struct spectrum_reader_context_ *context,
   int rc4 = 0;
   struct pollfd *rr_pollfd = &g_array_index(context->pollfds, struct pollfd,
                                             READ_REQUEST_QUEUE_FD_INDEX);
-  if (rr_pollfd->revents & POLLIN) {
+  if (rr_pollfd->fd >= 0 && rr_pollfd->revents & POLLIN) {
     struct data_path_message *msg =
       vys_async_queue_pop(context->shared->read_request_queue);
     if (msg != NULL)
@@ -1203,14 +1216,14 @@ on_poll_events(struct spectrum_reader_context_ *context,
   int rc5 = 0;
   struct pollfd *bp_pollfd = &g_array_index(context->pollfds, struct pollfd,
                                             BUFFER_POOL_IDLE_TIMER_FD_INDEX);
-  if (bp_pollfd->revents & POLLIN)
+  if (bp_pollfd->fd >= 0 && bp_pollfd->revents & POLLIN)
     rc5 = on_buffer_pool_idle_timer_event(context, error_record);
 
   /* cm events */
   int rc6 = 0;
   struct pollfd *cm_pollfd =
     &g_array_index(context->pollfds, struct pollfd, CM_EVENT_FD_INDEX);
-  if (cm_pollfd->revents & POLLIN) {
+  if (cm_pollfd->fd >= 0 && cm_pollfd->revents & POLLIN) {
     rc6 = on_cm_event(context, error_record);
   } else if (cm_pollfd->revents & (POLLERR | POLLHUP)) {
     MSG_ERROR(error_record, -1, "%s",
@@ -1253,11 +1266,13 @@ to_quit_state(struct spectrum_reader_context_ *context,
     }
     if (quit_msg == NULL) {
       quit_msg = data_path_message_new(context->shared->handle);
-      quit_msg->typ = DATA_PATH_QUIT;
+      if (quit_msg != NULL)
+        quit_msg->typ = DATA_PATH_QUIT;
     }
-    rc = loopback_msg(context, quit_msg, error_record);
     context->state = STATE_QUIT;
     context->quit_msg = quit_msg;
+    if (quit_msg != NULL)
+      rc = loopback_msg(context, quit_msg, error_record);
   }
   return rc;
 }
@@ -1270,7 +1285,8 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
   GTimer *req_backlog_timer = g_timer_new();
   unsigned long acc_req_backlog = 0;
   unsigned num_req_backlog_samples = 0;
-  bool quit = false;
+  bool startup_sync = FALSE;
+  bool quit = FALSE;
   while (!quit) {
     int rc = 0;
     int nfd = poll((struct pollfd *)(context->pollfds->data),
@@ -1286,9 +1302,10 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
       to_quit_state(context, NULL, error_record);
       result = -1;
     }
+    // FIXME: quit condition
     quit = (context->state == STATE_DONE
-            && (context->connections == NULL
-                || g_hash_table_size(context->connections) == 0));
+            /*&& (context->connections == NULL
+              || g_hash_table_size(context->connections) == 0)*/);
 
     // keep rdma request backlog statistics; not currently used for any purpose
     // but debugging, but it might be useful, so leaving the code in place
@@ -1302,6 +1319,10 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
       /*   (double)acc_req_backlog / num_req_backlog_samples); */
       acc_req_backlog = 0;
       num_req_backlog_samples = 0;
+    }
+    if (G_UNLIKELY(!startup_sync)) {
+      startup_sync = TRUE;
+      quit = sync_startup_phase(context->shared->handle, false);
     }
   }
   return result;
@@ -1451,13 +1472,16 @@ void *
 spectrum_reader(struct spectrum_reader_context *shared)
 {
   struct vys_error_record *error_record = NULL;
+  bool failed = FALSE;
 
+  int rc = 0;
   struct spectrum_reader_context_ context;
   memset(&context, 0, sizeof(context));
   context.shared = shared;
   context.state = STATE_INIT;
   context.pollfds = g_array_new(false, false, sizeof(struct pollfd));
   context.new_pollfds = g_array_new(false, false, sizeof(struct pollfd));
+  data_path_message_pool_ref(context.shared->handle);
   /* create table for registered memory keys */
   context.mrs = g_hash_table_new_full(
     g_direct_hash, g_direct_equal,
@@ -1477,7 +1501,7 @@ spectrum_reader(struct spectrum_reader_context *shared)
     pollfd->events = 0;
   }
 
-  int rc = start_rdma_cm(&context, &error_record);
+  rc = start_rdma_cm(&context, &error_record);
   if (rc < 0)
     goto cleanup_and_return;
 
@@ -1494,11 +1518,18 @@ spectrum_reader(struct spectrum_reader_context *shared)
     goto cleanup_and_return;
 
   context.state = STATE_RUN;
-  start_service_in_order(shared->handle, SPECTRUM_READER);
-  rc = spectrum_reader_loop(&context, &error_record);
+  while (!failed &&
+         g_atomic_int_get(&shared->handle->barrier.phase)
+         < PHASE_SPECTRUM_READER_STARTED)
+    failed = sync_startup_phase(shared->handle, false);
+  if (!failed)
+    rc = spectrum_reader_loop(&context, &error_record);
 
 cleanup_and_return:
-  start_service_in_order(shared->handle, SPECTRUM_READER);
+  while (!failed &&
+         g_atomic_int_get(&shared->handle->barrier.phase)
+         <= PHASE_SPECTRUM_READER_STARTED)
+    failed = sync_startup_phase(shared->handle, rc != 0);
 
   /* initialization failures may result in not being in STATE_DONE state */
   if (context.state != STATE_DONE) {
@@ -1544,10 +1575,11 @@ cleanup_and_return:
 
   /* post result message consumer queue */
   post_msg(shared->handle, msg);
-  handle_unref(shared->handle); // end message has been posted
-  data_path_message_free(shared->handle, context.end_msg);
+  if (context.end_msg != NULL)
+    data_path_message_free(shared->handle, context.end_msg);
 
   while (context.free_rdma_req_blocks != NULL) {
+    --(context.num_free_rdma_req_blocks);
     g_slice_free1(
       SIZEOF_RDMA_REQ_BLOCK(context.shared->handle->signal_msg_num_spectra),
       context.free_rdma_req_blocks->data);
@@ -1556,9 +1588,13 @@ cleanup_and_return:
         context.free_rdma_req_blocks,
         context.free_rdma_req_blocks);
   }
+  if (context.num_free_rdma_req_blocks != 0)
+    g_warning(
+      "rdma_req_blocks num_alloc - num_free: %ld",
+      context.num_free_rdma_req_blocks);
 
-  if (context.shared->handle->data_path_msg_pool != NULL) 
-    vys_buffer_pool_free(context.shared->handle->data_path_msg_pool);
+  data_path_message_pool_unref(context.shared->handle);
+  handle_unref(shared->handle); // end message has been posted
 
   g_array_free(context.pollfds, TRUE);
   g_array_free(context.new_pollfds, TRUE);
