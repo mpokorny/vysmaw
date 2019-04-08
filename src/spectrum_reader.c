@@ -864,8 +864,7 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
   }
 
   ack_completions(conn_ctx, 1);
-  // TODO: exit can hang here!
-  //rdma_destroy_qp(conn_ctx->id);
+  rdma_destroy_qp(conn_ctx->id);
 
   // deregister memory regions when there are no more connections
   if (g_hash_table_size(context->connections) == 0) {
@@ -1004,6 +1003,7 @@ poll_completions(struct spectrum_reader_context_ *context,
   if (G_LIKELY(nc > 0)) {
     g_assert(conn_ctx->num_posted_wr >= nc);
     conn_ctx->num_posted_wr -= nc;
+    //__atomic_thread_fence(__ATOMIC_RELEASE);
     for (unsigned i = 0; i < nc; ++i) {
       struct rdma_req *req = (struct rdma_req *)conn_ctx->wcs[i].wr_id;
       req->status = conn_ctx->wcs[i].status;
