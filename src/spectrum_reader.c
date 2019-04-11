@@ -58,6 +58,7 @@ struct spectrum_reader_context_ {
 struct server_connection_context {
   struct rdma_cm_id *id;
   struct ibv_wc *wcs;
+  struct sockaddr_in *addr;
   uint32_t *rkeys;
   bool established;
   bool disconnecting;
@@ -437,6 +438,7 @@ initiate_server_connection(struct spectrum_reader_context_ *context,
   struct server_connection_context *result =
     g_slice_new0(struct server_connection_context);
   result->id = id;
+  result->addr = key;
   result->reqs = g_queue_new();
   set_max_posted_wr(context, result,
                     context->shared->handle->config.rdma_read_max_posted);
@@ -480,7 +482,7 @@ on_signal_message(struct spectrum_reader_context_ *context,
   int rc = find_connection(context, &payload->sockaddr, &conn_ctx, &reqs,
                            error_record);
 
-  if (G_LIKELY(rc == 0 && reqs != NULL)) {
+  if (G_LIKELY(rc == 0 && reqs != NULL && context->state < STATE_QUIT)) {
     struct rdma_req_block *blk =
       new_rdma_req_block(context, conn_ctx, payload);
     if (G_LIKELY(blk != NULL)) {
@@ -582,6 +584,7 @@ on_server_addr_resolved(struct spectrum_reader_context_ *context,
   rc = rdma_create_qp(conn_ctx->id, NULL, &attr);
   if (G_UNLIKELY(rc != 0)) {
     VERB_ERR(error_record, errno, "rdma_create_qp");
+    conn_ctx->id->qp = NULL;
     return -1;
   }
 
@@ -823,6 +826,8 @@ begin_server_disconnect(struct spectrum_reader_context_ *context,
       rc = rdma_disconnect(conn_ctx->id);
       if (G_UNLIKELY(rc != 0))
         VERB_ERR(error_record, errno, "rdma_disconnect");
+    } else {
+      rc = complete_server_disconnect(context, conn_ctx, error_record);
     }
   }
   return rc;
@@ -840,31 +845,37 @@ complete_server_disconnect(struct spectrum_reader_context_ *context,
     g_free(conn_ctx->rkeys);
 
   struct vys_error_record *er = NULL;
-  bool removed = g_hash_table_remove(
-    context->connections, &(conn_ctx->id->route.addr.dst_sin));
+  bool removed = g_hash_table_remove(context->connections, conn_ctx->addr);
   if (G_UNLIKELY(!removed))
     MSG_ERROR(&er, -1, "%s",
               "failed to remove server connection record from client");
 
-  g_sequence_remove(
-    find_server_connection_context_iter(
-      context, conn_ctx->id->send_cq_channel->fd));
+  assert(conn_ctx->id != NULL);
+  if (conn_ctx->id->send_cq_channel != NULL) {
+    GSequenceIter *conn =
+      find_server_connection_context_iter(
+        context, conn_ctx->id->send_cq_channel->fd);
+    if (conn != NULL)
+      g_sequence_remove(conn);
+  }
 
   if (context->new_pollfds->len == 0)
     g_array_append_vals(context->new_pollfds, context->pollfds->data,
                         context->pollfds->len);
 
-  for (unsigned i = 0; i < context->new_pollfds->len; ++i) {
-    struct pollfd *pfd =
-      &(g_array_index(context->new_pollfds, struct pollfd, i));
-    if (pfd->fd == conn_ctx->id->send_cq_channel->fd) {
-      g_array_remove_index(context->new_pollfds, i);
-      break;
+  if (conn_ctx->id->send_cq_channel != NULL)
+    for (unsigned i = 0; i < context->new_pollfds->len; ++i) {
+      struct pollfd *pfd =
+        &(g_array_index(context->new_pollfds, struct pollfd, i));
+      if (pfd->fd == conn_ctx->id->send_cq_channel->fd) {
+        g_array_remove_index(context->new_pollfds, i);
+        break;
+      }
     }
-  }
 
   ack_completions(conn_ctx, 1);
-  rdma_destroy_qp(conn_ctx->id);
+  if (conn_ctx->id->qp != NULL)
+    rdma_destroy_qp(conn_ctx->id);
 
   // deregister memory regions when there are no more connections
   if (g_hash_table_size(context->connections) == 0) {
@@ -917,11 +928,11 @@ on_cm_event(struct spectrum_reader_context_ *context,
     g_hash_table_lookup(context->connections,
                         &event->id->route.addr.dst_sin);
   if (G_UNLIKELY(conn_ctx == NULL)) {
-    MSG_ERROR(
-      error_record, -1,
-      "failed to find connection for event %s",
-      rdma_event_str(event->event));
-    return -1;
+    /* MSG_ERROR( */
+    /*   error_record, -1, */
+    /*   "failed to find connection for event %s", */
+    /*   rdma_event_str(event->event)); */
+    return 0;
   }
 
   /* Optimistically read some values from the event, even if they might only
@@ -947,17 +958,35 @@ on_cm_event(struct spectrum_reader_context_ *context,
   /* dispatch event based on type */
   switch (ev_type) {
   case RDMA_CM_EVENT_ADDR_RESOLVED:
-    rc = on_server_addr_resolved(context, conn_ctx, error_record);
+    if (G_UNLIKELY(context->state >= STATE_QUIT)) {
+      rc = begin_server_disconnect(context, conn_ctx, error_record);
+    } else {
+      rc = on_server_addr_resolved(context, conn_ctx, error_record);
+      if (rc != 0)
+        begin_server_disconnect(context, conn_ctx, error_record);
+    }
     break;
 
   case RDMA_CM_EVENT_ROUTE_RESOLVED:
-    rc = on_server_route_resolved(context, conn_ctx, error_record);
+    if (G_UNLIKELY(context->state >= STATE_QUIT)) {
+      rc = begin_server_disconnect(context, conn_ctx, error_record);
+    } else {
+      rc = on_server_route_resolved(context, conn_ctx, error_record);
+      if (rc != 0)
+        begin_server_disconnect(context, conn_ctx, error_record);
+    }
     break;
 
   case RDMA_CM_EVENT_ESTABLISHED:
-    rc = on_server_established(context, conn_ctx, private_data,
-                               initiator_depth, error_record);
-    private_data = NULL;
+    if (G_UNLIKELY(context->state >= STATE_QUIT)) {
+      rc = begin_server_disconnect(context, conn_ctx, error_record);
+    } else {
+      rc = on_server_established(context, conn_ctx, private_data,
+                                 initiator_depth, error_record);
+      private_data = NULL;
+      if (rc != 0)
+        begin_server_disconnect(context, conn_ctx, error_record);
+    }
     break;
 
   case RDMA_CM_EVENT_DISCONNECTED:
@@ -1302,10 +1331,9 @@ spectrum_reader_loop(struct spectrum_reader_context_ *context,
       to_quit_state(context, NULL, error_record);
       result = -1;
     }
-    // FIXME: quit condition
     quit = (context->state == STATE_DONE
-            /*&& (context->connections == NULL
-              || g_hash_table_size(context->connections) == 0)*/);
+            && (context->connections == NULL
+              || g_hash_table_size(context->connections) == 0));
 
     // keep rdma request backlog statistics; not currently used for any purpose
     // but debugging, but it might be useful, so leaving the code in place
@@ -1602,3 +1630,5 @@ cleanup_and_return:
   g_free(shared);
   return NULL;
 }
+
+
