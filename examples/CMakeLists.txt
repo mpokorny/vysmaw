@@ -36,3 +36,10 @@ target_compile_options(sample5 PRIVATE
   -Wall -Werror)
 set_target_properties(sample5 PROPERTIES
   LINK_FLAGS -static-libstdc++)
+
+add_executable(sample6 sample6.cc)
+target_link_libraries(sample6 vysmaw)
+target_compile_options(sample6 PRIVATE
+  -Wall -Werror)
+set_target_properties(sample6 PROPERTIES
+  LINK_FLAGS -static-libstdc++)
